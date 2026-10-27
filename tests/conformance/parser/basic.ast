@@ -1,0 +1,1 @@
+Program(FunctionDeclaration:add(Parameter:left,Parameter:right,Block(Return(Binary:+(Name:left,Binary:*(Name:right,Integer:2))))))

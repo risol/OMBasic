@@ -1,0 +1,13 @@
+RECORD User(value)
+
+FUNCTION user()
+    RETURN 1
+END FUNCTION
+
+FUNCTION duplicate()
+END FUNCTION
+
+FUNCTION duplicate()
+END FUNCTION
+
+RECORD Unit()

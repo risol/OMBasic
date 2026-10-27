@@ -1,0 +1,200 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "5.7-keyword-uppercase",
+      "standard_section": "5.7",
+      "source": "05_identifiers/keyword_uppercase.bas",
+      "expect": { "compiles": true }
+    },
+    {
+      "id": "5.7-keyword-wrong-case",
+      "standard_section": "5.7",
+      "source": "05_identifiers/keyword_wrong_case.bas",
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E0101",
+          "text": "action",
+          "primary_span": {
+            "line": 1,
+            "start_byte_column": 1,
+            "end_byte_column": 7
+          }
+        }
+      }
+    },
+    {
+      "id": "5.1-ordinary-lower-snake",
+      "standard_section": "5.1",
+      "source": "05_identifiers/ordinary_lower_snake.bas",
+      "expect": { "compiles": true }
+    },
+    {
+      "id": "5.1-ordinary-mixed-case",
+      "standard_section": "5.1",
+      "source": "05_identifiers/ordinary_mixed_case.bas",
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E0102",
+          "text": "accountId",
+          "primary_span": {
+            "line": 2,
+            "start_byte_column": 5,
+            "end_byte_column": 14
+          }
+        }
+      }
+    },
+    {
+      "id": "5.1-entity-pascal-snake",
+      "standard_section": "5.1",
+      "source": "05_identifiers/entity_pascal_snake.bas",
+      "expect": { "compiles": true }
+    },
+    {
+      "id": "5.1-entity-invalid-case",
+      "standard_section": "5.1",
+      "source": "05_identifiers/entity_invalid_case.bas",
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E0102",
+          "text": "customer_record",
+          "primary_span": {
+            "line": 1,
+            "start_byte_column": 8,
+            "end_byte_column": 23
+          }
+        }
+      }
+    },
+    {
+      "id": "37.1-numeric-suffix",
+      "standard_section": "37.1",
+      "source": "lexer/numeric_suffix.bas",
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E0103",
+          "text": "12abc",
+          "primary_span": {
+            "line": 2,
+            "start_byte_column": 13,
+            "end_byte_column": 18
+          }
+        }
+      }
+    },
+    {
+      "id": "37.1-integer-overflow",
+      "standard_section": "37.1",
+      "source": "lexer/integer_overflow.bas",
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E0104",
+          "text": "9223372036854775809",
+          "primary_span": {
+            "line": 2,
+            "start_byte_column": 13,
+            "end_byte_column": 32
+          }
+        }
+      }
+    },
+    {
+      "id": "37.1-float-overflow",
+      "standard_section": "37.1",
+      "source": "lexer/float_overflow.bas",
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E0104",
+          "text": "1e9999",
+          "primary_span": {
+            "line": 2,
+            "start_byte_column": 13,
+            "end_byte_column": 19
+          }
+        }
+      }
+    },
+    {
+      "id": "37.1-malformed-exponent",
+      "standard_section": "37.1",
+      "source": "lexer/malformed_exponent.bas",
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E0103",
+          "text": "1e+",
+          "primary_span": {
+            "line": 2,
+            "start_byte_column": 13,
+            "end_byte_column": 16
+          }
+        }
+      }
+    },
+    {
+      "id": "37.1-invalid-string-escape",
+      "standard_section": "37.1",
+      "source": "lexer/invalid_escape.bas",
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E0103",
+          "text": "\\q",
+          "primary_span": {
+            "line": 2,
+            "start_byte_column": 17,
+            "end_byte_column": 19
+          }
+        }
+      }
+    },
+    {
+      "id": "37.1-valid-string-escape",
+      "standard_section": "37.1",
+      "source": "lexer/valid_escape.bas",
+      "expect": { "compiles": true }
+    },
+    {
+      "id": "37.1-valid-interpolation",
+      "standard_section": "37.1",
+      "source": "lexer/valid_interpolation.bas",
+      "expect": { "compiles": true }
+    },
+    {
+      "id": "37.1-finite-float-underflow",
+      "standard_section": "37.1",
+      "source": "lexer/float_underflow.bas",
+      "expect": { "compiles": true }
+    },
+    {
+      "id": "37.2-basic-parser-golden",
+      "standard_section": "37.2",
+      "source": "parser/basic.bas",
+      "expect": { "compiles": true }
+    },
+    {
+      "id": "37.2-chained-comparison",
+      "standard_section": "37.2",
+      "source": "parser/chained_comparison.bas",
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E0206",
+          "text": "<",
+          "primary_span": {
+            "line": 2,
+            "start_byte_column": 18,
+            "end_byte_column": 19
+          }
+        }
+      }
+    }
+  ]
+}

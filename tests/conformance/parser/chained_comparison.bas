@@ -1,0 +1,3 @@
+FUNCTION broken()
+    RETURN 1 < 2 < 3
+END FUNCTION

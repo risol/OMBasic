@@ -1,0 +1,156 @@
+#ifndef OMBASIC_SEMANTIC_NAME_RESOLVER_H
+#define OMBASIC_SEMANTIC_NAME_RESOLVER_H
+
+#include <stdbool.h>
+#include <stddef.h>
+
+#include "ombasic/foundation/ids.h"
+#include "ombasic/foundation/status.h"
+#include "ombasic/foundation/string_view.h"
+#include "ombasic/ffi/omi.h"
+#include "ombasic/module_graph/module_loader.h"
+#include "ombasic/syntax/parser.h"
+
+typedef enum Om_Symbol_Kind {
+    OM_SYMBOL_BUILTIN = 0,
+    OM_SYMBOL_MODULE_ALIAS,
+    OM_SYMBOL_FUNCTION,
+    OM_SYMBOL_ACTION,
+    OM_SYMBOL_RECORD,
+    OM_SYMBOL_MESSAGE,
+    OM_SYMBOL_ACTOR,
+    OM_SYMBOL_PARAMETER,
+    OM_SYMBOL_IMMUTABLE_BINDING,
+    OM_SYMBOL_MUTABLE_BINDING,
+    OM_SYMBOL_LOOP_VARIABLE,
+    OM_SYMBOL_FIELD
+} Om_Symbol_Kind;
+
+typedef enum Om_Scope_Kind {
+    OM_SCOPE_PRELUDE = 0,
+    OM_SCOPE_MODULE,
+    OM_SCOPE_FUNCTION,
+    OM_SCOPE_ACTION,
+    OM_SCOPE_ACTOR,
+    OM_SCOPE_RECEIVE,
+    OM_SCOPE_BLOCK,
+    OM_SCOPE_LOOP,
+    OM_SCOPE_SELECT_ARM,
+    OM_SCOPE_RECORD,
+    OM_SCOPE_MESSAGE
+} Om_Scope_Kind;
+
+typedef enum Om_Resolution_Diagnostic_Code {
+    OM_RESOLUTION_DIAGNOSTIC_E0301 = 301,
+    OM_RESOLUTION_DIAGNOSTIC_E0302 = 302,
+    OM_RESOLUTION_DIAGNOSTIC_E0303 = 303,
+    OM_RESOLUTION_DIAGNOSTIC_E0304 = 304,
+    OM_RESOLUTION_DIAGNOSTIC_E0305 = 305,
+    OM_RESOLUTION_DIAGNOSTIC_E0306 = 306,
+    OM_RESOLUTION_DIAGNOSTIC_E0307 = 307
+} Om_Resolution_Diagnostic_Code;
+
+typedef struct Om_Symbol {
+    Om_Symbol_Id id;
+    Om_String_View name;
+    Om_Symbol_Kind kind;
+    Om_Source_Span span;
+    Om_Scope_Id scope_id;
+    Om_Module_Id module_id;
+    Om_Module_Id target_module;
+    Om_Ast_Node_Id declaration_node;
+    bool exported;
+    bool mutable_binding;
+    /* Non-NULL for a prelude function imported from Native metadata. The
+       module must outlive resolution, inference, semantic analysis, and emit. */
+    const Om_Omi_Module *native_module;
+    size_t native_function_index;
+} Om_Symbol;
+
+typedef struct Om_Scope {
+    Om_Scope_Id id;
+    Om_Scope_Id parent_id;
+    Om_Scope_Kind kind;
+    Om_Module_Id module_id;
+    Om_Ast_Node_Id owner_node;
+} Om_Scope;
+
+typedef struct Om_Resolved_Node {
+    Om_Module_Id module_id;
+    Om_Ast_Node_Id node_id;
+    Om_Symbol_Id symbol_id;
+} Om_Resolved_Node;
+
+typedef struct Om_Node_Scope {
+    Om_Module_Id module_id;
+    Om_Ast_Node_Id node_id;
+    Om_Scope_Id scope_id;
+} Om_Node_Scope;
+
+typedef struct Om_Resolution_Diagnostic {
+    Om_Resolution_Diagnostic_Code code;
+    Om_Module_Id module_id;
+    Om_Source_Span span;
+    Om_Source_Span related_span;
+    bool has_related_span;
+} Om_Resolution_Diagnostic;
+
+typedef struct Om_Resolver_Config {
+    /* Additional prelude names, for example the standard library functions. */
+    const Om_String_View *prelude_names;
+    size_t prelude_name_count;
+    /* Native declarations become typed prelude functions. These modules must
+       remain alive until all compiler results that borrow their metadata are
+       destroyed. Names that collide with the built-in/additional prelude fail. */
+    const Om_Omi_Module *native_modules;
+    size_t native_module_count;
+} Om_Resolver_Config;
+
+typedef struct Om_Resolution_Result {
+    const Om_Symbol *symbols;
+    size_t symbol_count;
+    const Om_Scope *scopes;
+    size_t scope_count;
+    const Om_Resolved_Node *resolved_nodes;
+    size_t resolved_node_count;
+    const Om_Node_Scope *node_scopes;
+    size_t node_scope_count;
+    const Om_Resolution_Diagnostic *diagnostics;
+    size_t diagnostic_count;
+    void *owned_symbols;
+    void *owned_scopes;
+    void *owned_resolved_nodes;
+    void *owned_node_scopes;
+    void *owned_diagnostics;
+} Om_Resolution_Result;
+
+/*
+ * parsed_modules[i] must be the syntax result for Om_Module_Id{i}. Name views
+ * in the result borrow parser/project storage; keep both alive until the
+ * resolution result is destroyed.
+ */
+Om_Status om_name_resolve_project(
+    const Om_Module_Project *project,
+    const Om_Parser_Result *parsed_modules,
+    size_t parsed_module_count,
+    const Om_Resolver_Config *config,
+    Om_Resolution_Result *result
+);
+void om_resolution_result_destroy(Om_Resolution_Result *result);
+Om_Symbol_Id om_resolution_symbol_for_node(
+    const Om_Resolution_Result *result,
+    Om_Module_Id module_id,
+    Om_Ast_Node_Id node_id
+);
+Om_Scope_Id om_resolution_scope_for_node(
+    const Om_Resolution_Result *result,
+    Om_Module_Id module_id,
+    Om_Ast_Node_Id node_id
+);
+const Om_Symbol *om_resolution_symbol_by_id(
+    const Om_Resolution_Result *result,
+    Om_Symbol_Id symbol_id
+);
+const char *om_resolution_diagnostic_code_name(Om_Resolution_Diagnostic_Code code);
+
+#endif
