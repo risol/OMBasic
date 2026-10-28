@@ -94,9 +94,9 @@ def main() -> int:
 
         actor_root = repository / "examples" / "actor"
         hello_output = temporary_root / (
-            "hello.exe" if sys.platform == "win32" else "hello")
+            "hello-program.exe" if sys.platform == "win32" else "hello-program")
         actor_output = temporary_root / (
-            "actor.exe" if sys.platform == "win32" else "actor")
+            "actor-program.exe" if sys.platform == "win32" else "actor-program")
 
         moved_build_tree = False
         try:
