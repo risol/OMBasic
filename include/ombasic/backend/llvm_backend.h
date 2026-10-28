@@ -29,8 +29,7 @@ typedef enum Om_Llvm_Optimization_Level {
 typedef struct Om_Llvm_Emit_Request {
     const Om_Mir_Project *project;
     Om_Symbol_Id entry_symbol;
-    /* NULL or empty uses the configured default target triple. */
-    const char *target_triple;
+    const Om_Target *target;
     Om_String_View source_root;
     const Om_Backend_Source_Location *source_locations;
     size_t source_location_count;

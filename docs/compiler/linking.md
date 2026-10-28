@@ -24,7 +24,7 @@ selects `lld-link.exe` through `clang-cl.exe` and discovers the MSVC and SDK
 library directories so native `run` and `build` commands also work from a
 regular PowerShell session.
 
-Example for LLVM installed at `F:\clang+llvm-23.1.4-x86_64-pc-windows-msvc`:
+Example for LLVM 23 installed at `F:\clang+llvm-23.1.4-x86_64-pc-windows-msvc`:
 
 ```powershell
 cmake -S . -B build\windows-clang -G Ninja `
@@ -40,7 +40,7 @@ archives plus the MSVC C runtime libraries. LLVM is not a runtime dependency.
 
 ## Linux with Clang and LLD
 
-Install LLVM 23.1.4 with Clang and LLD, CMake, Ninja, Python 3, and the system
+Install LLVM 23.x with Clang and LLD, CMake, Ninja, Python 3, and the system
 C development headers and libraries. Configure with the target triple for the
 host architecture:
 
@@ -56,5 +56,9 @@ cmake --build build/linux-clang --parallel
 CMake verifies that `ld.lld` is available and passes its directory to Clang, so
 the driver uses that linker through `-fuse-ld=lld` even when it is not on
 `PATH`. The platform's libc and startup files remain responsible for the Linux
-system ABI. Set `OM_LLVM_TARGET_TRIPLE` to the actual host target when building
-for a different architecture or libc ABI.
+system ABI. CMake's `OM_LLVM_TARGET_TRIPLE` describes the host target and the
+Runtime archives packaged by that SDK. `ombasic build --target <llvm-triple>`
+selects an explicit per-compilation target, but the current SDK can emit and
+link only for its host triple. Cross-target builds need both a matching
+target-specific OMBasic Runtime and platform sysroot. See the
+[target model](target_model.md).

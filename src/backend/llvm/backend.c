@@ -20,9 +20,6 @@ static void dispose_backend(Om_Llvm_Backend_Context *backend)
     if (backend->target_data != NULL) {
         LLVMDisposeTargetData(backend->target_data);
     }
-    if (backend->owned_target_triple != NULL) {
-        LLVMDisposeMessage(backend->owned_target_triple);
-    }
     om_free(backend->functions);
     om_free(backend->blocks);
     om_free(backend->block_tails);
@@ -59,7 +56,9 @@ Om_Status om_llvm_emit(const Om_Llvm_Emit_Request *request,
     const size_t location_count = request->source_location_count;
     const Om_Llvm_Artifact artifact = request->artifact;
     const char *const output_path = request->output_path;
-    if (project == NULL || project->owned_storage == NULL
+    if (request->target == NULL || request->target->triple == NULL
+        || request->target->triple[0] == '\0'
+        || project == NULL || project->owned_storage == NULL
         || project->type_store == NULL || output_path == NULL
         || output_path[0] == '\0' || entry_symbol.value == UINT32_MAX
         || artifact < OM_LLVM_ARTIFACT_OBJECT
@@ -86,7 +85,8 @@ Om_Status om_llvm_emit(const Om_Llvm_Emit_Request *request,
 #endif
     Om_Llvm_Backend_Context backend = {
         .project = project,
-        .requested_target_triple = request->target_triple,
+        .target = *request->target,
+        .target_triple = request->target->triple,
         .optimization_level = request->optimization_level
             == OM_LLVM_OPTIMIZATION_DEFAULT
                 ? build_optimization_level : request->optimization_level,

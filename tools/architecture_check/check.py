@@ -61,7 +61,8 @@ CORE_TARGET_EDGES = {
     "ombasic_mir": {"ombasic::specialization"},
     "ombasic_target": {"ombasic::foundation"},
     "ombasic_backend_llvm": {"ombasic::mir", "ombasic::target"},
-    "ombasic_compiler": {"ombasic::mir", "ombasic::backend_llvm"},
+    "ombasic_compiler": {"ombasic::mir", "ombasic::target",
+                         "ombasic::backend_llvm"},
     "ombasic_toolchain": {"ombasic::foundation"},
     "ombasic_linker": {"ombasic::foundation", "ombasic::toolchain"},
     "ombasic_distribution": {"ombasic::foundation"},
@@ -72,7 +73,7 @@ CORE_TARGET_EDGES = {
                                      "ombasic::foundation"},
     "ombasic_tooling": {"ombasic::syntax", "ombasic::semantic"},
     "ombasic": {"ombasic::tooling", "ombasic::native_metadata",
-                "ombasic::compiler", "ombasic::linker"},
+                "ombasic::compiler", "ombasic::linker", "ombasic::target"},
 }
 ALIAS_TARGETS = {
     "ombasic::foundation": "ombasic_foundation",
@@ -224,6 +225,20 @@ def check(root: Path) -> list[str]:
                                  and generated_runtime_abi)):
                     errors.append(
                         f"{relative}: {owner} may not include {included_capability} ({include})"
+                    )
+                normalized_include = include_path.replace("\\", "/").lower()
+                include_name = normalized_include.rsplit("/", 1)[-1]
+                is_runtime_internal = (
+                    "runtime" in normalized_include
+                    and "internal" in include_name
+                    and include_name.endswith(".h")
+                    and not normalized_include.startswith(
+                        "ombasic/runtime/abi/")
+                )
+                if (relative.startswith(("src/backend/", "src/compiler/"))
+                        and is_runtime_internal):
+                    errors.append(
+                        f"{relative}: compiler/backend may not include Runtime private header {include}"
                     )
 
     return errors

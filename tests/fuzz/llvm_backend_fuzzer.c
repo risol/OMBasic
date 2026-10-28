@@ -73,9 +73,15 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
         const int output_fd = mkstemp(output_path);
         if (output_fd >= 0) {
             (void)close(output_fd);
+            Om_Target host_target = {0};
+            if (om_target_host(&host_target) != OM_STATUS_OK) {
+                (void)unlink(output_path);
+                goto cleanup;
+            }
             const Om_Llvm_Emit_Request request = {
                 .project = &project,
                 .entry_symbol = (Om_Symbol_Id){0},
+                .target = &host_target,
                 .source_root = {
                     source_root, sizeof(source_root) - 1,
                 },

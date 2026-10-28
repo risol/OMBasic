@@ -142,8 +142,7 @@ Om_Status initialize_debug_info(Om_Llvm_Backend_Context *backend,
         LLVMValueAsMetadata(LLVMConstInt(
             LLVMInt32TypeInContext(backend->context),
             LLVMDebugMetadataVersion(), 0)));
-    if (strstr(target_triple, "windows") != NULL
-        || strstr(target_triple, "win32") != NULL) {
+    if (backend->target.os == OM_TARGET_OS_WINDOWS) {
         LLVMAddModuleFlag(backend->module, LLVMModuleFlagBehaviorWarning,
             "CodeView", sizeof("CodeView") - 1,
             LLVMValueAsMetadata(LLVMConstInt(

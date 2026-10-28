@@ -68,6 +68,8 @@ descriptors.
 ## Enforcement
 
 CMake target edges and C includes are checked by
-`tools/architecture_check/check.py`. Legacy VM/bytecode symbols are rejected
-from source, public headers, and tests. Changes to an allowed edge require an
-ADR naming the owner and invariant.
+`tools/architecture_check/check.py` and the language-example audit in
+`tools/spec_check/check.py`. The checks reject Runtime private-header includes
+from the compiler/backend, LLVM includes outside the backend, legacy
+VM/bytecode symbols, allocator violations, and obsolete Actor reason keywords.
+Changes to an allowed edge require an ADR naming the owner and invariant.

@@ -122,7 +122,10 @@ Om_Status om_compiler_emit(const Om_Compiler_Emit_Request *request,
     }
     (void)memset(result, 0, sizeof(*result));
     Om_Status status = OM_STATUS_INVALID_ARGUMENT;
-    if (request == NULL || request->source_project == NULL
+    if (request == NULL || request->target == NULL
+        || request->target->triple == NULL
+        || request->target->triple[0] == '\0'
+        || request->source_project == NULL
         || request->parsed_modules == NULL || request->parsed_module_count == 0
         || request->resolution == NULL || request->inference == NULL
         || request->semantic == NULL || request->entry_symbol.value == UINT32_MAX
@@ -213,6 +216,7 @@ Om_Status om_compiler_emit(const Om_Compiler_Emit_Request *request,
         const Om_Llvm_Emit_Request emit_request = {
             .project = &result->mir,
             .entry_symbol = request->entry_symbol,
+            .target = request->target,
             .source_root = request->source_root,
             .source_locations = locations,
             .source_location_count = result->mir.instruction_count,

@@ -25,10 +25,6 @@
 
 #include "ombasic/foundation/memory.h"
 
-#ifndef OM_TOOLCHAIN_TARGET_TRIPLE
-#define OM_TOOLCHAIN_TARGET_TRIPLE ""
-#endif
-
 static char *copy_string(const char *value)
 {
     if (value == NULL) {
@@ -346,10 +342,8 @@ Om_Status om_toolchain_runtime_resources_resolve(
     const char *target_triple,
     Om_Toolchain_Resources *resources)
 {
-    if (target_triple == NULL || target_triple[0] == '\0') {
-        target_triple = OM_TOOLCHAIN_TARGET_TRIPLE;
-    }
-    if (resources == NULL || target_triple[0] == '\0') {
+    if (resources == NULL || target_triple == NULL
+        || target_triple[0] == '\0') {
         return OM_STATUS_INVALID_ARGUMENT;
     }
     (void)memset(resources, 0, sizeof(*resources));

@@ -2442,7 +2442,21 @@ SELECT 只计算一次 scrutinee，CASE 按顺序匹配，无 fallthrough；CASE
 
 Null 是独立单例类型；0.1 没有 nullable 类型，Null 不能赋给其他类型。Result<T,E> 是内建 tagged union，Ok(value) 与 Error(error) 从上下文推导。Function、Action 返回类型由 RETURN 推导；无值返回为 Unit。TRY 接收 Result<T,E>，在 Ok 时产出 T，在 Error 时通过相同 E 的外围 Result 返回通道传播。Receive handler 返回 Unit；TRY 在 Receive 中传播错误会使当前 Actor 标记为 FAILED 并停止处理消息，观察者只收到失败原因，不收到原始错误值。
 
-内建类型包括 Unit、Result、Node_Ref、Actor_Id、Actor_Down_Reason；内建 Result 构造器为 Ok 与 Error。SELF 仅能在 Actor handler 中使用，表示当前 ActorRef。Actor_Down_Reason 是内建 nominal type，成员只能写成 Actor_Down_Reason.normal、Actor_Down_Reason.failed 或 Actor_Down_Reason.node_unreachable；这些成员名不是关键字，也不能裸写为 magic 值。内建系统 Message Actor_Down(actor_id, reason) 对所有 Actor 协议可接收；actor_id 类型为 Actor_Id，reason 类型为 Actor_Down_Reason。用户不能重新声明或遮蔽这些内建名称及 Actor_Down。STOP 仅能在 Actor 执行上下文中使用，正常终止当前 Actor；Actor 收到 STOP 后不再处理 mailbox 中的新 Message。
+#### 标准内建 nominal 值
+
+内建类型包括 Unit、Result、Node_Ref、Actor_Id、Actor_Down_Reason；内建 Result 构造器为 Ok 与 Error。SELF 仅能在 Actor handler 中使用，表示当前 ActorRef。
+
+Actor_Down_Reason 是标准内建 nominal type，只有以下三个标准值：
+
+| 源代码值 | 规范含义 |
+|---|---|
+| `Actor_Down_Reason.normal` | Runtime 已知 Actor 正常终止。 |
+| `Actor_Down_Reason.failed` | Runtime 已知 Actor 因 handler、initializer 或所包含的 Runtime fault 失败终止。 |
+| `Actor_Down_Reason.node_unreachable` | 本地节点无法确认远端 Actor 状态；这不证明远端 Actor 已终止。 |
+
+三个值必须通过限定成员语法引用。它们不是全局变量、关键字或裸 enum member，也不能由上下文自动推导。Runtime 的内部整数表示不属于语言源代码语义。
+
+内建系统 Message `Actor_Down(actor_id, reason)` 对所有 Actor 协议可接收；`actor_id` 类型为 Actor_Id，`reason` 类型为 Actor_Down_Reason。用户不能重新声明或遮蔽这些内建名称及 Actor_Down。STOP 仅能在 Actor 执行上下文中使用，正常终止当前 Actor；Actor 收到 STOP 后不再处理 mailbox 中的新 Message。
 
 Actor_Down_Reason.node_unreachable 表示本地节点无法确认远端 Actor 的状态，不证明该 Actor 已经终止。网络分区、连接丢失或远端节点故障都可能导致这种不确定状态；远端 Actor 可能仍在运行。
 

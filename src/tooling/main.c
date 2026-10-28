@@ -111,9 +111,9 @@ static void print_usage(FILE *stream)
                   "Usage:\n"
                   "  ombasic version\n"
                   "  ombasic fmt [--write|--check] <file.bas>\n"
-                  "  ombasic check --root <source-root> <entry.bas> [--native file.omi] [-L dir] [--diagnostics=json]\n"
-                  "  ombasic run --root <source-root> <entry.bas> [--resource-dir <sdk-root>] [--native file.omi] [-L dir] [--entry callable]\n"
-                  "  ombasic build --root <source-root> <entry.bas> [--resource-dir <sdk-root>] [--native file.omi] [-L dir] [--emit=hir|mir|llvm-ir|asm|obj] [-o output]\n"
+                  "  ombasic check <entry.bas> [--root <source-root>] [--native file.omi] [-L dir] [--diagnostics=json]\n"
+                  "  ombasic run <entry.bas> [--root <source-root>] [--target <llvm-triple>] [--sysroot path] [--resource-dir <sdk-root>] [--native file.omi] [-L dir] [--entry callable]\n"
+                  "  ombasic build <entry.bas> [--root <source-root>] [--target <llvm-triple>] [--sysroot path] [--resource-dir <sdk-root>] [--native file.omi] [-L dir] [--emit=hir|mir|llvm-ir|asm|obj] [-o output]\n"
                   "  ombasic lsp --root <source-root>\n"
                   "  ombasic bind --header <file.h> --library <path> --output <file.omi> [-I dir]\n"
                   "  ombasic check-omi <file.omi>\n");

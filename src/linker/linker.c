@@ -155,11 +155,20 @@ static bool native_library_has_lib_suffix(Om_String_View library)
 int om_linker_link_native(const Om_Linker_Request *request,
                           char **debug_symbols_path_out)
 {
-    if (request == NULL || request->object_path == NULL
+    if (request == NULL || request->target == NULL
+        || request->target->triple == NULL
+        || request->target_runtime_root == NULL
+        || request->resources == NULL
+        || request->resources->target_triple == NULL
+        || request->resources->target_runtime_root == NULL
+        || strcmp(request->target->triple,
+                  request->resources->target_triple) != 0
+        || strcmp(request->target_runtime_root,
+                  request->resources->target_runtime_root) != 0
+        || request->object_path == NULL
         || request->object_path[0] == '\0'
         || request->executable_path == NULL
         || request->executable_path[0] == '\0'
-        || request->resources == NULL
         || request->resources->runtime_archive == NULL
         || request->resources->runtime_services_archive == NULL
         || request->resources->runtime_distribution_archive == NULL
@@ -180,15 +189,28 @@ int om_linker_link_native(const Om_Linker_Request *request,
     const Om_String_View *library_directories = request->library_directories;
     const size_t library_directory_count = request->library_directory_count;
     const Om_Toolchain_Resources *resources = request->resources;
-    if (library_directory_count > (SIZE_MAX - 32) / 2
-        || native_module_count > SIZE_MAX - 32
+    const char *link_driver = request->link_driver;
+    if (link_driver == NULL) {
+        link_driver = OM_NATIVE_LINK_DRIVER;
+    }
+    if (link_driver[0] == '\0') {
+        return -1;
+    }
+    if (library_directory_count > (SIZE_MAX - 36) / 2
+        || native_module_count > SIZE_MAX - 36
             - library_directory_count * 2
         || native_module_count > SIZE_MAX - library_directory_count) {
         return -1;
     }
-    const size_t argument_capacity = 32 + library_directory_count * 2
+    const size_t argument_capacity = 36 + library_directory_count * 2
         + native_module_count;
-    const size_t owned_capacity = library_directory_count + native_module_count;
+    if (library_directory_count > SIZE_MAX - native_module_count
+        || (request->sysroot != NULL && !OM_NATIVE_LINK_DRIVER_STYLE_MSVC
+            && library_directory_count + native_module_count == SIZE_MAX)) {
+        return -1;
+    }
+    const size_t owned_capacity = library_directory_count + native_module_count
+        + (request->sysroot != NULL && !OM_NATIVE_LINK_DRIVER_STYLE_MSVC ? 1 : 0);
     char **arguments = om_alloc_array(argument_capacity, sizeof(*arguments));
     char **owned_arguments = owned_capacity == 0 ? NULL
         : om_alloc_array(owned_capacity, sizeof(*owned_arguments));
@@ -205,7 +227,7 @@ int om_linker_link_native(const Om_Linker_Request *request,
     char *debug_symbols_path = NULL;
     char *debug_symbols_argument = NULL;
 #endif
-    arguments[count++] = (char *)OM_NATIVE_LINK_DRIVER;
+    arguments[count++] = (char *)link_driver;
 #if OM_NATIVE_USE_LLD
     arguments[count++] = "-fuse-ld=lld";
 #endif
@@ -231,6 +253,13 @@ int om_linker_link_native(const Om_Linker_Request *request,
     }
 #endif
 #if OM_NATIVE_LINK_DRIVER_STYLE_MSVC
+    if (request->sysroot != NULL) {
+        if (request->sysroot[0] == '\0') {
+            goto argument_failure;
+        }
+        arguments[count++] = "/winsysroot";
+        arguments[count++] = (char *)request->sysroot;
+    }
     const size_t output_length = strlen(executable_path);
     if (output_length > SIZE_MAX - sizeof("/Fe")) {
         goto argument_failure;
@@ -290,6 +319,18 @@ int om_linker_link_native(const Om_Linker_Request *request,
     arguments[count++] = "/DEBUG";
     arguments[count++] = debug_symbols_argument;
 #else
+    if (request->sysroot != NULL) {
+        if (request->sysroot[0] == '\0') {
+            goto argument_failure;
+        }
+        char *sysroot_argument = make_link_argument("--sysroot=",
+            (Om_String_View){request->sysroot, strlen(request->sysroot)}, NULL);
+        if (sysroot_argument == NULL) {
+            goto argument_failure;
+        }
+        arguments[count++] = sysroot_argument;
+        owned_arguments[owned_count++] = sysroot_argument;
+    }
     if (OM_LLD_LINKER_DIRECTORY[0] != '\0') {
         arguments[count++] = "-B";
         arguments[count++] = (char *)OM_LLD_LINKER_DIRECTORY;
@@ -331,7 +372,7 @@ int om_linker_link_native(const Om_Linker_Request *request,
     arguments[count++] = (char *)executable_path;
 #endif
     arguments[count] = NULL;
-    const int result = om_linker_run_executable(OM_NATIVE_LINK_DRIVER, arguments);
+    const int result = om_linker_run_executable(link_driver, arguments);
     om_free(output_argument);
 #if OM_NATIVE_LINK_DRIVER_STYLE_MSVC
     om_free(debug_symbols_argument);

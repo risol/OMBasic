@@ -291,6 +291,8 @@ target_link_libraries(ombasic_mir
 add_library(ombasic_target STATIC src/target/target.c)
 add_library(ombasic::target ALIAS ombasic_target)
 target_include_directories(ombasic_target PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_compile_definitions(ombasic_target PRIVATE
+    "OM_TARGET_DEFAULT_TRIPLE=\"${OM_LLVM_TARGET_TRIPLE}\"")
 target_link_libraries(ombasic_target
     PUBLIC ombasic::foundation
     PRIVATE ombasic_warnings ombasic_sanitizers
@@ -418,9 +420,6 @@ target_link_libraries(ombasic_backend_llvm
     PUBLIC ombasic::mir ombasic::target
     PRIVATE ${OM_LLVM_LINK_LIBRARIES} ombasic_warnings ombasic_sanitizers
 )
-target_compile_definitions(ombasic_backend_llvm PRIVATE
-    "OM_LLVM_TARGET_TRIPLE=\"${OM_LLVM_TARGET_TRIPLE}\""
-)
 if(CMAKE_CONFIGURATION_TYPES)
     target_compile_definitions(ombasic_backend_llvm PRIVATE
         "$<$<CONFIG:Debug>:OM_LLVM_OPT_LEVEL=0>"
@@ -442,7 +441,7 @@ add_library(ombasic_compiler STATIC src/compiler/pipeline.c)
 add_library(ombasic::compiler ALIAS ombasic_compiler)
 target_include_directories(ombasic_compiler PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(ombasic_compiler
-    PUBLIC ombasic::mir
+    PUBLIC ombasic::mir ombasic::target
     PRIVATE ombasic::backend_llvm ombasic_warnings ombasic_sanitizers
 )
 
@@ -453,9 +452,6 @@ target_link_libraries(ombasic_toolchain
     PUBLIC ombasic::foundation
     PRIVATE ombasic_warnings ombasic_sanitizers
 )
-target_compile_definitions(ombasic_toolchain PRIVATE
-    "OM_TOOLCHAIN_TARGET_TRIPLE=\"${OM_LLVM_TARGET_TRIPLE}\"")
-
 add_library(ombasic_linker STATIC src/linker/linker.c)
 add_library(ombasic::linker ALIAS ombasic_linker)
 target_include_directories(ombasic_linker PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
@@ -467,7 +463,7 @@ target_link_libraries(ombasic_linker
 add_executable(ombasic src/tooling/main.c src/tooling/check.c)
 target_link_libraries(ombasic
     PRIVATE ombasic::tooling ombasic::native_metadata ombasic::compiler
-            ombasic::linker
+            ombasic::linker ombasic::target
             ombasic_warnings ombasic_sanitizers
 )
 if(WIN32)
@@ -686,6 +682,9 @@ endif()
 add_custom_target(architecture-check
     COMMAND "${Python3_EXECUTABLE}"
             "${CMAKE_CURRENT_SOURCE_DIR}/tools/architecture_check/check.py"
+            --root "${CMAKE_CURRENT_SOURCE_DIR}"
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/spec_check/check.py"
             --root "${CMAKE_CURRENT_SOURCE_DIR}"
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     VERBATIM
@@ -927,6 +926,10 @@ if(BUILD_TESTING)
     add_test(NAME architecture
         COMMAND "${Python3_EXECUTABLE}"
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/architecture_check/check.py"
+                --root "${CMAKE_CURRENT_SOURCE_DIR}")
+    add_test(NAME spec_audit
+        COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/spec_check/check.py"
                 --root "${CMAKE_CURRENT_SOURCE_DIR}")
     add_test(NAME conformance_manifest
         COMMAND "${Python3_EXECUTABLE}"

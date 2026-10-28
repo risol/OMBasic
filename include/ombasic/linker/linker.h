@@ -4,9 +4,14 @@
 #include <stddef.h>
 
 #include "ombasic/foundation/string_view.h"
+#include "ombasic/target/target.h"
 #include "ombasic/toolchain/resources.h"
 
 typedef struct Om_Linker_Request {
+    const Om_Target *target;
+    const char *target_runtime_root;
+    const char *link_driver;
+    const char *sysroot;
     const char *object_path;
     const char *executable_path;
     const Om_String_View *libraries;

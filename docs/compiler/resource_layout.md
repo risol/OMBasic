@@ -47,9 +47,11 @@ The target Runtime directory is:
 <sdk-root>/lib/ombasic/<target-triple>/
 ```
 
-The current compiler selects the host triple configured at compiler build time.
-Per-compilation `--target` and `--sysroot` are tracked separately in the target
-model work.
+The configured host target is the current supported compilation target. Pass
+`--target <llvm-triple>` to make that choice explicit. Described foreign
+triples fail with `E0702` until their Runtime archive and linker sysroot are
+available; unknown triples fail with `E0701`. The compiler never silently
+substitutes the host triple. See [Target model](target_model.md).
 
 ## External tools
 

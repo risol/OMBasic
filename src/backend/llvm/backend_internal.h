@@ -23,9 +23,6 @@
 #include "ombasic/semantic/system_actors.h"
 #include "ombasic/target/target.h"
 
-#ifndef OM_LLVM_TARGET_TRIPLE
-#define OM_LLVM_TARGET_TRIPLE ""
-#endif
 #ifndef OM_LLVM_OPT_LEVEL
 #define OM_LLVM_OPT_LEVEL 0
 #endif
@@ -71,8 +68,6 @@ typedef struct Om_Llvm_Backend_Context {
     const Om_Mir_Project *project;
     Om_Target target;
     const char *target_triple;
-    const char *requested_target_triple;
-    char *owned_target_triple;
     Om_Llvm_Optimization_Level optimization_level;
     Om_String_View source_root;
     const Om_Backend_Source_Location *source_locations;

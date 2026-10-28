@@ -81,6 +81,60 @@ def main() -> int:
             "    print($\"call={apply_unary(plus_one, 41)}\")\n"
             "END ACTION\n",
             encoding="utf-8", newline="\n")
+        rootless_check = subprocess.run([
+            str(compiler), "check", "main.bas",
+        ], cwd=command_root, capture_output=True, text=True, check=False)
+        require(rootless_check.returncode == 0,
+                f"rootless check command failed: {rootless_check.stderr!r}")
+        rootless_output = command_root / (
+            "rootless-hello.exe" if sys.platform == "win32"
+            else "rootless-hello")
+        rootless_build = subprocess.run([
+            str(compiler), "build", "main.bas", "-o", str(rootless_output),
+        ], cwd=command_root, capture_output=True, text=True, check=False)
+        require(rootless_build.returncode == 0 and rootless_output.is_file(),
+                f"rootless build command failed: "
+                f"return={rootless_build.returncode}, "
+                f"stderr={rootless_build.stderr!r}")
+        rootless_run = subprocess.run(
+            [str(rootless_output)], cwd=command_root,
+            capture_output=True, text=True, check=False)
+        require(rootless_run.returncode == 0
+                and rootless_run.stdout == "Hello, OMBasic\n",
+                f"rootless executable failed: {rootless_run.stdout!r} "
+                f"{rootless_run.stderr!r}")
+
+        host_target = ("x86_64-pc-windows-msvc" if sys.platform == "win32"
+                       else "x86_64-unknown-linux-gnu")
+        native_target = subprocess.run([
+            str(compiler), "run", "--root", str(command_root), "main.bas",
+            "--target", host_target,
+            "--resource-dir", str(native_library_dir),
+        ], capture_output=True, text=True, check=False)
+        require(native_target.returncode == 0
+                and native_target.stdout == "Hello, OMBasic\n",
+                f"host --target run failed: stdout={native_target.stdout!r}, "
+                f"stderr={native_target.stderr!r}")
+
+        unsupported_target = subprocess.run([
+            str(compiler), "build", "--root", str(command_root), "main.bas",
+            "--target", "x86_64-unknown-freebsd",
+        ], capture_output=True, text=True, check=False)
+        require(unsupported_target.returncode != 0
+                and "E0701: unsupported target triple" in unsupported_target.stderr,
+                "unsupported target did not produce its stable diagnostic: "
+                f"{unsupported_target.stderr!r}")
+        foreign_target = ("x86_64-unknown-linux-gnu" if sys.platform == "win32"
+                          else "x86_64-pc-windows-msvc")
+        foreign_target_run = subprocess.run([
+            str(compiler), "run", "--root", str(command_root), "main.bas",
+            "--target", foreign_target,
+        ], capture_output=True, text=True, check=False)
+        require(foreign_target_run.returncode != 0
+                and "E0702: target runtime/sysroot unavailable" in foreign_target_run.stderr,
+                "non-host run target was not rejected explicitly: "
+                f"{foreign_target_run.stderr!r}")
+
         ran = subprocess.run([
             str(compiler), "run", "--root", str(command_root), "main.bas",
             "--resource-dir", str(native_library_dir),

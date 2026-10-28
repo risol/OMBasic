@@ -10,26 +10,12 @@ Om_Status om_llvm_backend_initialize_module(Om_Llvm_Backend_Context *backend)
         return OM_STATUS_NOT_FOUND;
     }
 
-    const char *triple = backend->requested_target_triple;
+    const char *triple = backend->target.triple;
     if (triple == NULL || triple[0] == '\0') {
-        triple = OM_LLVM_TARGET_TRIPLE;
-    }
-    if (triple[0] == '\0') {
-        backend->owned_target_triple = LLVMGetDefaultTargetTriple();
-        if (backend->owned_target_triple == NULL) {
-            return OM_STATUS_NOT_FOUND;
-        }
-        triple = backend->owned_target_triple;
-    }
-    backend->target_triple = triple;
-
-    Om_Status status = om_target_describe(triple, &backend->target);
-    if (status != OM_STATUS_OK) {
-        (void)fprintf(stderr,
-            "ombasic: unsupported target ABI triple '%s'\n", triple);
-        return status;
+        return OM_STATUS_INVALID_ARGUMENT;
     }
 
+    Om_Status status = OM_STATUS_OK;
     LLVMTargetRef target = NULL;
     char *error_message = NULL;
     if (LLVMGetTargetFromTriple(triple, &target, &error_message) != 0) {
@@ -48,7 +34,8 @@ Om_Status om_llvm_backend_initialize_module(Om_Llvm_Backend_Context *backend)
         backend->optimization_level == OM_LLVM_OPTIMIZATION_SPEED
             ? LLVMCodeGenLevelDefault : LLVMCodeGenLevelNone;
     const LLVMRelocMode relocation_mode =
-        strstr(triple, "linux") != NULL ? LLVMRelocPIC : LLVMRelocDefault;
+        backend->target.object_format == OM_TARGET_OBJECT_FORMAT_ELF
+            ? LLVMRelocPIC : LLVMRelocDefault;
     backend->target_machine = LLVMCreateTargetMachine(target, triple,
         "generic", "", codegen_optimization_level, relocation_mode,
         LLVMCodeModelDefault);

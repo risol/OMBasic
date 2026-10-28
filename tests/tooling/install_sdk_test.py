@@ -79,6 +79,12 @@ def main() -> int:
             encoding="utf-8", newline="\n")
         output = temporary_root / ("relocated-app.exe" if sys.platform == "win32"
                                    else "relocated-app")
+        checked = subprocess.run(
+            [str(compiler), "check", "--root", str(source_root), "main.bas"],
+            cwd=temporary_root, capture_output=True, text=True, check=False)
+        if checked.returncode != 0:
+            raise AssertionError(
+                f"relocated SDK check failed: {checked.stdout!r} {checked.stderr!r}")
         built = subprocess.run(
             [str(compiler), "build", "--root", str(source_root), "main.bas",
              "-o", str(output)],
@@ -91,6 +97,32 @@ def main() -> int:
         if ran.returncode != 0 or ran.stdout != "relocated SDK works\n":
             raise AssertionError(
                 f"relocated output failed: {ran.stdout!r} {ran.stderr!r}")
+
+        actor_output = temporary_root / (
+            "relocated-actor.exe" if sys.platform == "win32" else "relocated-actor")
+        actor_root = repository / "examples" / "actor"
+        actor_check = subprocess.run(
+            [str(compiler), "check", "--root", str(actor_root), "main.bas"],
+            cwd=temporary_root, capture_output=True, text=True, check=False)
+        if actor_check.returncode != 0:
+            raise AssertionError(
+                f"relocated SDK Actor check failed: "
+                f"{actor_check.stdout!r} {actor_check.stderr!r}")
+        actor_built = subprocess.run(
+            [str(compiler), "build", "--root", str(actor_root), "main.bas",
+             "-o", str(actor_output)],
+            cwd=temporary_root, capture_output=True, text=True, check=False)
+        if actor_built.returncode != 0 or not actor_output.is_file():
+            raise AssertionError(
+                f"relocated SDK Actor build failed: "
+                f"{actor_built.stdout!r} {actor_built.stderr!r}")
+        actor_ran = subprocess.run(
+            [str(actor_output)], cwd=temporary_root,
+            capture_output=True, text=True, check=False)
+        if actor_ran.returncode != 0 or actor_ran.stdout != "count=1\n":
+            raise AssertionError(
+                f"relocated Actor output failed: "
+                f"{actor_ran.stdout!r} {actor_ran.stderr!r}")
 
         manifest = moved_sdk / "share" / "ombasic" / "target-manifest.json"
         manifest_text = manifest.read_text(encoding="utf-8")
