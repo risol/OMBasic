@@ -102,6 +102,17 @@ static const Om_Runtime_Type_Descriptor TEST_INT_NULL_MAP_TYPE = {
     .value_type = &TEST_NULL_TYPE,
 };
 
+#ifdef OM_RUNTIME_TEST_SUPPORT_ONLY
+static const Om_Runtime_Type_Descriptor TEST_INT_INT_MAP_TYPE = {
+    .fingerprint = UINT64_C(12),
+    .kind = OM_RUNTIME_TYPE_MAP,
+    .size = sizeof(void *),
+    .alignment = _Alignof(void *),
+    .key_type = &TEST_INT_TYPE,
+    .value_type = &TEST_INT_TYPE,
+};
+#endif
+
 static size_t cstring_release_count = 0;
 static size_t native_pointer_release_count = 0;
 
@@ -540,6 +551,159 @@ cleanup:
     return passed;
 }
 
+#ifdef OM_RUNTIME_TEST_SUPPORT_ONLY
+bool om_runtime_test_fault_boundary(void)
+{
+    return test_runtime_fault_boundary();
+}
+
+bool om_runtime_test_root_order(void)
+{
+    return test_unit_null_containers_and_root_order();
+}
+
+bool om_runtime_test_gc(void)
+{
+    return test_collection_threshold_tracks_live_heap()
+        && test_cycle_collection()
+        && test_native_objects_and_collection();
+}
+
+bool om_runtime_test_strings(void)
+{
+    return test_runtime_cstring_conversion();
+}
+
+bool om_runtime_test_records(void)
+{
+    Om_Execution_Context *context = om_runtime_context_create(0);
+    Om_Runtime_Root_Frame *frame = NULL;
+    void *roots[2] = {NULL, NULL};
+    bool passed = false;
+    static const uint8_t label[] = "record value";
+    RUNTIME_ASSERT(context != NULL);
+    frame = om_runtime_roots_push(context, roots, 2);
+    RUNTIME_ASSERT(frame != NULL);
+    RUNTIME_ASSERT(om_runtime_string_create_utf8_default(context, label,
+        sizeof(label) - 1, &roots[1]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_record_create(context, &TEST_RECORD_TYPE,
+        &roots[0]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_record_set(context, roots[0], 0,
+        (Om_Runtime_Value){.managed = roots[1]}) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_record_set(context, roots[0], 1,
+        (Om_Runtime_Value){.integer = 42}) == OM_STATUS_OK);
+    Om_Runtime_Value value = {0};
+    RUNTIME_ASSERT(om_runtime_record_get(context, roots[0], 0, &value)
+                   == OM_STATUS_OK);
+    RUNTIME_ASSERT(value.managed == roots[1]);
+    RUNTIME_ASSERT(om_runtime_record_get(context, roots[0], 1, &value)
+                   == OM_STATUS_OK);
+    RUNTIME_ASSERT(value.integer == 42);
+    roots[1] = NULL;
+    RUNTIME_ASSERT(om_runtime_collect(context) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_live_object_count(context) == 2);
+    roots[0] = NULL;
+    RUNTIME_ASSERT(om_runtime_collect(context) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_live_object_count(context) == 0);
+    passed = true;
+
+cleanup:
+    if (frame != NULL) {
+        (void)om_runtime_roots_pop(context, frame);
+    }
+    om_runtime_context_destroy(context);
+    return passed;
+}
+
+bool om_runtime_test_lists(void)
+{
+    Om_Execution_Context *context = om_runtime_context_create(0);
+    Om_Runtime_Root_Frame *frame = NULL;
+    void *roots[2] = {NULL, NULL};
+    bool passed = false;
+    static const uint8_t item[] = "list item";
+    RUNTIME_ASSERT(context != NULL);
+    frame = om_runtime_roots_push(context, roots, 2);
+    RUNTIME_ASSERT(frame != NULL);
+    RUNTIME_ASSERT(om_runtime_string_create_utf8_default(context, item,
+        sizeof(item) - 1, &roots[1]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_create(context, &TEST_STRING_LIST_TYPE,
+        &roots[0]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_append(context, roots[0],
+        (Om_Runtime_Value){.managed = roots[1]}) == OM_STATUS_OK);
+    size_t length = 0;
+    RUNTIME_ASSERT(om_runtime_list_length(context, roots[0], &length)
+                   == OM_STATUS_OK);
+    RUNTIME_ASSERT(length == 1);
+    Om_Runtime_Value value = {0};
+    RUNTIME_ASSERT(om_runtime_list_get(context, roots[0], 0, &value)
+                   == OM_STATUS_OK);
+    RUNTIME_ASSERT(value.managed == roots[1]);
+    roots[1] = NULL;
+    RUNTIME_ASSERT(om_runtime_collect(context) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_live_object_count(context) == 2);
+    roots[0] = NULL;
+    RUNTIME_ASSERT(om_runtime_collect(context) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_live_object_count(context) == 0);
+    passed = true;
+
+cleanup:
+    if (frame != NULL) {
+        (void)om_runtime_roots_pop(context, frame);
+    }
+    om_runtime_context_destroy(context);
+    return passed;
+}
+
+bool om_runtime_test_maps(void)
+{
+    Om_Execution_Context *context = om_runtime_context_create(0);
+    Om_Runtime_Root_Frame *frame = NULL;
+    void *root = NULL;
+    bool passed = false;
+    RUNTIME_ASSERT(context != NULL);
+    frame = om_runtime_roots_push(context, &root, 1);
+    RUNTIME_ASSERT(frame != NULL);
+    RUNTIME_ASSERT(om_runtime_map_create(context, &TEST_INT_INT_MAP_TYPE,
+        &root) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_map_set(context, root,
+        (Om_Runtime_Value){.integer = 7},
+        (Om_Runtime_Value){.integer = 70}) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_map_set(context, root,
+        (Om_Runtime_Value){.integer = 9},
+        (Om_Runtime_Value){.integer = 90}) == OM_STATUS_OK);
+    size_t length = 0;
+    RUNTIME_ASSERT(om_runtime_map_length(context, root, &length)
+                   == OM_STATUS_OK);
+    RUNTIME_ASSERT(length == 2);
+    Om_Runtime_Value value = {0};
+    RUNTIME_ASSERT(om_runtime_map_get(context, root,
+        (Om_Runtime_Value){.integer = 7}, &value) == OM_STATUS_OK);
+    RUNTIME_ASSERT(value.integer == 70);
+    RUNTIME_ASSERT(om_runtime_map_get(context, root,
+        (Om_Runtime_Value){.integer = 9}, &value) == OM_STATUS_OK);
+    RUNTIME_ASSERT(value.integer == 90);
+    RUNTIME_ASSERT(om_runtime_map_get(context, root,
+        (Om_Runtime_Value){.integer = 11}, &value) == OM_STATUS_NOT_FOUND);
+    RUNTIME_ASSERT(om_runtime_collect(context) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_live_object_count(context) == 1);
+    passed = true;
+
+cleanup:
+    if (frame != NULL) {
+        (void)om_runtime_roots_pop(context, frame);
+    }
+    om_runtime_context_destroy(context);
+    return passed;
+}
+
+bool om_runtime_test_native_pointers(void)
+{
+    return test_native_pointer_lifecycle();
+}
+#endif
+
+#ifndef OM_RUNTIME_TEST_SUPPORT_ONLY
 int main(void)
 {
     const bool objects_passed = test_native_objects_and_collection();
@@ -557,3 +721,4 @@ int main(void)
             && container_passed && fault_passed && native_pointer_passed
         ? 0 : 1;
 }
+#endif

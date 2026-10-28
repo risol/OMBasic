@@ -6,6 +6,13 @@
 #include "ombasic/foundation/memory.h"
 #include "ombasic/foundation/utf8.h"
 
+const Om_Runtime_Type_Descriptor RUNTIME_STRING_TYPE = {
+    .fingerprint = UINT64_C(0x6f6d737472696e67),
+    .kind = OM_RUNTIME_TYPE_STRING,
+    .size = sizeof(void *),
+    .alignment = _Alignof(void *),
+};
+
 Om_Status om_runtime_string_create(Om_Execution_Context *context,
                                    const Om_Runtime_Type_Descriptor *type,
                                    Om_Const_Byte_Slice utf8,

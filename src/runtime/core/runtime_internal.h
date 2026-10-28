@@ -60,10 +60,18 @@ typedef struct Om_Runtime_Object_Copy_Context {
     size_t pair_capacity;
 } Om_Runtime_Object_Copy_Context;
 
+typedef Om_Status (*Om_Runtime_External_Root_Provider)(
+    Om_Execution_Context *context,
+    Om_Runtime_Trace_Visitor visitor,
+    void *visitor_context);
+
 extern const Om_Runtime_Type_Descriptor RUNTIME_STRING_TYPE;
 extern const Om_Runtime_Type_Descriptor RUNTIME_NATIVE_POINTER_TYPE;
 void finalize_native_pointer(Om_Runtime_Object_Header *object);
+void destroy_actor_system(Om_Runtime_Actor_System *system);
+Om_Status runtime_collect_internal(Om_Execution_Context *context);
 
+bool runtime_is_power_of_two(size_t value);
 bool type_is_managed(const Om_Runtime_Type_Descriptor *type);
 bool result_descriptor_valid(const Om_Runtime_Type_Descriptor *type);
 bool runtime_descriptor_compatible(
@@ -122,6 +130,7 @@ struct Om_Execution_Context {
     void *current_actor_message_object;
     bool owns_actor_system;
     bool is_actor_mailbox;
+    Om_Runtime_External_Root_Provider external_root_provider;
     Om_Runtime_Actor_State_Initializer pending_actor_initializer;
     void *pending_actor_initializer_state;
     void *pending_actor_state_object;

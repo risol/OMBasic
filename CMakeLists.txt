@@ -315,16 +315,29 @@ if(WIN32)
 endif()
 
 add_library(ombasic_runtime STATIC
+    src/runtime/actor/actor.c
+    src/runtime/actor/mailbox.c
+    src/runtime/actor/watch.c
+    src/runtime/callback/callback.c
+    src/runtime/core/context.c
+    src/runtime/core/object.c
+    src/runtime/core/value.c
     src/runtime/data/list.c
     src/runtime/data/map.c
+    src/runtime/data/native_pointer.c
     src/runtime/data/record.c
     src/runtime/data/string.c
     src/runtime/fault/fault.c
-    src/runtime/object/native_runtime.c
+    src/runtime/gc/heap.c
+    src/runtime/gc/roots.c
+    src/runtime/gc/trace.c
+    src/runtime/scheduler/scheduler.c
+    src/runtime/system_actor/system_actor.c
 )
 add_library(ombasic::runtime ALIAS ombasic_runtime)
 target_include_directories(ombasic_runtime PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_include_directories(ombasic_runtime PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/actor"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/core"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/system_actor"
 )
@@ -825,6 +838,38 @@ if(BUILD_TESTING)
         ombasic::runtime ombasic::runtime_services
         ombasic_warnings ombasic_sanitizers)
     add_test(NAME native_runtime COMMAND ombasic_native_runtime_tests)
+
+    add_library(ombasic_runtime_test_support STATIC
+        tests/runtime/native_heap_tests.c)
+    target_compile_definitions(ombasic_runtime_test_support PRIVATE
+        OM_RUNTIME_TEST_SUPPORT_ONLY=1)
+    target_link_libraries(ombasic_runtime_test_support PRIVATE
+        ombasic::runtime ombasic::runtime_services
+        ombasic_warnings ombasic_sanitizers)
+
+    function(add_runtime_component_test target_name source_file test_name)
+        add_executable(${target_name} "${source_file}")
+        target_link_libraries(${target_name} PRIVATE
+            ombasic_runtime_test_support ombasic_warnings ombasic_sanitizers)
+        add_test(NAME ${test_name} COMMAND ${target_name})
+    endfunction()
+
+    add_runtime_component_test(ombasic_runtime_fault_tests
+        tests/runtime/fault_tests.c runtime_fault)
+    add_runtime_component_test(ombasic_runtime_root_tests
+        tests/runtime/root_tests.c runtime_roots)
+    add_runtime_component_test(ombasic_runtime_gc_tests
+        tests/runtime/gc_tests.c runtime_gc)
+    add_runtime_component_test(ombasic_runtime_string_tests
+        tests/runtime/string_tests.c runtime_string)
+    add_runtime_component_test(ombasic_runtime_record_tests
+        tests/runtime/record_tests.c runtime_record)
+    add_runtime_component_test(ombasic_runtime_list_tests
+        tests/runtime/list_tests.c runtime_list)
+    add_runtime_component_test(ombasic_runtime_map_tests
+        tests/runtime/map_tests.c runtime_map)
+    add_runtime_component_test(ombasic_runtime_native_pointer_tests
+        tests/runtime/native_pointer_tests.c runtime_native_pointer)
 
     add_executable(ombasic_native_actor_tests tests/runtime/native_actor_tests.c)
     target_link_libraries(ombasic_native_actor_tests PRIVATE

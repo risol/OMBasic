@@ -1,3 +1,12 @@
+#if !defined(_WIN32)
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+#ifndef _DEFAULT_SOURCE
+#define _DEFAULT_SOURCE 1
+#endif
+#endif
+
 #include "ombasic/toolchain/resources.h"
 
 #include <stdbool.h>
@@ -177,14 +186,14 @@ static bool is_regular_file(const char *path)
 {
     struct stat information;
     return path != NULL && stat(path, &information) == 0
-        && (information.st_mode & S_IFMT) == S_IFREG;
+        && S_ISREG(information.st_mode);
 }
 
 static bool is_directory(const char *path)
 {
     struct stat information;
     return path != NULL && stat(path, &information) == 0
-        && (information.st_mode & S_IFMT) == S_IFDIR;
+        && S_ISDIR(information.st_mode);
 }
 
 static const char *const *archive_names(void)

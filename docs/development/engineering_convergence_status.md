@@ -23,7 +23,7 @@ implementation commits.
 | 0. Baseline and architecture protections | Complete | Baseline passed 23/23; architecture checker rejects legacy reason keywords and build-tree archive macros. |
 | 1. Language and `Actor_Down_Reason` | Complete | Removed the three reason keywords, introduced nominal qualified values, and covered positive, type-mismatch, unknown-member, and HIR identity cases; CTest passes 23/23. |
 | 2. Relocatable SDK resources | Complete | Build-tree archive macros removed; explicit/env/executable-relative resource lookup, install layout, manifest, precise missing-archive error, and SDK move/build/run test implemented. Installed archives are stripped and Windows compiler PDB path is relative; relocation test passes. |
-| 3. Runtime implementation split | Not started | — |
+| 3. Runtime implementation split | In progress | Removed `native_runtime.c`; split core/context/value/object, fault, GC heap/roots/trace, string/record/list/map/native pointer, Actor/mailbox/watch, scheduler, callback, and system Actor services. Added per-capability Runtime tests. Windows clang-cl Debug CTest passes 32/32; Linux clang 23 ASan/UBSan Runtime, Actor, 2M-message stress, and distribution tests pass 12/12. Linux TSan build succeeds, but test execution is currently blocked because the container's address-space layout prevents TSan from starting; rerun in a compatible CI environment before closing the phase. |
 | 4. LLVM backend split | Not started | — |
 | 5. Runtime ABI layering | Not started | — |
 | 6. GitHub Actions gates | Not started | — |
