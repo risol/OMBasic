@@ -1731,7 +1731,8 @@ static Om_String_View type_kind_name(Om_Type_Kind kind)
     case OM_TYPE_UNIT: return (Om_String_View){"Unit", 4};
     case OM_TYPE_NODE_REF: return (Om_String_View){"NodeRef", 7};
     case OM_TYPE_ACTOR_ID: return (Om_String_View){"ActorId", 7};
-    case OM_TYPE_DOWN_REASON: return (Om_String_View){"DownReason", 10};
+    case OM_TYPE_DOWN_REASON:
+        return (Om_String_View){"Actor_Down_Reason", 17};
     case OM_TYPE_NATIVE_POINTER: return (Om_String_View){"NativePointer", 13};
     case OM_TYPE_LIST: return (Om_String_View){"List", 4};
     case OM_TYPE_MAP: return (Om_String_View){"Map", 3};
@@ -1777,6 +1778,11 @@ static Om_Status compute_descriptor_fingerprint(
     static const char general_domain[] = "OMBASIC.Type.v1";
     static const char record_domain[] = "OMBASIC.Record.v1";
     static const char message_domain[] = "OMBASIC.Message.v1";
+    static const char builtin_nominal_domain[] = "OMBASIC.BuiltinNominal.v1";
+    static const char builtin_member_domain[] = "OMBASIC.BuiltinMember.v1";
+    static const Om_String_View down_reason_members[] = {
+        {"normal", 6}, {"failed", 6}, {"node_unreachable", 16}
+    };
     if (backend == NULL || stack == NULL || fingerprint == NULL
         || depth >= sizeof(stack->types) / sizeof(stack->types[0])) {
         return OM_STATUS_INVALID_ARGUMENT;
@@ -1810,6 +1816,18 @@ static Om_Status compute_descriptor_fingerprint(
     Om_String_View entity_name = type_kind_name(view.kind);
     const char *domain = general_domain;
     size_t domain_length = sizeof(general_domain) - 1;
+    if (view.kind == OM_TYPE_DOWN_REASON) {
+        if (view.nominal_symbol.value == UINT32_MAX) {
+            status = OM_STATUS_INVALID_ARGUMENT;
+            goto cleanup;
+        }
+        domain = builtin_nominal_domain;
+        domain_length = sizeof(builtin_nominal_domain) - 1;
+        canonical_path = (Om_String_View){"builtin", 7};
+        entity_name = (Om_String_View){"Actor_Down_Reason", 17};
+        child_count = sizeof(down_reason_members)
+            / sizeof(down_reason_members[0]);
+    }
     if (view.kind == OM_TYPE_RECORD || view.kind == OM_TYPE_MESSAGE) {
         if (nominal != NULL) {
             if (nominal->field_start > backend->project->field_count
@@ -1855,13 +1873,20 @@ static Om_Status compute_descriptor_fingerprint(
     for (size_t index = 0; status == OM_STATUS_OK && index < child_count;
          ++index) {
         Om_Type_Id child_type = OM_TYPE_ID_INVALID;
-        if (fields != NULL) {
+        if (view.kind == OM_TYPE_DOWN_REASON) {
+            status = om_fingerprint64_schema(
+                (Om_String_View){builtin_member_domain,
+                                 sizeof(builtin_member_domain) - 1},
+                (Om_String_View){"builtin::Actor_Down_Reason", 26},
+                down_reason_members[index], NULL, 0,
+                &child_fingerprints[index]);
+        } else if (fields != NULL) {
             child_type = fields[index].type_id;
         } else {
             status = om_type_store_child_at(backend->project->type_store,
                 resolved_id, index, &child_type);
         }
-        if (status == OM_STATUS_OK) {
+        if (status == OM_STATUS_OK && view.kind != OM_TYPE_DOWN_REASON) {
             status = compute_descriptor_fingerprint(backend, child_type,
                 depth + 1, stack, &child_fingerprints[index]);
         }

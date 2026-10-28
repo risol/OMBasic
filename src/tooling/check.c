@@ -312,6 +312,7 @@ static int generate_native_program(
     const Om_Omi_Project *native_project,
     const Om_String_View *library_directories,
     size_t library_directory_count,
+    const char *resource_dir_override,
     const char *entry_name,
     const char *requested_output,
     const char *emit_kind,
@@ -477,6 +478,24 @@ static int generate_native_program(
             native_libraries[index] = module->library_path;
         }
     }
+    Om_Toolchain_Resources resources = {0};
+    const Om_Status resource_status = om_toolchain_runtime_resources_resolve(
+        resource_dir_override, NULL, &resources);
+    if (resource_status != OM_STATUS_OK) {
+        (void)fprintf(stderr,
+            "ombasic: runtime resources unavailable for target '%s'; "
+            "resource root '%s' is missing '%s'\n",
+            resources.target_triple != NULL ? resources.target_triple : "host",
+            resources.resource_root != NULL ? resources.resource_root
+                : (resource_dir_override != NULL ? resource_dir_override
+                    : "executable-relative SDK layout"),
+            resources.missing_archive_path != NULL
+                ? resources.missing_archive_path
+                : "the expected target runtime archives");
+        om_toolchain_resources_destroy(&resources);
+        om_free(native_libraries);
+        goto cleanup;
+    }
     const Om_Linker_Request link_request = {
         .object_path = object_path,
         .executable_path = output_path,
@@ -484,9 +503,11 @@ static int generate_native_program(
         .library_count = native_library_count,
         .library_directories = library_directories,
         .library_directory_count = library_directory_count,
+        .resources = &resources,
     };
     const int linker_result = om_linker_link_native(&link_request,
                                                      &debug_symbols_path);
+    om_toolchain_resources_destroy(&resources);
     om_free(native_libraries);
     if (linker_result != 0) {
         (void)fprintf(stderr, "ombasic: native linker failed (exit %d)\n",
@@ -1067,6 +1088,7 @@ int om_cli_compile_command(int argc, char **argv, const char *command)
     const char *root_path = NULL;
     const char *entry_path = NULL;
     const char *output_path = NULL;
+    const char *resource_dir_override = NULL;
     const char *entry_name = "main";
     const char *emit_kind = NULL;
     bool json = false;
@@ -1092,6 +1114,9 @@ int om_cli_compile_command(int argc, char **argv, const char *command)
     for (int index = 2; index < argc; ++index) {
         if (strcmp(argv[index], "--root") == 0 && index + 1 < argc) {
             root_path = argv[++index];
+        } else if (strcmp(argv[index], "--resource-dir") == 0
+                   && index + 1 < argc) {
+            resource_dir_override = argv[++index];
         } else if (strcmp(argv[index], "--native") == 0
                    && index + 1 < argc) {
             const char *path = argv[++index];
@@ -1303,7 +1328,7 @@ int om_cli_compile_command(int argc, char **argv, const char *command)
         exit_code = generate_native_program(&project, root.canonical_path,
             parsed, module_count, &resolution, &inference, &semantic,
             &native_project, library_directories, library_directory_count,
-            entry_name, output_path, emit_kind,
+            resource_dir_override, entry_name, output_path, emit_kind,
             strcmp(command, "run") == 0);
     }
 

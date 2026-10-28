@@ -128,10 +128,7 @@ static bool is_expression_prefix(const Om_Token *previous)
            && previous->keyword != OM_KEYWORD_TRUE
            && previous->keyword != OM_KEYWORD_FALSE
            && previous->keyword != OM_KEYWORD_NULL
-           && previous->keyword != OM_KEYWORD_SELF
-           && previous->keyword != OM_KEYWORD_NORMAL
-           && previous->keyword != OM_KEYWORD_FAILED
-           && previous->keyword != OM_KEYWORD_NODE_UNREACHABLE;
+           && previous->keyword != OM_KEYWORD_SELF;
 }
 
 static bool unary_operator_at(const Om_Lexer_Result *lexed, size_t index)

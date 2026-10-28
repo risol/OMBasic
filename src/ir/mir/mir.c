@@ -1061,7 +1061,17 @@ static Om_Status verify_instruction(const Om_Mir_Project *project,
     switch (instruction->opcode) {
     case OM_MIR_CONST_INT:
         MIR_EXPECT_OPERANDS(0);
-        if (result_kind != OM_TYPE_INT && result_kind != OM_TYPE_DOWN_REASON) {
+        if (result_kind == OM_TYPE_DOWN_REASON) {
+            Om_Type_View reason_type = {0};
+            status = om_type_store_get(project->type_store, result->type_id,
+                                       &reason_type);
+            if (status != OM_STATUS_OK
+                || reason_type.nominal_symbol.value == UINT32_MAX
+                || instruction->integer_value > 2) {
+                return add_diagnostic(diagnostics, OM_MIR_DIAGNOSTIC_E1102,
+                    function->id, block->id, result->id, instruction->span);
+            }
+        } else if (result_kind != OM_TYPE_INT) {
             return add_diagnostic(diagnostics, OM_MIR_DIAGNOSTIC_E1102,
                 function->id, block->id, result->id, instruction->span);
         }

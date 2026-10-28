@@ -82,6 +82,8 @@ if(NOT LLVM_PACKAGE_VERSION MATCHES "^23\\.")
     message(FATAL_ERROR
         "OMBasic requires LLVM major 23; found ${LLVM_PACKAGE_VERSION}.")
 endif()
+find_program(OM_LLVM_STRIP NAMES llvm-strip.exe llvm-strip
+    HINTS "${LLVM_TOOLS_BINARY_DIR}" REQUIRED)
 
 if(BUILD_TESTING)
     if(WIN32)
@@ -313,11 +315,17 @@ if(WIN32)
 endif()
 
 add_library(ombasic_runtime STATIC
+    src/runtime/data/list.c
+    src/runtime/data/map.c
+    src/runtime/data/record.c
+    src/runtime/data/string.c
+    src/runtime/fault/fault.c
     src/runtime/object/native_runtime.c
 )
 add_library(ombasic::runtime ALIAS ombasic_runtime)
 target_include_directories(ombasic_runtime PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_include_directories(ombasic_runtime PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/core"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/system_actor"
 )
 target_link_libraries(ombasic_runtime
@@ -411,38 +419,37 @@ target_link_libraries(ombasic_compiler
     PRIVATE ombasic::backend_llvm ombasic_warnings ombasic_sanitizers
 )
 
+add_library(ombasic_toolchain STATIC src/toolchain/resources.c)
+add_library(ombasic::toolchain ALIAS ombasic_toolchain)
+target_include_directories(ombasic_toolchain PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_link_libraries(ombasic_toolchain
+    PUBLIC ombasic::foundation
+    PRIVATE ombasic_warnings ombasic_sanitizers
+)
+target_compile_definitions(ombasic_toolchain PRIVATE
+    "OM_TOOLCHAIN_TARGET_TRIPLE=\"${OM_LLVM_TARGET_TRIPLE}\"")
+
 add_library(ombasic_linker STATIC src/linker/linker.c)
 add_library(ombasic::linker ALIAS ombasic_linker)
 target_include_directories(ombasic_linker PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(ombasic_linker
-    PUBLIC ombasic::foundation
+    PUBLIC ombasic::foundation ombasic::toolchain
     PRIVATE ombasic_warnings ombasic_sanitizers
 )
 
 add_executable(ombasic src/tooling/main.c src/tooling/check.c)
-file(TO_CMAKE_PATH "${Python3_EXECUTABLE}" OM_PYTHON_EXECUTABLE_CMAKE)
-file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/tools/ombasic_bind.py" OM_BIND_SCRIPT_PATH_CMAKE)
-file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/tools/ombasic_lsp.py" OM_LSP_SCRIPT_PATH_CMAKE)
-target_compile_definitions(ombasic PRIVATE
-    "OM_PYTHON_EXECUTABLE=\"${OM_PYTHON_EXECUTABLE_CMAKE}\""
-    "OM_BIND_SCRIPT_PATH=\"${OM_BIND_SCRIPT_PATH_CMAKE}\""
-    "OM_LSP_SCRIPT_PATH=\"${OM_LSP_SCRIPT_PATH_CMAKE}\""
-)
 target_link_libraries(ombasic
     PRIVATE ombasic::tooling ombasic::native_metadata ombasic::compiler
             ombasic::linker
             ombasic_warnings ombasic_sanitizers
 )
-add_dependencies(ombasic_linker ombasic_runtime ombasic_runtime_services
+if(WIN32)
+    target_link_options(ombasic PRIVATE
+        "-Xlinker" "/PDBALTPATH:ombasic.pdb")
+endif()
+add_dependencies(ombasic ombasic_runtime ombasic_runtime_services
                  ombasic_runtime_distribution ombasic_distribution
                  ombasic_foundation)
-target_compile_definitions(ombasic_linker PRIVATE
-    "OM_RUNTIME_ARCHIVE=\"$<TARGET_FILE:ombasic_runtime>\""
-    "OM_RUNTIME_SERVICES_ARCHIVE=\"$<TARGET_FILE:ombasic_runtime_services>\""
-    "OM_RUNTIME_DISTRIBUTION_ARCHIVE=\"$<TARGET_FILE:ombasic_runtime_distribution>\""
-    "OM_DISTRIBUTION_ARCHIVE=\"$<TARGET_FILE:ombasic_distribution>\""
-    "OM_FOUNDATION_ARCHIVE=\"$<TARGET_FILE:ombasic_foundation>\""
-)
 if(OM_SANITIZER STREQUAL "address-undefined")
     set(OM_NATIVE_LINK_SANITIZER_FLAG "-fsanitize=address,undefined")
 elseif(OM_SANITIZER STREQUAL "thread")
@@ -456,7 +463,7 @@ target_compile_definitions(ombasic_linker PRIVATE
 if(MSVC OR CMAKE_C_SIMULATE_ID STREQUAL "MSVC")
     find_program(OM_CLANG_CL NAMES clang-cl.exe
         HINTS "${LLVM_TOOLS_BINARY_DIR}" REQUIRED)
-    set(OM_NATIVE_LINK_DRIVER "${OM_CLANG_CL}")
+    set(OM_NATIVE_LINK_DRIVER "clang-cl")
     set(OM_NATIVE_LINK_DRIVER_STYLE_MSVC 1)
 
     set(OM_MSVC_LIBRARY_DIRECTORY "" CACHE PATH
@@ -573,24 +580,18 @@ if(MSVC OR CMAKE_C_SIMULATE_ID STREQUAL "MSVC")
     set(OM_WINDOWS_UM_LIBRARY_DIRECTORY
         "${OM_WINDOWS_KITS_LIBRARY_DIRECTORY}/um/${OM_WINDOWS_TARGET_ARCH}")
 else()
-    set(OM_NATIVE_LINK_DRIVER "${CMAKE_C_COMPILER}")
+    set(OM_NATIVE_LINK_DRIVER "clang")
     set(OM_NATIVE_LINK_DRIVER_STYLE_MSVC 0)
     set(OM_MSVC_LIBRARY_DIRECTORY "")
     set(OM_WINDOWS_UCRT_LIBRARY_DIRECTORY "")
     set(OM_WINDOWS_UM_LIBRARY_DIRECTORY "")
 endif()
-file(TO_CMAKE_PATH "${OM_NATIVE_LINK_DRIVER}" OM_NATIVE_LINK_DRIVER_CMAKE)
-file(TO_CMAKE_PATH "${OM_LLD_LINKER_DIRECTORY}" OM_LLD_LINKER_DIRECTORY_CMAKE)
-file(TO_CMAKE_PATH "${OM_MSVC_LIBRARY_DIRECTORY}" OM_MSVC_LIBRARY_DIRECTORY_CMAKE)
-file(TO_CMAKE_PATH "${OM_WINDOWS_UCRT_LIBRARY_DIRECTORY}" OM_WINDOWS_UCRT_LIBRARY_DIRECTORY_CMAKE)
-file(TO_CMAKE_PATH "${OM_WINDOWS_UM_LIBRARY_DIRECTORY}" OM_WINDOWS_UM_LIBRARY_DIRECTORY_CMAKE)
+set(OM_NATIVE_LINK_DRIVER_CMAKE "${OM_NATIVE_LINK_DRIVER}")
+set(OM_LLD_LINKER_DIRECTORY_CMAKE "")
 target_compile_definitions(ombasic_linker PRIVATE
     "OM_NATIVE_LINK_DRIVER_STYLE_MSVC=${OM_NATIVE_LINK_DRIVER_STYLE_MSVC}"
     "OM_NATIVE_LINK_DRIVER=\"${OM_NATIVE_LINK_DRIVER_CMAKE}\""
     "OM_LLD_LINKER_DIRECTORY=\"${OM_LLD_LINKER_DIRECTORY_CMAKE}\""
-    "OM_MSVC_LIBRARY_DIRECTORY=\"${OM_MSVC_LIBRARY_DIRECTORY_CMAKE}\""
-    "OM_WINDOWS_UCRT_LIBRARY_DIRECTORY=\"${OM_WINDOWS_UCRT_LIBRARY_DIRECTORY_CMAKE}\""
-    "OM_WINDOWS_UM_LIBRARY_DIRECTORY=\"${OM_WINDOWS_UM_LIBRARY_DIRECTORY_CMAKE}\""
 )
 if(OM_LLD_LINKER OR OM_NATIVE_LINK_DRIVER_STYLE_MSVC)
     target_compile_definitions(ombasic_linker PRIVATE OM_NATIVE_USE_LLD=1)
@@ -603,6 +604,56 @@ if(WIN32)
                 "${OM_LLVM_C_DLL}" "$<TARGET_FILE_DIR:ombasic>"
         VERBATIM
     )
+endif()
+
+set(OM_BUILD_RESOURCE_ROOT "${CMAKE_CURRENT_BINARY_DIR}")
+set(OM_BUILD_RUNTIME_DIRECTORY
+    "${OM_BUILD_RESOURCE_ROOT}/lib/ombasic/${OM_LLVM_TARGET_TRIPLE}")
+set(OM_BUILD_TOOL_DIRECTORY "${OM_BUILD_RESOURCE_ROOT}/share/ombasic/tools")
+add_custom_target(ombasic_build_resources
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${OM_BUILD_RUNTIME_DIRECTORY}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${OM_BUILD_TOOL_DIRECTORY}"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "$<TARGET_FILE:ombasic_runtime>" "${OM_BUILD_RUNTIME_DIRECTORY}"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "$<TARGET_FILE:ombasic_runtime_services>" "${OM_BUILD_RUNTIME_DIRECTORY}"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "$<TARGET_FILE:ombasic_runtime_distribution>" "${OM_BUILD_RUNTIME_DIRECTORY}"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "$<TARGET_FILE:ombasic_distribution>" "${OM_BUILD_RUNTIME_DIRECTORY}"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "$<TARGET_FILE:ombasic_foundation>" "${OM_BUILD_RUNTIME_DIRECTORY}"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/ombasic_bind.py"
+            "${OM_BUILD_TOOL_DIRECTORY}"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/ombasic_lsp.py"
+            "${OM_BUILD_TOOL_DIRECTORY}"
+    DEPENDS ombasic_runtime ombasic_runtime_services
+            ombasic_runtime_distribution ombasic_distribution
+            ombasic_foundation
+    VERBATIM
+)
+add_dependencies(ombasic ombasic_build_resources)
+
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/share/ombasic")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/share/ombasic/target-manifest.json"
+    "{\n  \"format_version\": 1,\n  \"ombasic_version\": \"${PROJECT_VERSION}\",\n  \"targets\": {\n    \"${OM_LLVM_TARGET_TRIPLE}\": {\n      \"runtime_dir\": \"lib/ombasic/${OM_LLVM_TARGET_TRIPLE}\"\n    }\n  }\n}\n")
+install(TARGETS ombasic RUNTIME DESTINATION bin)
+install(TARGETS ombasic_runtime ombasic_runtime_services
+                ombasic_runtime_distribution ombasic_distribution
+                ombasic_foundation
+        ARCHIVE DESTINATION "lib/ombasic/${OM_LLVM_TARGET_TRIPLE}")
+configure_file(cmake/StripSdkArchives.cmake.in
+    "${CMAKE_CURRENT_BINARY_DIR}/StripSdkArchives.cmake" @ONLY)
+install(SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/StripSdkArchives.cmake")
+install(DIRECTORY include/ombasic DESTINATION include)
+install(FILES tools/ombasic_bind.py tools/ombasic_lsp.py
+        DESTINATION share/ombasic/tools)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/share/ombasic/target-manifest.json"
+        DESTINATION share/ombasic)
+if(WIN32)
+    install(FILES "${OM_LLVM_C_DLL}" DESTINATION bin)
 endif()
 
 add_custom_target(architecture-check
@@ -827,6 +878,14 @@ if(BUILD_TESTING)
                 "${CMAKE_CURRENT_SOURCE_DIR}"
                 "${OM_LLVM_DEBUG_INFO_TOOL}"
                 "$<TARGET_FILE_DIR:ombasic_test_native_math>")
+    add_test(NAME install_sdk_relocation
+        COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/tooling/install_sdk_test.py"
+                "${CMAKE_COMMAND}"
+                "${CMAKE_BINARY_DIR}"
+                "${CMAKE_CURRENT_SOURCE_DIR}"
+                "$<CONFIG>")
+    set_tests_properties(install_sdk_relocation PROPERTIES TIMEOUT 180)
 endif()
 
 if(OM_BUILD_FUZZERS)

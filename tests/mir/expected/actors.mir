@@ -1,23 +1,23 @@
-function f0 instance=0 kind=2 symbol=19 signature=t61(Action) entry=bb0 effects=2562
-bb0(v0:t60(Record), v1:t52(Message)):
+function f0 instance=0 kind=2 symbol=19 signature=t62(Action) entry=bb0 effects=2562
+bb0(v0:t61(Record), v1:t53(Message)):
   v2 = load-field v1 : t0(Int)
   v3 = load-field v0 : t0(Int)
   v4 = int-add-checked v3, v2 : t0(Int)
   v5 = store-init-field v0, v4 : t5(Unit)
   v6 = runtime-actor-stop : t5(Unit)
   return
-function f1 instance=1 kind=1 symbol=21 signature=t59(Action) entry=bb1 effects=8
+function f1 instance=1 kind=1 symbol=21 signature=t60(Action) entry=bb1 effects=8
 bb1(v7:t6(Node_Ref)):
-  v8 = runtime-actor-spawn v7 : t58(ActorRef)
+  v8 = runtime-actor-spawn v7 : t59(ActorRef)
   return
-function f2 instance=2 kind=1 symbol=22 signature=t56(Action) entry=bb2 effects=12
+function f2 instance=2 kind=1 symbol=22 signature=t57(Action) entry=bb2 effects=12
 bb2():
-  v9 = runtime-actor-spawn : t58(ActorRef)
+  v9 = runtime-actor-spawn : t59(ActorRef)
   v10 = const-int value=1 : t0(Int)
-  v11 = alloc-object v10 : t52(Message)
+  v11 = alloc-object v10 : t53(Message)
   v12 = runtime-actor-send v9, v11 : t5(Unit)
   return
-function f3 instance=3 kind=3 symbol=24 signature=t62(Function) entry=bb3 effects=0
-bb3(v13:t60(Record)):
+function f3 instance=3 kind=3 symbol=24 signature=t63(Function) entry=bb3 effects=0
+bb3(v13:t61(Record)):
   v14 = const-int value=0 : t0(Int)
   return v14

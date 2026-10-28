@@ -1,8 +1,7 @@
-#include "ombasic/runtime/native_runtime.h"
+#include "runtime_internal.h"
 
 #include <inttypes.h>
 #include <limits.h>
-#include <setjmp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,26 +21,6 @@
 #define OM_RUNTIME_DEFAULT_COLLECTION_THRESHOLD ((size_t)64 * 1024)
 #define OM_RUNTIME_SYSTEM_QUEUE_CAPACITY ((size_t)1024)
 #define OM_RUNTIME_REMOTE_ACTOR_ID_BIT (UINT64_C(1) << 63)
-
-typedef union Om_Runtime_Object_Header {
-    struct {
-        const Om_Runtime_Type_Descriptor *type;
-        struct Om_Execution_Context *owner;
-        union Om_Runtime_Object_Header *next;
-        size_t allocated_size;
-        void *external_storage;
-        bool marked;
-    } fields;
-    long double long_double_alignment;
-    void *pointer_alignment;
-    uint64_t integer_alignment;
-} Om_Runtime_Object_Header;
-
-struct Om_Runtime_Root_Frame {
-    struct Om_Runtime_Root_Frame *previous;
-    void **slots;
-    size_t count;
-};
 
 typedef struct Om_Runtime_Actor_Message {
     void *object;
@@ -128,41 +107,6 @@ typedef struct Om_Runtime_System_Task {
     void *payload_object;
 } Om_Runtime_System_Task;
 
-typedef struct Om_Runtime_Fault_Boundary {
-    jmp_buf environment;
-    struct Om_Runtime_Fault_Boundary *previous;
-    Om_Runtime_Root_Frame *root_base;
-    volatile Om_Runtime_Fault_Code code;
-    volatile uint32_t source_span_id;
-} Om_Runtime_Fault_Boundary;
-
-struct Om_Execution_Context {
-    Om_Runtime_Object_Header *objects;
-    Om_Runtime_Root_Frame *roots;
-    Om_Runtime_Fault_Boundary *fault_boundary;
-    const Om_Runtime_Source_Span *source_spans;
-    size_t source_span_count;
-    size_t allocation_bytes;
-    size_t collection_threshold;
-    size_t minimum_collection_threshold;
-    size_t live_object_count;
-    size_t collection_count;
-    bool collecting;
-    Om_Runtime_Actor_System *actor_system;
-    Om_Runtime_Actor *current_actor;
-    void *current_actor_message_object;
-    bool owns_actor_system;
-    bool is_actor_mailbox;
-    Om_Runtime_Actor_State_Initializer pending_actor_initializer;
-    void *pending_actor_initializer_state;
-    void *pending_actor_state_object;
-    Om_Status pending_actor_initializer_status;
-    Om_Runtime_Actor_Handler pending_actor_handler;
-    void *pending_actor_state;
-    const void *pending_actor_message;
-    Om_Status pending_actor_status;
-};
-
 typedef struct Om_Runtime_Native_Callback_Registration {
     Om_Runtime_Native_Callback_Function callback;
     Om_Runtime_Actor_System *system;
@@ -224,92 +168,7 @@ static void native_callback_broadcast(void)
 
 static void finalize_native_pointer(Om_Runtime_Object_Header *object);
 
-static void restore_roots(Om_Execution_Context *context,
-                          Om_Runtime_Root_Frame *base)
-{
-    if (context == NULL) {
-        return;
-    }
-    Om_Runtime_Root_Frame *frame = context->roots;
-    while (frame != NULL && frame != base) {
-        Om_Runtime_Root_Frame *previous = frame->previous;
-        om_free(frame);
-        frame = previous;
-    }
-    context->roots = base;
-}
-
-static const char *runtime_fault_message(Om_Runtime_Fault_Code code)
-{
-    switch (code) {
-    case OM_RUNTIME_FAULT_INTEGER_OVERFLOW:
-        return "integer overflow";
-    case OM_RUNTIME_FAULT_DIVISION_BY_ZERO:
-        return "division by zero";
-    case OM_RUNTIME_FAULT_INDEX_OUT_OF_BOUNDS:
-        return "collection index out of bounds";
-    case OM_RUNTIME_FAULT_MAP_KEY_NOT_FOUND:
-        return "map key not found";
-    case OM_RUNTIME_FAULT_ZERO_RANGE_STEP:
-        return "numeric range step cannot be zero";
-    case OM_RUNTIME_FAULT_OPERATION_FAILED:
-        return "runtime operation failed";
-    case OM_RUNTIME_FAULT_ACTOR_FAILED:
-        return "Actor handler failed";
-    case OM_RUNTIME_FAULT_NONE:
-        break;
-    }
-    return "unknown runtime fault";
-}
-
-static void report_runtime_fault(const Om_Execution_Context *context,
-                                 Om_Runtime_Fault_Code code,
-                                 uint32_t source_span_id)
-{
-    const char *message = runtime_fault_message(code);
-    if (context != NULL && source_span_id < context->source_span_count) {
-        const Om_Runtime_Source_Span *span =
-            &context->source_spans[source_span_id];
-        if (span->path != NULL && span->path[0] != '\0'
-            && span->line != 0 && span->column != 0) {
-            (void)fprintf(stderr, "%s:%" PRIu32 ":%" PRIu32
-                ": runtime fault: %s\n", span->path, span->line,
-                span->column, message);
-            return;
-        }
-    }
-    (void)fprintf(stderr, "ombasic runtime fault: %s\n", message);
-}
-
-typedef struct Om_Runtime_String_Body {
-    size_t length;
-    char bytes[];
-} Om_Runtime_String_Body;
-
-typedef struct Om_Runtime_Native_Pointer_Body {
-    void *pointer;
-    Om_Runtime_Native_Pointer_Release release;
-    void *owner;
-} Om_Runtime_Native_Pointer_Body;
-
-typedef struct Om_Runtime_List_Body {
-    size_t length;
-    size_t capacity;
-    Om_Runtime_Value *items;
-} Om_Runtime_List_Body;
-
-typedef struct Om_Runtime_Map_Entry {
-    Om_Runtime_Value key;
-    Om_Runtime_Value value;
-} Om_Runtime_Map_Entry;
-
-typedef struct Om_Runtime_Map_Body {
-    size_t length;
-    size_t capacity;
-    Om_Runtime_Map_Entry *entries;
-} Om_Runtime_Map_Body;
-
-static const Om_Runtime_Type_Descriptor RUNTIME_STRING_TYPE = {
+const Om_Runtime_Type_Descriptor RUNTIME_STRING_TYPE = {
     .fingerprint = UINT64_C(0x6f6d737472696e67),
     .kind = OM_RUNTIME_TYPE_STRING,
     .size = sizeof(void *),
@@ -330,9 +189,7 @@ static const Om_Runtime_Type_Descriptor RUNTIME_NATIVE_POINTER_TYPE = {
     .trace = trace_native_pointer,
 };
 
-static size_t stored_value_size(const Om_Runtime_Type_Descriptor *type);
-
-static bool type_is_managed(const Om_Runtime_Type_Descriptor *type)
+bool type_is_managed(const Om_Runtime_Type_Descriptor *type)
 {
     return type != NULL && (type->kind == OM_RUNTIME_TYPE_STRING
         || type->kind == OM_RUNTIME_TYPE_RECORD
@@ -342,7 +199,7 @@ static bool type_is_managed(const Om_Runtime_Type_Descriptor *type)
         || type->kind == OM_RUNTIME_TYPE_NATIVE_POINTER);
 }
 
-static bool result_descriptor_valid(const Om_Runtime_Type_Descriptor *type)
+bool result_descriptor_valid(const Om_Runtime_Type_Descriptor *type)
 {
     if (type == NULL || type->kind != OM_RUNTIME_TYPE_RESULT
         || type->fields == NULL || type->field_count != 3
@@ -361,7 +218,7 @@ static bool result_descriptor_valid(const Om_Runtime_Type_Descriptor *type)
     return true;
 }
 
-static bool runtime_descriptor_compatible(
+bool runtime_descriptor_compatible(
     const Om_Runtime_Type_Descriptor *expected,
     const Om_Runtime_Type_Descriptor *actual,
     size_t depth)
@@ -419,7 +276,7 @@ static bool is_power_of_two(size_t value)
     return value != 0 && (value & (value - 1)) == 0;
 }
 
-static size_t stored_value_size(const Om_Runtime_Type_Descriptor *type)
+size_t stored_value_size(const Om_Runtime_Type_Descriptor *type)
 {
     if (type_is_managed(type)) {
         return sizeof(void *);
@@ -427,7 +284,7 @@ static size_t stored_value_size(const Om_Runtime_Type_Descriptor *type)
     return type == NULL ? 0 : type->size;
 }
 
-static Om_Runtime_Object_Header *find_object(
+Om_Runtime_Object_Header *find_object(
     const Om_Execution_Context *context,
     const void *pointer
 )
@@ -452,12 +309,12 @@ static Om_Runtime_Object_Header *find_object(
     return NULL;
 }
 
-static void *object_payload(Om_Runtime_Object_Header *object)
+void *object_payload(Om_Runtime_Object_Header *object)
 {
     return object == NULL ? NULL : (void *)(object + 1);
 }
 
-static const void *object_payload_const(const Om_Runtime_Object_Header *object)
+const void *object_payload_const(const Om_Runtime_Object_Header *object)
 {
     return object == NULL ? NULL : (const void *)(object + 1);
 }
@@ -465,8 +322,8 @@ static const void *object_payload_const(const Om_Runtime_Object_Header *object)
 static Om_Status collect_internal(Om_Execution_Context *context);
 static void destroy_actor_system(Om_Runtime_Actor_System *system);
 
-static Om_Status allocation_safepoint(Om_Execution_Context *context,
-                                      size_t expected_bytes)
+Om_Status allocation_safepoint(Om_Execution_Context *context,
+                               size_t expected_bytes)
 {
     if (context == NULL || context->collecting) {
         return context == NULL ? OM_STATUS_INVALID_ARGUMENT : OM_STATUS_OK;
@@ -487,11 +344,11 @@ static Om_Status allocation_safepoint(Om_Execution_Context *context,
     return OM_STATUS_OK;
 }
 
-static Om_Status allocate_object(Om_Execution_Context *context,
-                                 const Om_Runtime_Type_Descriptor *type,
-                                 size_t payload_size,
-                                 size_t external_size,
-                                 Om_Runtime_Object_Header **result)
+Om_Status allocate_object(Om_Execution_Context *context,
+                          const Om_Runtime_Type_Descriptor *type,
+                          size_t payload_size,
+                          size_t external_size,
+                          Om_Runtime_Object_Header **result)
 {
     if (context == NULL || type == NULL || result == NULL) {
         return OM_STATUS_INVALID_ARGUMENT;
@@ -529,7 +386,7 @@ static Om_Status allocate_object(Om_Execution_Context *context,
     return OM_STATUS_OK;
 }
 
-static bool descriptor_valid_for_record(
+bool descriptor_valid_for_record(
     const Om_Runtime_Type_Descriptor *type
 )
 {
@@ -552,9 +409,9 @@ static bool descriptor_valid_for_record(
     return true;
 }
 
-static bool value_matches_type(const Om_Execution_Context *context,
-                               const Om_Runtime_Type_Descriptor *type,
-                               Om_Runtime_Value value)
+bool value_matches_type(const Om_Execution_Context *context,
+                        const Om_Runtime_Type_Descriptor *type,
+                        Om_Runtime_Value value)
 {
     if (type == NULL) {
         return false;
@@ -586,9 +443,9 @@ static bool value_matches_type(const Om_Execution_Context *context,
     return false;
 }
 
-static void store_value(void *address,
-                        const Om_Runtime_Type_Descriptor *type,
-                        Om_Runtime_Value value)
+void store_value(void *address,
+                 const Om_Runtime_Type_Descriptor *type,
+                 Om_Runtime_Value value)
 {
     if (type->kind == OM_RUNTIME_TYPE_BOOL) {
         (void)memcpy(address, &value.boolean, sizeof(value.boolean));
@@ -655,54 +512,6 @@ Om_Status om_runtime_set_source_spans(
     context->source_spans = spans;
     context->source_span_count = span_count;
     return OM_STATUS_OK;
-}
-
-int om_runtime_run(Om_Execution_Context *context,
-                   Om_Runtime_Entry_Function entry)
-{
-    if (context == NULL || entry == NULL) {
-        return 70;
-    }
-    Om_Runtime_Fault_Boundary boundary = {
-        .previous = context->fault_boundary,
-        .root_base = context->roots,
-        .source_span_id = UINT32_MAX,
-    };
-    context->fault_boundary = &boundary;
-    const int jump_status = setjmp(boundary.environment);
-    int result = 70;
-    if (jump_status == 0) {
-        result = entry(context);
-        if (context->roots != boundary.root_base) {
-            restore_roots(context, boundary.root_base);
-            report_runtime_fault(context, OM_RUNTIME_FAULT_OPERATION_FAILED,
-                                 UINT32_MAX);
-            result = 70;
-        }
-    } else {
-        restore_roots(context, boundary.root_base);
-        if (boundary.code != OM_RUNTIME_FAULT_ACTOR_FAILED) {
-            report_runtime_fault(context, boundary.code,
-                                 boundary.source_span_id);
-        }
-        result = 70;
-    }
-    context->fault_boundary = boundary.previous;
-    return result;
-}
-
-_Noreturn void om_runtime_fault(Om_Execution_Context *context,
-                                Om_Runtime_Fault_Code code,
-                                uint32_t source_span_id)
-{
-    if (context != NULL && context->fault_boundary != NULL) {
-        Om_Runtime_Fault_Boundary *boundary = context->fault_boundary;
-        boundary->code = code;
-        boundary->source_span_id = source_span_id;
-        longjmp(boundary->environment, 1);
-    }
-    report_runtime_fault(context, code, source_span_id);
-    abort();
 }
 
 void om_runtime_context_destroy(Om_Execution_Context *context)
@@ -1060,786 +869,6 @@ size_t om_runtime_collection_count(const Om_Execution_Context *context)
 {
     return context == NULL ? 0 : context->collection_count;
 }
-
-Om_Status om_runtime_string_create(Om_Execution_Context *context,
-                                   const Om_Runtime_Type_Descriptor *type,
-                                   Om_Const_Byte_Slice utf8,
-                                   void **result)
-{
-    if (context == NULL || type == NULL || result == NULL
-        || type->kind != OM_RUNTIME_TYPE_STRING
-        || (utf8.data == NULL && utf8.length != 0)) {
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    *result = NULL;
-    Om_Status status = om_utf8_validate(utf8);
-    if (status != OM_STATUS_OK) {
-        return status;
-    }
-    size_t payload_size = 0;
-    if (!om_checked_size_add(offsetof(Om_Runtime_String_Body, bytes),
-                             utf8.length, &payload_size)
-        || !om_checked_size_add(payload_size, 1, &payload_size)) {
-        return OM_STATUS_OUT_OF_RANGE;
-    }
-    Om_Runtime_Object_Header *object = NULL;
-    status = allocate_object(context, type, payload_size, 0, &object);
-    if (status != OM_STATUS_OK) {
-        return status;
-    }
-    Om_Runtime_String_Body *string = object_payload(object);
-    string->length = utf8.length;
-    if (utf8.length != 0) {
-        (void)memcpy(string->bytes, utf8.data, utf8.length);
-    }
-    string->bytes[utf8.length] = '\0';
-    *result = object;
-    return OM_STATUS_OK;
-}
-
-Om_Status om_runtime_string_create_utf8(Om_Execution_Context *context,
-                                        const Om_Runtime_Type_Descriptor *type,
-                                        const uint8_t *bytes,
-                                        size_t length,
-                                        void **result)
-{
-    return om_runtime_string_create(context, type,
-        (Om_Const_Byte_Slice){bytes, length}, result);
-}
-
-Om_Status om_runtime_string_create_utf8_default(Om_Execution_Context *context,
-                                                const uint8_t *bytes,
-                                                size_t length,
-                                                void **result)
-{
-    return om_runtime_string_create_utf8(context, &RUNTIME_STRING_TYPE,
-                                         bytes, length, result);
-}
-
-Om_Status om_runtime_string_concat(Om_Execution_Context *context,
-                                   const void *left,
-                                   const void *right,
-                                   void **result)
-{
-    if (context == NULL || result == NULL) {
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    *result = NULL;
-    Om_String_View left_view = {0};
-    Om_String_View right_view = {0};
-    Om_Status status = om_runtime_string_view(context, left, &left_view);
-    if (status == OM_STATUS_OK) {
-        status = om_runtime_string_view(context, right, &right_view);
-    }
-    size_t length = 0;
-    size_t payload_size = 0;
-    if (status == OM_STATUS_OK
-        && (!om_checked_size_add(left_view.length, right_view.length, &length)
-            || !om_checked_size_add(offsetof(Om_Runtime_String_Body, bytes),
-                                   length, &payload_size)
-            || !om_checked_size_add(payload_size, 1, &payload_size))) {
-        status = OM_STATUS_OUT_OF_RANGE;
-    }
-    Om_Runtime_Object_Header *object = NULL;
-    if (status == OM_STATUS_OK) {
-        status = allocate_object(context, &RUNTIME_STRING_TYPE, payload_size,
-                                 0, &object);
-    }
-    if (status != OM_STATUS_OK) {
-        return status;
-    }
-    Om_Runtime_String_Body *string = object_payload(object);
-    string->length = length;
-    if (left_view.length != 0) {
-        (void)memcpy(string->bytes, left_view.data, left_view.length);
-    }
-    if (right_view.length != 0) {
-        (void)memcpy(string->bytes + left_view.length, right_view.data,
-                     right_view.length);
-    }
-    string->bytes[length] = '\0';
-    *result = object;
-    return OM_STATUS_OK;
-}
-
-Om_Status om_runtime_string_format_value(Om_Execution_Context *context,
-                                         Om_Runtime_Type_Kind kind,
-                                         const Om_Runtime_Value *value,
-                                         void **result)
-{
-    if (context == NULL || value == NULL || result == NULL) {
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    *result = NULL;
-    static const uint8_t NULL_TEXT[] = "null";
-    static const uint8_t UNIT_TEXT[] = "()";
-    static const uint8_t TRUE_TEXT[] = "true";
-    static const uint8_t FALSE_TEXT[] = "false";
-    const uint8_t *bytes = NULL;
-    size_t length = 0;
-    char buffer[64];
-    int written = 0;
-    switch (kind) {
-    case OM_RUNTIME_TYPE_UNIT:
-        bytes = UNIT_TEXT;
-        length = sizeof(UNIT_TEXT) - 1;
-        break;
-    case OM_RUNTIME_TYPE_NULL:
-        bytes = NULL_TEXT;
-        length = sizeof(NULL_TEXT) - 1;
-        break;
-    case OM_RUNTIME_TYPE_BOOL:
-        bytes = value->boolean ? TRUE_TEXT : FALSE_TEXT;
-        length = value->boolean ? sizeof(TRUE_TEXT) - 1
-                                : sizeof(FALSE_TEXT) - 1;
-        break;
-    case OM_RUNTIME_TYPE_INT:
-        written = snprintf(buffer, sizeof(buffer), "%lld",
-                           (long long)value->integer);
-        break;
-    case OM_RUNTIME_TYPE_FLOAT:
-        written = snprintf(buffer, sizeof(buffer), "%.17g", value->floating);
-        break;
-    case OM_RUNTIME_TYPE_STRING: {
-        Om_String_View view = {0};
-        const Om_Status status = om_runtime_string_view(context,
-            value->managed, &view);
-        if (status != OM_STATUS_OK) {
-            return status;
-        }
-        bytes = (const uint8_t *)view.data;
-        length = view.length;
-        break;
-    }
-    default:
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    if (kind == OM_RUNTIME_TYPE_INT || kind == OM_RUNTIME_TYPE_FLOAT) {
-        if (written < 0 || (size_t)written >= sizeof(buffer)) {
-            return OM_STATUS_OUT_OF_RANGE;
-        }
-        bytes = (const uint8_t *)buffer;
-        length = (size_t)written;
-    }
-    return om_runtime_string_create_utf8_default(context, bytes, length,
-                                                  result);
-}
-
-Om_Status om_runtime_string_view(const Om_Execution_Context *context,
-                                 const void *string,
-                                 Om_String_View *result)
-{
-    const Om_Runtime_Object_Header *object = find_object(context, string);
-    if (object == NULL || result == NULL
-        || object->fields.type->kind != OM_RUNTIME_TYPE_STRING) {
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    const Om_Runtime_String_Body *body = object_payload_const(object);
-    *result = (Om_String_View){body->bytes, body->length};
-    return OM_STATUS_OK;
-}
-
-Om_Status om_runtime_string_cstring_view(const Om_Execution_Context *context,
-                                         const void *string,
-                                         const uint8_t **bytes,
-                                         size_t *length)
-{
-    if (bytes == NULL || length == NULL) {
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    *bytes = NULL;
-    *length = 0;
-    Om_String_View view = {0};
-    Om_Status status = om_runtime_string_view(context, string, &view);
-    if (status != OM_STATUS_OK) {
-        return status;
-    }
-    if (view.length != 0 && memchr(view.data, '\0', view.length) != NULL) {
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    *bytes = (const uint8_t *)view.data;
-    *length = view.length;
-    return OM_STATUS_OK;
-}
-
-Om_Status om_runtime_string_create_from_cstring(
-    Om_Execution_Context *context,
-    const char *cstring,
-    void **result)
-{
-    if (context == NULL || cstring == NULL || result == NULL) {
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    const size_t length = strlen(cstring);
-    return om_runtime_string_create_utf8_default(context,
-        (const uint8_t *)cstring, length, result);
-}
-
-Om_Status om_runtime_string_create_from_owned_cstring(
-    Om_Execution_Context *context,
-    char *cstring,
-    Om_Runtime_CString_Release release,
-    void **result)
-{
-    if (release == NULL) {
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    if (cstring == NULL) {
-        if (result != NULL) {
-            *result = NULL;
-        }
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    if (result == NULL) {
-        release(cstring);
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    *result = NULL;
-    const Om_Status status = om_runtime_string_create_from_cstring(
-        context, cstring, result);
-    release(cstring);
-    return status;
-}
-
-Om_Status om_runtime_print(Om_Execution_Context *context,
-                           const void *string)
-{
-    if (context == NULL || find_object(context, string) == NULL) {
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    Om_String_View view = {0};
-    Om_Status status = om_runtime_string_view(context, string, &view);
-    if (status != OM_STATUS_OK) {
-        return status;
-    }
-    if ((view.length != 0 && fwrite(view.data, 1, view.length, stdout) != view.length)
-        || fputc('\n', stdout) == EOF) {
-        return OM_STATUS_IO_ERROR;
-    }
-    return OM_STATUS_OK;
-}
-
-Om_Status om_runtime_record_create(Om_Execution_Context *context,
-                                   const Om_Runtime_Type_Descriptor *type,
-                                   void **result)
-{
-    if (context == NULL || result == NULL || !descriptor_valid_for_record(type)) {
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    *result = NULL;
-    Om_Runtime_Object_Header *object = NULL;
-    const Om_Status status = allocate_object(context, type, type->size, 0,
-                                             &object);
-    if (status == OM_STATUS_OK) {
-        *result = object;
-    }
-    return status;
-}
-
-Om_Status om_runtime_record_set(Om_Execution_Context *context,
-                                void *record,
-                                size_t field_index,
-                                Om_Runtime_Value value)
-{
-    Om_Runtime_Object_Header *object = find_object(context, record);
-    if (object == NULL || !descriptor_valid_for_record(object->fields.type)
-        || field_index >= object->fields.type->field_count) {
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    const Om_Runtime_Field_Descriptor *field =
-        &object->fields.type->fields[field_index];
-    if (!value_matches_type(context, field->type, value)) {
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    store_value((unsigned char *)object_payload(object) + field->offset,
-                field->type, value);
-    return OM_STATUS_OK;
-}
-
-static Om_Status validate_inline_value_data(
-    const Om_Execution_Context *context,
-    const Om_Runtime_Type_Descriptor *type,
-    const void *value,
-    size_t depth)
-{
-    if (context == NULL || type == NULL || value == NULL || depth > 128) {
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    if (type->kind == OM_RUNTIME_TYPE_RESULT) {
-        if (!result_descriptor_valid(type)) {
-            return OM_STATUS_INVALID_ARGUMENT;
-        }
-        bool is_ok = false;
-        (void)memcpy(&is_ok,
-            (const unsigned char *)value + type->fields[0].offset,
-            sizeof(is_ok));
-        const Om_Runtime_Field_Descriptor *payload =
-            &type->fields[is_ok ? 1 : 2];
-        return validate_inline_value_data(context, payload->type,
-            (const unsigned char *)value + payload->offset, depth + 1);
-    }
-    if (type_is_managed(type)) {
-        void *managed = NULL;
-        (void)memcpy(&managed, value, sizeof(managed));
-        if (managed == NULL) return OM_STATUS_OK;
-        const Om_Runtime_Object_Header *object = find_object(context, managed);
-        if (object == NULL || object->fields.type->kind != type->kind
-            || (type->kind != OM_RUNTIME_TYPE_STRING
-                && type->system_message_id != OM_SYSTEM_MESSAGE_ID_ANY
-                && !runtime_descriptor_compatible(type,
-                    object->fields.type, 0))) {
-            return OM_STATUS_INVALID_ARGUMENT;
-        }
-        return OM_STATUS_OK;
-    }
-    return OM_STATUS_OK;
-}
-
-Om_Status om_runtime_record_set_value(Om_Execution_Context *context,
-                                      void *record,
-                                      size_t field_index,
-                                      const void *value)
-{
-    Om_Runtime_Object_Header *object = find_object(context, record);
-    if (object == NULL || value == NULL
-        || !descriptor_valid_for_record(object->fields.type)
-        || field_index >= object->fields.type->field_count) {
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    const Om_Runtime_Field_Descriptor *field =
-        &object->fields.type->fields[field_index];
-    if (field->type->kind != OM_RUNTIME_TYPE_RESULT) {
-        Om_Runtime_Value scalar = {0};
-        const size_t size = stored_value_size(field->type);
-        if (size > sizeof(scalar)) {
-            return OM_STATUS_INVALID_ARGUMENT;
-        }
-        (void)memcpy(&scalar, value, size);
-        return om_runtime_record_set(context, record, field_index, scalar);
-    }
-    if (!result_descriptor_valid(field->type)) {
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    const Om_Status value_status = validate_inline_value_data(context,
-        field->type, value, 0);
-    if (value_status != OM_STATUS_OK) return value_status;
-    (void)memcpy((unsigned char *)object_payload(object) + field->offset,
-                 value, field->type->size);
-    return OM_STATUS_OK;
-}
-
-Om_Status om_runtime_record_get(const Om_Execution_Context *context,
-                                const void *record,
-                                size_t field_index,
-                                void *result)
-{
-    const Om_Runtime_Object_Header *object = find_object(context, record);
-    if (object == NULL || result == NULL
-        || !descriptor_valid_for_record(object->fields.type)
-        || field_index >= object->fields.type->field_count) {
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    const Om_Runtime_Field_Descriptor *field =
-        &object->fields.type->fields[field_index];
-    if (field->type->kind == OM_RUNTIME_TYPE_RESULT) {
-        if (!result_descriptor_valid(field->type)) {
-            return OM_STATUS_INVALID_ARGUMENT;
-        }
-        (void)memcpy(result,
-            (const unsigned char *)object_payload_const(object) + field->offset,
-            field->type->size);
-        return OM_STATUS_OK;
-    }
-    const size_t result_size = stored_value_size(field->type);
-    if (result_size != 0) {
-        (void)memcpy(result,
-            (const unsigned char *)object_payload_const(object) + field->offset,
-            result_size);
-    }
-    return OM_STATUS_OK;
-}
-
-Om_Status om_runtime_list_create(Om_Execution_Context *context,
-                                 const Om_Runtime_Type_Descriptor *type,
-                                 void **result)
-{
-    if (context == NULL || type == NULL || result == NULL
-        || type->kind != OM_RUNTIME_TYPE_LIST || type->element_type == NULL
-        || type->element_type->kind > OM_RUNTIME_TYPE_ACTOR_REF) {
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    *result = NULL;
-    Om_Runtime_Object_Header *object = NULL;
-    const Om_Status status = allocate_object(context, type,
-        sizeof(Om_Runtime_List_Body), 0, &object);
-    if (status == OM_STATUS_OK) {
-        *result = object;
-    }
-    return status;
-}
-
-static Om_Status list_reserve(Om_Execution_Context *context,
-                              Om_Runtime_Object_Header *object,
-                              size_t requested_capacity)
-{
-    Om_Runtime_List_Body *list = object_payload(object);
-    if (requested_capacity <= list->capacity) {
-        return OM_STATUS_OK;
-    }
-    size_t capacity = list->capacity == 0 ? 4 : list->capacity;
-    while (capacity < requested_capacity) {
-        if (capacity > SIZE_MAX / 2) {
-            capacity = requested_capacity;
-            break;
-        }
-        capacity *= 2;
-    }
-    if (capacity > SIZE_MAX / sizeof(*list->items)) {
-        return OM_STATUS_OUT_OF_RANGE;
-    }
-    const size_t new_bytes = capacity * sizeof(*list->items);
-    const size_t old_bytes = list->capacity * sizeof(*list->items);
-    Om_Status status = allocation_safepoint(context,
-        new_bytes > old_bytes ? new_bytes - old_bytes : 0);
-    if (status != OM_STATUS_OK) {
-        return status;
-    }
-    Om_Runtime_Value *items = om_realloc_array(list->items, capacity,
-                                               sizeof(*items));
-    if (items == NULL) {
-        return OM_STATUS_OUT_OF_MEMORY;
-    }
-    list->items = items;
-    list->capacity = capacity;
-    object->fields.external_storage = items;
-    object->fields.allocated_size += new_bytes - old_bytes;
-    context->allocation_bytes += new_bytes - old_bytes;
-    return OM_STATUS_OK;
-}
-
-Om_Status om_runtime_list_append(Om_Execution_Context *context,
-                                 void *list_pointer,
-                                 Om_Runtime_Value value)
-{
-    Om_Runtime_Object_Header *object = find_object(context, list_pointer);
-    if (object == NULL || object->fields.type->kind != OM_RUNTIME_TYPE_LIST) {
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    const Om_Runtime_Type_Descriptor *type = object->fields.type;
-    if (!value_matches_type(context, type->element_type, value)) {
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    Om_Runtime_List_Body *list = object_payload(object);
-    if (list->length == SIZE_MAX) {
-        return OM_STATUS_OUT_OF_RANGE;
-    }
-    Om_Status status = list_reserve(context, object, list->length + 1);
-    if (status == OM_STATUS_OK) {
-        list->items[list->length++] = value;
-    }
-    return status;
-}
-
-Om_Status om_runtime_list_append_value(Om_Execution_Context *context,
-                                      void *list,
-                                      const Om_Runtime_Value *value)
-{
-    return value == NULL ? OM_STATUS_INVALID_ARGUMENT
-        : om_runtime_list_append(context, list, *value);
-}
-
-Om_Status om_runtime_list_get(const Om_Execution_Context *context,
-                              const void *list_pointer,
-                              size_t index,
-                              Om_Runtime_Value *result)
-{
-    const Om_Runtime_Object_Header *object = find_object(context, list_pointer);
-    if (object == NULL || result == NULL
-        || object->fields.type->kind != OM_RUNTIME_TYPE_LIST) {
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    const Om_Runtime_List_Body *list = object_payload_const(object);
-    if (index >= list->length) {
-        return OM_STATUS_OUT_OF_RANGE;
-    }
-    *result = list->items[index];
-    return OM_STATUS_OK;
-}
-
-Om_Status om_runtime_list_length(const Om_Execution_Context *context,
-                                 const void *list_pointer,
-                                 size_t *result)
-{
-    const Om_Runtime_Object_Header *object = find_object(context, list_pointer);
-    if (object == NULL || result == NULL
-        || object->fields.type->kind != OM_RUNTIME_TYPE_LIST) {
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    const Om_Runtime_List_Body *list = object_payload_const(object);
-    *result = list->length;
-    return OM_STATUS_OK;
-}
-
-Om_Status om_runtime_map_create(Om_Execution_Context *context,
-                                const Om_Runtime_Type_Descriptor *type,
-                                void **result)
-{
-    if (context == NULL || type == NULL || result == NULL
-        || type->kind != OM_RUNTIME_TYPE_MAP || type->key_type == NULL
-        || type->value_type == NULL
-        || (type->key_type->kind != OM_RUNTIME_TYPE_INT
-            && type->key_type->kind != OM_RUNTIME_TYPE_BOOL
-            && type->key_type->kind != OM_RUNTIME_TYPE_STRING
-            && type->key_type->kind != OM_RUNTIME_TYPE_ACTOR_REF)
-        || type->value_type->kind > OM_RUNTIME_TYPE_ACTOR_REF) {
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    *result = NULL;
-    Om_Runtime_Object_Header *object = NULL;
-    const Om_Status status = allocate_object(context, type,
-        sizeof(Om_Runtime_Map_Body), 0, &object);
-    if (status == OM_STATUS_OK) {
-        *result = object;
-    }
-    return status;
-}
-
-static Om_Status map_key_equal(const Om_Execution_Context *context,
-                               const Om_Runtime_Type_Descriptor *type,
-                               Om_Runtime_Value left,
-                               Om_Runtime_Value right,
-                               bool *equal)
-{
-    if (type->kind == OM_RUNTIME_TYPE_INT
-        || type->kind == OM_RUNTIME_TYPE_ACTOR_REF) {
-        *equal = left.integer == right.integer;
-    } else if (type->kind == OM_RUNTIME_TYPE_BOOL) {
-        *equal = left.boolean == right.boolean;
-    } else if (type->kind == OM_RUNTIME_TYPE_STRING) {
-        if (left.managed == right.managed) {
-            *equal = true;
-        } else if (left.managed == NULL || right.managed == NULL) {
-            *equal = false;
-        } else if (find_object(context, left.managed) == NULL
-                   || find_object(context, right.managed) == NULL) {
-            return OM_STATUS_INVALID_ARGUMENT;
-        } else {
-            Om_String_View left_view = {0};
-            Om_String_View right_view = {0};
-            Om_Status status = om_runtime_string_view(context, left.managed,
-                                                       &left_view);
-            if (status == OM_STATUS_OK) {
-                status = om_runtime_string_view(context, right.managed,
-                                                 &right_view);
-            }
-            if (status != OM_STATUS_OK) {
-                return status;
-            }
-            *equal = left_view.length == right_view.length
-                && (left_view.length == 0
-                    || memcmp(left_view.data, right_view.data,
-                              left_view.length) == 0);
-        }
-    } else {
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    return OM_STATUS_OK;
-}
-
-static Om_Status map_find_key(const Om_Execution_Context *context,
-                              const Om_Runtime_Object_Header *object,
-                              Om_Runtime_Value key,
-                              size_t *index,
-                              bool *found)
-{
-    const Om_Runtime_Type_Descriptor *type = object->fields.type;
-    const Om_Runtime_Map_Body *map = object_payload_const(object);
-    *found = false;
-    for (size_t offset = 0; offset < map->length; ++offset) {
-        bool equal = false;
-        const Om_Status status = map_key_equal(context, type->key_type, key,
-            map->entries[offset].key, &equal);
-        if (status != OM_STATUS_OK) {
-            return status;
-        }
-        if (equal) {
-            *index = offset;
-            *found = true;
-            return OM_STATUS_OK;
-        }
-    }
-    return OM_STATUS_OK;
-}
-
-static Om_Status map_reserve(Om_Execution_Context *context,
-                             Om_Runtime_Object_Header *object,
-                             size_t requested_capacity)
-{
-    Om_Runtime_Map_Body *map = object_payload(object);
-    if (requested_capacity <= map->capacity) {
-        return OM_STATUS_OK;
-    }
-    size_t capacity = map->capacity == 0 ? 4 : map->capacity;
-    while (capacity < requested_capacity) {
-        if (capacity > SIZE_MAX / 2) {
-            capacity = requested_capacity;
-            break;
-        }
-        capacity *= 2;
-    }
-    if (capacity > SIZE_MAX / sizeof(*map->entries)) {
-        return OM_STATUS_OUT_OF_RANGE;
-    }
-    const size_t new_bytes = capacity * sizeof(*map->entries);
-    const size_t old_bytes = map->capacity * sizeof(*map->entries);
-    Om_Status status = allocation_safepoint(context,
-        new_bytes > old_bytes ? new_bytes - old_bytes : 0);
-    if (status != OM_STATUS_OK) {
-        return status;
-    }
-    Om_Runtime_Map_Entry *entries = om_realloc_array(map->entries, capacity,
-                                                     sizeof(*entries));
-    if (entries == NULL) {
-        return OM_STATUS_OUT_OF_MEMORY;
-    }
-    if (capacity > map->capacity) {
-        (void)memset(entries + map->capacity, 0,
-            (capacity - map->capacity) * sizeof(*entries));
-    }
-    map->entries = entries;
-    map->capacity = capacity;
-    object->fields.external_storage = entries;
-    object->fields.allocated_size += new_bytes - old_bytes;
-    context->allocation_bytes += new_bytes - old_bytes;
-    return OM_STATUS_OK;
-}
-
-Om_Status om_runtime_map_set(Om_Execution_Context *context,
-                             void *map_pointer,
-                             Om_Runtime_Value key,
-                             Om_Runtime_Value value)
-{
-    Om_Runtime_Object_Header *object = find_object(context, map_pointer);
-    if (object == NULL || object->fields.type->kind != OM_RUNTIME_TYPE_MAP) {
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    const Om_Runtime_Type_Descriptor *type = object->fields.type;
-    if (!value_matches_type(context, type->key_type, key)
-        || !value_matches_type(context, type->value_type, value)) {
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    size_t index = 0;
-    bool found = false;
-    Om_Status status = map_find_key(context, object, key, &index, &found);
-    Om_Runtime_Map_Body *map = object_payload(object);
-    if (status == OM_STATUS_OK && !found) {
-        if (map->length == SIZE_MAX) {
-            return OM_STATUS_OUT_OF_RANGE;
-        }
-        status = map_reserve(context, object, map->length + 1);
-        if (status == OM_STATUS_OK) {
-            index = map->length++;
-        }
-    }
-    if (status == OM_STATUS_OK) {
-        map->entries[index] = (Om_Runtime_Map_Entry){key, value};
-    }
-    return status;
-}
-
-Om_Status om_runtime_map_set_values(Om_Execution_Context *context,
-                                    void *map,
-                                    const Om_Runtime_Value *key,
-                                    const Om_Runtime_Value *value)
-{
-    if (key == NULL || value == NULL) {
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    return om_runtime_map_set(context, map, *key, *value);
-}
-
-Om_Status om_runtime_map_get(const Om_Execution_Context *context,
-                             const void *map_pointer,
-                             Om_Runtime_Value key,
-                             Om_Runtime_Value *result)
-{
-    const Om_Runtime_Object_Header *object = find_object(context, map_pointer);
-    if (object == NULL || result == NULL
-        || object->fields.type->kind != OM_RUNTIME_TYPE_MAP) {
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    const Om_Runtime_Type_Descriptor *type = object->fields.type;
-    if (!value_matches_type(context, type->key_type, key)) {
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    size_t index = 0;
-    bool found = false;
-    const Om_Status status = map_find_key(context, object, key, &index,
-                                           &found);
-    if (status != OM_STATUS_OK) {
-        return status;
-    }
-    if (!found) {
-        return OM_STATUS_NOT_FOUND;
-    }
-    const Om_Runtime_Map_Body *map = object_payload_const(object);
-    *result = map->entries[index].value;
-    return OM_STATUS_OK;
-}
-
-Om_Status om_runtime_map_get_value(const Om_Execution_Context *context,
-                                   const void *map,
-                                   const Om_Runtime_Value *key,
-                                   Om_Runtime_Value *result)
-{
-    return key == NULL ? OM_STATUS_INVALID_ARGUMENT
-        : om_runtime_map_get(context, map, *key, result);
-}
-
-Om_Status om_runtime_map_key_at(const Om_Execution_Context *context,
-                                const void *map_pointer,
-                                size_t index,
-                                Om_Runtime_Value *result)
-{
-    const Om_Runtime_Object_Header *object = find_object(context, map_pointer);
-    if (object == NULL || result == NULL
-        || object->fields.type->kind != OM_RUNTIME_TYPE_MAP) {
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    const Om_Runtime_Map_Body *map = object_payload_const(object);
-    if (index >= map->length) {
-        return OM_STATUS_OUT_OF_RANGE;
-    }
-    *result = map->entries[index].key;
-    return OM_STATUS_OK;
-}
-
-Om_Status om_runtime_map_length(const Om_Execution_Context *context,
-                                const void *map_pointer,
-                                size_t *result)
-{
-    const Om_Runtime_Object_Header *object = find_object(context, map_pointer);
-    if (object == NULL || result == NULL
-        || object->fields.type->kind != OM_RUNTIME_TYPE_MAP) {
-        return OM_STATUS_INVALID_ARGUMENT;
-    }
-    const Om_Runtime_Map_Body *map = object_payload_const(object);
-    *result = map->length;
-    return OM_STATUS_OK;
-}
-
-typedef struct Om_Runtime_Object_Copy_Pair {
-    const Om_Runtime_Object_Header *source;
-    void *destination;
-} Om_Runtime_Object_Copy_Pair;
-
-typedef struct Om_Runtime_Object_Copy_Context {
-    Om_Execution_Context *source_context;
-    Om_Execution_Context *destination_context;
-    Om_Runtime_Object_Copy_Pair *pairs;
-    size_t pair_count;
-    size_t pair_capacity;
-} Om_Runtime_Object_Copy_Context;
 
 static Om_Status clone_managed_value(Om_Runtime_Object_Copy_Context *copy,
                                      const Om_Runtime_Type_Descriptor *type,

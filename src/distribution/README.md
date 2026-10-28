@@ -36,7 +36,7 @@ Decoded field trees own their storage and are released with
 
 The payload value tags follow `Om_Distribution_Value_Kind`: Null 0, Unit 1,
 Bool 2, Int64 3, Float64 4, String 5, List 6, Map 7, Record 8, Message 9,
-ActorRef 10, Actor_Id 11, and Down_Reason 12. Composite values carry a schema
+ActorRef 10, Actor_Id 11, and Actor_Down_Reason 12. Composite values carry a schema
 fingerprint, field/item count, and recursively encoded values. The receiver
 checks the expected top-level schema fingerprint and field count before
 returning the decoded Message.
@@ -79,7 +79,8 @@ execution context.
 `runtime_distribution_native` launches two native test processes on localhost
 for both a normal remote Actor lifecycle and a disconnected-node scenario. It
 covers the fingerprint handshake, remote spawn, String/ActorRef Message fields,
-watch notification, normal Actor termination, and `NODE_UNREACHABLE` delivery.
+watch notification, normal Actor termination, and
+`Actor_Down_Reason.node_unreachable` delivery.
 The TCP transport test verifies ordered, at-most-once delivery for sequential
 sends on one connection; failed sends are not retried. Peer authentication
 remains outside the current protocol contract.

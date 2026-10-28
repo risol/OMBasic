@@ -501,7 +501,7 @@ static Om_Status setup_prelude(Om_Resolver *resolver,
                                const Om_Resolver_Config *config)
 {
     static const char *const builtin_names[] = {
-        "Unit", "Result", "Node_Ref", "Actor_Id", "Down_Reason",
+        "Unit", "Result", "Node_Ref", "Actor_Id", "Actor_Down_Reason",
         "Ok", "Error", "Actor_Down", "print",
         OM_SYSTEM_ACTOR_NAME_CONSOLE, OM_SYSTEM_ACTOR_NAME_TIMER,
         OM_SYSTEM_ACTOR_NAME_FILE_SYSTEM,
@@ -737,7 +737,25 @@ static Om_Status resolve_module_member(Om_Resolver *resolver,
     const Om_Ast_Node_Id receiver_id = ast_child(resolver, module, member, 0);
     const Om_Symbol_Id receiver_symbol = resolved_symbol(resolver, module, receiver_id);
     const Om_Symbol *receiver = symbol_at(resolver, receiver_symbol);
-    if (receiver == NULL || receiver->kind != OM_SYMBOL_MODULE_ALIAS) {
+    if (receiver == NULL) {
+        return OM_STATUS_OK;
+    }
+    if (receiver->kind == OM_SYMBOL_BUILTIN
+        && om_name_equal_case_insensitive(
+            receiver->name, (Om_String_View){"Actor_Down_Reason", 17})) {
+        static const Om_String_View members[] = {
+            {"normal", 6}, {"failed", 6}, {"node_unreachable", 16}
+        };
+        for (size_t index = 0; index < sizeof(members) / sizeof(members[0]);
+             ++index) {
+            if (om_string_view_equal(member->name, members[index])) {
+                return set_node_symbol(resolver, module, member_id,
+                                       receiver_symbol);
+            }
+        }
+        return report_undefined(resolver, module, member_name_span(member));
+    }
+    if (receiver->kind != OM_SYMBOL_MODULE_ALIAS) {
         return OM_STATUS_OK;
     }
     const Om_Symbol_Id target = lookup_module_symbol(

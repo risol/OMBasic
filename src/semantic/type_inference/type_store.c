@@ -435,7 +435,7 @@ Om_Status om_type_store_nominal(Om_Type_Store *store,
                                 Om_Type_Id *type_id)
 {
     if ((kind != OM_TYPE_RECORD && kind != OM_TYPE_MESSAGE
-         && kind != OM_TYPE_ACTOR_PROTOCOL)
+         && kind != OM_TYPE_ACTOR_PROTOCOL && kind != OM_TYPE_DOWN_REASON)
         || symbol_id.value == UINT32_MAX) {
         return OM_STATUS_INVALID_ARGUMENT;
     }
@@ -1039,7 +1039,7 @@ const char *om_type_kind_name(Om_Type_Kind kind)
     case OM_TYPE_UNIT: return "Unit";
     case OM_TYPE_NODE_REF: return "Node_Ref";
     case OM_TYPE_ACTOR_ID: return "Actor_Id";
-    case OM_TYPE_DOWN_REASON: return "Down_Reason";
+    case OM_TYPE_DOWN_REASON: return "Actor_Down_Reason";
     case OM_TYPE_LIST: return "List";
     case OM_TYPE_MAP: return "Map";
     case OM_TYPE_RECORD: return "Record";

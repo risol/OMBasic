@@ -268,9 +268,14 @@ static Om_Status specialized_type(Om_Type_Store *store,
     case OM_TYPE_UNIT:
     case OM_TYPE_NODE_REF:
     case OM_TYPE_ACTOR_ID:
-    case OM_TYPE_DOWN_REASON:
     case OM_TYPE_NATIVE_POINTER:
         status = om_type_store_primitive(store, view.kind, result);
+        break;
+    case OM_TYPE_DOWN_REASON:
+        status = view.nominal_symbol.value == UINT32_MAX
+            ? om_type_store_primitive(store, view.kind, result)
+            : om_type_store_nominal(store, view.kind, view.nominal_symbol,
+                                    result);
         break;
     case OM_TYPE_LIST:
         status = view.child_count == 1

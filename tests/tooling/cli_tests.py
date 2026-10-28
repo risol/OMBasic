@@ -83,6 +83,7 @@ def main() -> int:
             encoding="utf-8", newline="\n")
         ran = subprocess.run([
             str(compiler), "run", "--root", str(command_root), "main.bas",
+            "--resource-dir", str(native_library_dir),
         ], capture_output=True, text=True, check=False)
         require(ran.returncode == 0 and ran.stdout == "Hello, OMBasic\n",
                 f"native run failed: stdout={ran.stdout!r}, stderr={ran.stderr!r}")
@@ -939,7 +940,7 @@ def main() -> int:
             "        SEND target, Start()\n"
             "    END RECEIVE\n"
             "    RECEIVE Actor_Down(ended_id, reason)\n"
-            "        IF reason = FAILED THEN\n"
+            "        IF reason = Actor_Down_Reason.failed THEN\n"
             '            print("try marked failed")\n'
             "        ELSE\n"
             '            print("wrong failure reason")\n'
@@ -980,7 +981,7 @@ def main() -> int:
             "        WATCH target\n"
             "    END RECEIVE\n"
             "    RECEIVE Actor_Down(ended_id, cause)\n"
-            "        IF cause = FAILED THEN\n"
+            "        IF cause = Actor_Down_Reason.failed THEN\n"
             "            print(\"failed\")\n"
             "        ELSE\n"
             "            print(\"wrong reason\")\n"
@@ -1344,6 +1345,110 @@ def main() -> int:
     require(valid.returncode == 0, f"valid check failed: {valid.stderr}")
     require(json.loads(valid.stdout) == {"diagnostics": []},
             "valid check did not return an empty diagnostic list")
+
+    with tempfile.TemporaryDirectory(prefix="ombasic-down-reason-") as temporary:
+        reason_root = pathlib.Path(temporary)
+        empty_resource_root = reason_root / "empty-sdk"
+        empty_resource_root.mkdir()
+        reason_source = (
+            "ACTION inspect(reason)\n"
+            "    normal = TRUE\n"
+            "    failed = FALSE\n"
+            "    node_unreachable = TRUE\n"
+            "    SELECT reason\n"
+            "        CASE Actor_Down_Reason.normal\n"
+            "            IF normal THEN\n"
+            "                print(\"normal\")\n"
+            "            END IF\n"
+            "        CASE Actor_Down_Reason.failed\n"
+            "            IF failed THEN\n"
+            "                print(\"failed\")\n"
+            "            END IF\n"
+            "        CASE Actor_Down_Reason.node_unreachable\n"
+            "            IF node_unreachable THEN\n"
+            "                print(\"unreachable\")\n"
+            "            END IF\n"
+            "    END SELECT\n"
+            "END ACTION\n"
+            "ACTION main()\n"
+            "    reason = Actor_Down_Reason.failed\n"
+            "END ACTION\n")
+        (reason_root / "main.bas").write_text(
+            reason_source, encoding="utf-8", newline="\n")
+        reason_check = subprocess.run([
+            str(compiler), "check", "--root", str(reason_root), "main.bas",
+            "--resource-dir", str(empty_resource_root),
+            "--diagnostics=json",
+        ], capture_output=True, text=True, check=False)
+        require(reason_check.returncode == 0
+                and json.loads(reason_check.stdout) == {"diagnostics": []},
+                "Actor_Down_Reason members or lowercase identifiers failed: "
+                f"return={reason_check.returncode}, "
+                f"stdout={reason_check.stdout!r}, "
+                f"stderr={reason_check.stderr!r}")
+        (reason_root / "missing_runtime.bas").write_text(
+            "ACTION main()\n"
+            "    print(\"resource check\")\n"
+            "END ACTION\n",
+            encoding="utf-8", newline="\n")
+        missing_runtime = subprocess.run([
+            str(compiler), "build", "--root", str(reason_root),
+            "missing_runtime.bas",
+            "--resource-dir", str(empty_resource_root),
+            "-o", str(reason_root / "missing-runtime.exe"),
+        ], capture_output=True, text=True, check=False)
+        expected_runtime_archive = ("ombasic_runtime.lib" if sys.platform == "win32"
+                                   else "libombasic_runtime.a")
+        require(missing_runtime.returncode != 0
+                and str(empty_resource_root) in missing_runtime.stderr
+                and expected_runtime_archive in missing_runtime.stderr,
+                "missing SDK archive did not report the selected resource root: "
+                f"return={missing_runtime.returncode}, "
+                f"stderr={missing_runtime.stderr!r}")
+        reason_hir = reason_root / "reason.hir"
+        reason_emit = subprocess.run([
+            str(compiler), "build", "--root", str(reason_root), "main.bas",
+            "--emit=hir", "-o", str(reason_hir),
+        ], capture_output=True, text=True, check=False)
+        require(reason_emit.returncode == 0 and reason_hir.is_file()
+                and "value=builtin::Actor_Down_Reason.failed : Actor_Down_Reason"
+                    in reason_hir.read_text(encoding="utf-8"),
+                "HIR did not preserve Actor_Down_Reason nominal identity: "
+                f"return={reason_emit.returncode}, stderr={reason_emit.stderr!r}")
+
+        invalid_reason_source = (
+            "ACTION main()\n"
+            "    IF Actor_Down_Reason.failed = 1 THEN\n"
+            "        print(\"bad\")\n"
+            "    END IF\n"
+            "END ACTION\n")
+        (reason_root / "invalid.bas").write_text(
+            invalid_reason_source, encoding="utf-8", newline="\n")
+        invalid_reason = subprocess.run([
+            str(compiler), "check", "--root", str(reason_root), "invalid.bas",
+            "--diagnostics=json",
+        ], capture_output=True, text=True, check=False)
+        reason_diagnostics = json.loads(invalid_reason.stdout)["diagnostics"]
+        require(invalid_reason.returncode != 0
+                and any(item["code"] == "E0401"
+                        for item in reason_diagnostics),
+                "Int was accepted as Actor_Down_Reason: "
+                f"return={invalid_reason.returncode}, "
+                f"diagnostics={reason_diagnostics!r}, "
+                f"stderr={invalid_reason.stderr!r}")
+
+        (reason_root / "unknown_member.bas").write_text(
+            "ACTION main()\n"
+            "    reason = Actor_Down_Reason.unknown\n"
+            "END ACTION\n",
+            encoding="utf-8", newline="\n")
+        unknown_member = subprocess.run([
+            str(compiler), "check", "--root", str(reason_root),
+            "unknown_member.bas", "--diagnostics=json",
+        ], capture_output=True, text=True, check=False)
+        unknown_diagnostics = json.loads(unknown_member.stdout)["diagnostics"]
+        require(unknown_member.returncode != 0 and unknown_diagnostics,
+                "unknown Actor_Down_Reason member was accepted")
 
     lexer_root = repository / "tests/conformance/lexer"
     invalid = subprocess.run([

@@ -16,7 +16,7 @@ Runtime.
   boundary around the entry Action, Actor initializers, and Actor handlers.
 - Record the fault code and source span, restore the shadow-root chain to the
   boundary's saved base, and return a contained failure to the caller.
-- Convert an Actor handler fault into the Actor's normal FAILED terminal state
+- Convert an Actor handler fault into the Actor's failed terminal state
   so watcher notifications follow the ordinary lifecycle path.
 - Limit non-local transfer to Runtime faults; returns, `TRY`, and `STOP` remain
   normal generated control flow.

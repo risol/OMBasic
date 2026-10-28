@@ -24,15 +24,6 @@
 #ifndef OM_LLD_LINKER_DIRECTORY
 #define OM_LLD_LINKER_DIRECTORY ""
 #endif
-#ifndef OM_MSVC_LIBRARY_DIRECTORY
-#define OM_MSVC_LIBRARY_DIRECTORY ""
-#endif
-#ifndef OM_WINDOWS_UCRT_LIBRARY_DIRECTORY
-#define OM_WINDOWS_UCRT_LIBRARY_DIRECTORY ""
-#endif
-#ifndef OM_WINDOWS_UM_LIBRARY_DIRECTORY
-#define OM_WINDOWS_UM_LIBRARY_DIRECTORY ""
-#endif
 #ifndef OM_NATIVE_LINK_DRIVER_STYLE_MSVC
 #define OM_NATIVE_LINK_DRIVER_STYLE_MSVC 0
 #endif
@@ -42,22 +33,6 @@
 #ifndef OM_NATIVE_LINK_SANITIZER_FLAG
 #define OM_NATIVE_LINK_SANITIZER_FLAG ""
 #endif
-#ifndef OM_RUNTIME_ARCHIVE
-#define OM_RUNTIME_ARCHIVE ""
-#endif
-#ifndef OM_RUNTIME_SERVICES_ARCHIVE
-#define OM_RUNTIME_SERVICES_ARCHIVE ""
-#endif
-#ifndef OM_RUNTIME_DISTRIBUTION_ARCHIVE
-#define OM_RUNTIME_DISTRIBUTION_ARCHIVE ""
-#endif
-#ifndef OM_DISTRIBUTION_ARCHIVE
-#define OM_DISTRIBUTION_ARCHIVE ""
-#endif
-#ifndef OM_FOUNDATION_ARCHIVE
-#define OM_FOUNDATION_ARCHIVE ""
-#endif
-
 #if OM_NATIVE_LINK_DRIVER_STYLE_MSVC
 static char *make_native_pdb_path(const char *executable_path);
 #endif
@@ -65,8 +40,8 @@ static char *make_native_pdb_path(const char *executable_path);
 int om_linker_run_executable(const char *executable, char *const arguments[])
 {
 #ifdef _WIN32
-    const intptr_t result = _spawnv(_P_WAIT, executable,
-                                    (const char *const *)arguments);
+    const intptr_t result = _spawnvp(_P_WAIT, executable,
+                                     (const char *const *)arguments);
     return result < 0 || result > INT_MAX ? -1 : (int)result;
 #else
     const pid_t child = fork();
@@ -74,7 +49,7 @@ int om_linker_run_executable(const char *executable, char *const arguments[])
         return -1;
     }
     if (child == 0) {
-        execv(executable, arguments);
+        execvp(executable, arguments);
         _exit(127);
     }
     int child_status = 0;
@@ -92,98 +67,6 @@ int om_linker_run_executable(const char *executable, char *const arguments[])
         return 128 + WTERMSIG(child_status);
     }
     return -1;
-#endif
-}
-
-#ifdef _WIN32
-static int copy_windows_environment_variable(const char *name, char **value)
-{
-    *value = NULL;
-    size_t required_size = 0;
-    if (getenv_s(&required_size, NULL, 0, name) != 0) {
-        return -1;
-    }
-    if (required_size == 0) {
-        return 0;
-    }
-    char *copy = om_alloc(required_size);
-    if (copy == NULL) {
-        return -1;
-    }
-    size_t actual_size = 0;
-    if (getenv_s(&actual_size, copy, required_size, name) != 0
-        || actual_size > required_size) {
-        om_free(copy);
-        return -1;
-    }
-    *value = copy;
-    return 0;
-}
-#endif
-
-static int spawn_with_msvc_library_paths(const char *executable,
-                                         char *const arguments[])
-{
-#ifdef _WIN32
-    char *saved_value = NULL;
-    if (copy_windows_environment_variable("LIB", &saved_value) != 0) {
-        return -1;
-    }
-    const char *directories[] = {
-        OM_MSVC_LIBRARY_DIRECTORY,
-        OM_WINDOWS_UCRT_LIBRARY_DIRECTORY,
-        OM_WINDOWS_UM_LIBRARY_DIRECTORY,
-        saved_value,
-    };
-    size_t total_length = 1;
-    size_t directory_count = 0;
-    for (size_t index = 0; index < sizeof(directories) / sizeof(directories[0]);
-         ++index) {
-        if (directories[index] == NULL || directories[index][0] == '\0') {
-            continue;
-        }
-        const size_t length = strlen(directories[index]);
-        const size_t separator_length = directory_count == 0 ? 0 : 1;
-        if (length > SIZE_MAX - total_length - separator_length) {
-            om_free(saved_value);
-            return -1;
-        }
-        total_length += length + separator_length;
-        ++directory_count;
-    }
-    char *library_path = om_alloc(total_length);
-    if (library_path == NULL) {
-        om_free(saved_value);
-        return -1;
-    }
-    size_t used = 0;
-    directory_count = 0;
-    for (size_t index = 0; index < sizeof(directories) / sizeof(directories[0]);
-         ++index) {
-        if (directories[index] == NULL || directories[index][0] == '\0') {
-            continue;
-        }
-        if (directory_count != 0) {
-            library_path[used++] = ';';
-        }
-        const size_t length = strlen(directories[index]);
-        (void)memcpy(library_path + used, directories[index], length);
-        used += length;
-        ++directory_count;
-    }
-    library_path[used] = '\0';
-    if (_putenv_s("LIB", library_path) != 0) {
-        om_free(library_path);
-        om_free(saved_value);
-        return -1;
-    }
-    const int result = om_linker_run_executable(executable, arguments);
-    (void)_putenv_s("LIB", saved_value == NULL ? "" : saved_value);
-    om_free(library_path);
-    om_free(saved_value);
-    return result;
-#else
-    return om_linker_run_executable(executable, arguments);
 #endif
 }
 
@@ -276,6 +159,12 @@ int om_linker_link_native(const Om_Linker_Request *request,
         || request->object_path[0] == '\0'
         || request->executable_path == NULL
         || request->executable_path[0] == '\0'
+        || request->resources == NULL
+        || request->resources->runtime_archive == NULL
+        || request->resources->runtime_services_archive == NULL
+        || request->resources->runtime_distribution_archive == NULL
+        || request->resources->distribution_archive == NULL
+        || request->resources->foundation_archive == NULL
         || (request->library_count != 0 && request->libraries == NULL)
         || (request->library_directory_count != 0
             && request->library_directories == NULL)) {
@@ -290,6 +179,7 @@ int om_linker_link_native(const Om_Linker_Request *request,
     const size_t native_module_count = request->library_count;
     const Om_String_View *library_directories = request->library_directories;
     const size_t library_directory_count = request->library_directory_count;
+    const Om_Toolchain_Resources *resources = request->resources;
     if (library_directory_count > (SIZE_MAX - 32) / 2
         || native_module_count > SIZE_MAX - 32
             - library_directory_count * 2
@@ -370,11 +260,11 @@ int om_linker_link_native(const Om_Linker_Request *request,
         arguments[count++] = library_path_argument;
         owned_arguments[owned_count++] = library_path_argument;
     }
-    arguments[count++] = (char *)OM_RUNTIME_DISTRIBUTION_ARCHIVE;
-    arguments[count++] = (char *)OM_DISTRIBUTION_ARCHIVE;
-    arguments[count++] = (char *)OM_RUNTIME_ARCHIVE;
-    arguments[count++] = (char *)OM_RUNTIME_SERVICES_ARCHIVE;
-    arguments[count++] = (char *)OM_FOUNDATION_ARCHIVE;
+    arguments[count++] = resources->runtime_distribution_archive;
+    arguments[count++] = resources->distribution_archive;
+    arguments[count++] = resources->runtime_archive;
+    arguments[count++] = resources->runtime_services_archive;
+    arguments[count++] = resources->foundation_archive;
     arguments[count++] = "/defaultlib:Ws2_32.lib";
     arguments[count++] = "/defaultlib:Bcrypt.lib";
     arguments[count++] = "/defaultlib:libcmt.lib";
@@ -405,11 +295,11 @@ int om_linker_link_native(const Om_Linker_Request *request,
         arguments[count++] = (char *)OM_LLD_LINKER_DIRECTORY;
     }
     arguments[count++] = (char *)object_path;
-    arguments[count++] = (char *)OM_RUNTIME_DISTRIBUTION_ARCHIVE;
-    arguments[count++] = (char *)OM_DISTRIBUTION_ARCHIVE;
-    arguments[count++] = (char *)OM_RUNTIME_ARCHIVE;
-    arguments[count++] = (char *)OM_RUNTIME_SERVICES_ARCHIVE;
-    arguments[count++] = (char *)OM_FOUNDATION_ARCHIVE;
+    arguments[count++] = resources->runtime_distribution_archive;
+    arguments[count++] = resources->distribution_archive;
+    arguments[count++] = resources->runtime_archive;
+    arguments[count++] = resources->runtime_services_archive;
+    arguments[count++] = resources->foundation_archive;
 #endif
     for (size_t index = 0; index < native_module_count; ++index) {
         const Om_String_View library = libraries[index];
@@ -441,9 +331,7 @@ int om_linker_link_native(const Om_Linker_Request *request,
     arguments[count++] = (char *)executable_path;
 #endif
     arguments[count] = NULL;
-    const int result = OM_NATIVE_LINK_DRIVER_STYLE_MSVC
-        ? spawn_with_msvc_library_paths(OM_NATIVE_LINK_DRIVER, arguments)
-        : om_linker_run_executable(OM_NATIVE_LINK_DRIVER, arguments);
+    const int result = om_linker_run_executable(OM_NATIVE_LINK_DRIVER, arguments);
     om_free(output_argument);
 #if OM_NATIVE_LINK_DRIVER_STYLE_MSVC
     om_free(debug_symbols_argument);

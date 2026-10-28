@@ -53,7 +53,7 @@ typedef enum Om_Hir_Kind {
     OM_HIR_BOOLEAN,
     OM_HIR_NULL,
     OM_HIR_SELF,
-    OM_HIR_DOWN_REASON,
+    OM_HIR_NOMINAL_VALUE,
     OM_HIR_UNARY,
     OM_HIR_TRY,
     OM_HIR_BINARY,

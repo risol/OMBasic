@@ -70,7 +70,6 @@ static const char *ast_kind_name(Om_Ast_Kind kind)
     case OM_AST_BOOLEAN_LITERAL: return "Boolean";
     case OM_AST_NULL_LITERAL: return "Null";
     case OM_AST_SELF: return "Self";
-    case OM_AST_DOWN_REASON_LITERAL: return "DownReason";
     case OM_AST_UNARY: return "Unary";
     case OM_AST_BINARY: return "Binary";
     case OM_AST_CALL: return "Call";
@@ -311,6 +310,7 @@ bool om_test_parser_language_grammar(void)
         "    END FOR\n"
         "    VAR settings = {\"x\": 1, \"y\": 2}\n"
         "    VAR picked = settings[\"x\"].value\n"
+        "    VAR down_reason = Actor_Down_Reason.failed\n"
         "    SELECT value\n"
         "    CASE Ok(found)\n"
         "        print(found)\n"
@@ -374,7 +374,7 @@ bool om_test_parser_language_grammar(void)
     PARSER_ASSERT(count_kind(&parsed.ast, OM_AST_SELECT) == 1);
     PARSER_ASSERT(count_kind(&parsed.ast, OM_AST_MAP) == 1);
     PARSER_ASSERT(count_kind(&parsed.ast, OM_AST_INDEX) == 1);
-    PARSER_ASSERT(count_kind(&parsed.ast, OM_AST_MEMBER) == 1);
+    PARSER_ASSERT(count_kind(&parsed.ast, OM_AST_MEMBER) == 2);
     PARSER_ASSERT(count_kind(&parsed.ast, OM_AST_CONTINUE) == 1);
     PARSER_ASSERT(count_kind(&parsed.ast, OM_AST_RETURN) >= 2);
     PARSER_ASSERT(count_kind(&parsed.ast, OM_AST_CALL_STATEMENT) >= 4);

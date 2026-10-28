@@ -1725,21 +1725,18 @@ static Om_Status lower_expression(Om_Mir_Lowering_Context *context,
             OM_HIR_OPERATOR_NONE, OM_FUNCTION_INSTANCE_ID_INVALID, NULL, 0,
             value, 0.0, out_value);
     }
-    case OM_HIR_DOWN_REASON: {
-        uint64_t reason = UINT64_MAX;
-        if (name_equals_ascii_ci(node->name, "NORMAL")) {
-            reason = 0;
-        } else if (name_equals_ascii_ci(node->name, "FAILED")) {
-            reason = 1;
-        } else if (name_equals_ascii_ci(node->name, "NODE_UNREACHABLE")) {
-            reason = 2;
-        }
-        if (reason == UINT64_MAX) {
+    case OM_HIR_NOMINAL_VALUE: {
+        Om_Type_View nominal_type = {0};
+        if (node->integer_magnitude > 2
+            || om_type_store_get(context->specialization->type_store, type_id,
+                                 &nominal_type) != OM_STATUS_OK
+            || nominal_type.kind != OM_TYPE_DOWN_REASON
+            || nominal_type.nominal_symbol.value == UINT32_MAX) {
             return add_lowering_diagnostic(context, node->span);
         }
         return emit_instruction(context, node, OM_MIR_CONST_INT, type_id,
             OM_HIR_OPERATOR_NONE, OM_FUNCTION_INSTANCE_ID_INVALID, NULL, 0,
-            reason, 0.0, out_value);
+            node->integer_magnitude, 0.0, out_value);
     }
     case OM_HIR_SELF:
         return emit_instruction(context, node, OM_MIR_RUNTIME_ACTOR_SELF,
@@ -4265,8 +4262,24 @@ static Om_Status collect_nominal_descriptors(
         Om_Status status = om_type_store_primitive(context->specialization->type_store,
             OM_TYPE_ACTOR_ID, &actor_id_type);
         if (status == OM_STATUS_OK) {
-            status = om_type_store_primitive(context->specialization->type_store,
-                OM_TYPE_DOWN_REASON, &reason_type);
+            Om_Symbol_Id reason_type_symbol = OM_SYMBOL_ID_INVALID;
+            for (size_t symbol_index = 0;
+                 symbol_index < hir->resolution->symbol_count;
+                 ++symbol_index) {
+                const Om_Symbol *candidate =
+                    &hir->resolution->symbols[symbol_index];
+                if (candidate->kind == OM_SYMBOL_BUILTIN
+                    && name_equals_ascii_ci(candidate->name,
+                                             "Actor_Down_Reason")) {
+                    reason_type_symbol = candidate->id;
+                    break;
+                }
+            }
+            status = reason_type_symbol.value == UINT32_MAX
+                ? OM_STATUS_NOT_FOUND
+                : om_type_store_nominal(
+                    context->specialization->type_store,
+                    OM_TYPE_DOWN_REASON, reason_type_symbol, &reason_type);
         }
         Om_Symbol_Id actor_id_field = OM_SYMBOL_ID_INVALID;
         Om_Symbol_Id reason_field = OM_SYMBOL_ID_INVALID;
