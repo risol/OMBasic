@@ -4,62 +4,47 @@ OMBasic is a statically typed, BASIC-style language. Functions use inferred
 types and explicit effects. Mutable state and asynchronous work belong to
 Actors, which communicate through typed Messages.
 
-## Compilation and runtime
+## Native AOT compilation
 
 ```mermaid
 flowchart LR
-    Source[".bas source and imports"] --> Loader["Source and module loader"]
-    Loader --> Syntax["Lexer and parser"]
-    Syntax --> Semantic["Name resolution, types, effects, protocols"]
-    Semantic --> Emitter["Bytecode emitter and verifier"]
-    Emitter --> Image["Portable OMBC image"]
-    Image --> VM["Runtime VM and Actor scheduler"]
-    VM --> Native["Typed Native calls through .omi"]
-    VM --> Remote["Optional remote nodes over TCP"]
+    Source[".bas source and imports"] --> Frontend["Source, lexer, parser"]
+    Frontend --> Semantic["Names, types, effects, protocols"]
+    Semantic --> HIR["Typed HIR"]
+    HIR --> Specialize["Generic specialization"]
+    Specialize --> MIR["Native MIR / CFG"]
+    MIR --> Target["Target ABI model"]
+    Target --> LLVM["LLVM C API backend"]
+    LLVM --> Compiler["Compiler pipeline"]
+    Compiler --> Object[".o / .obj"]
+    Object --> Linker["Linker module: LLD / platform linker"]
+    Linker --> Executable["Native executable"]
+    Executable --> Runtime["libombasic_runtime via Runtime ABI"]
 ```
 
-The source loader establishes canonical module identities, validates import
-paths, and orders modules before compilation. The lexer and parser report
-source-spanned errors and build a syntax-only AST. Name resolution, type
-inference, effect analysis, Actor protocol checking, and serialization
-validation operate on that AST and produce the semantic model consumed by the
-bytecode emitter. The emitter builds and verifies an owned image; serialized
-OMBC files contain explicit fixed-width fields rather than C structures.
+The frontend and semantic analysis own OMBasic language meaning. HIR records
+resolved symbols, concrete types, effects, protocol identities, and source
+spans. Specialization makes native function instances concrete. MIR expresses
+values and control-flow blocks, not stack-machine instructions. The LLVM
+backend lowers MIR mechanically and emits object files; it does not implement
+language semantics.
 
-The VM verifies bytecode before execution. Each Actor owns its mutable state,
-VM stack, and heap. Mailbox messages are copied into owned transit storage and
-then into the receiving Actor's heap. Scheduler workers never mutate another
-running Actor's heap. Blocking Native and system I/O operations use a bounded
-worker pool, and their results return through ordinary mailbox messages.
+Generated native code calls a stable Runtime ABI. Runtime owns managed objects,
+shadow roots, Actor state, mailboxes, scheduling, system services, callbacks,
+and distribution. It does not parse source, inspect compiler IR, interpret
+instructions, or depend on LLVM.
 
-Native declarations live in `.omi` metadata. The FFI layer validates C ABI
-signatures and ownership annotations, then uses libffi for calls. Foreign
-thread callbacks copy supported scalar fields into a mailbox; they never run
-Actor handlers on the foreign thread. Remote nodes exchange versioned frames,
-typed payloads, and program/interface fingerprints. The current transport is
-blocking TCP and does not retry failed sends or authenticate peers.
+## Implementation state
 
-## Capabilities and dependency direction
+The VM and OMBC execution path have been removed. The compiler now lowers
+source through typed HIR, specialization, verified MIR, and LLVM object
+emission; `build` and `run` link standalone native executables. Runtime
+capabilities include managed heaps, Actors, system services, Native calls and
+callback ingress, and distributed Actor messaging.
 
-The primary compilation path is:
+## Capabilities
 
-```text
-foundation -> source -> syntax -> module_graph -> semantic -> bytecode -> compiler -> CLI
-```
-
-The VM depends on bytecode and runtime contracts, not on compiler internals or
-syntax. Tooling calls the public source, syntax, semantic, and compiler APIs.
-The [dependency rules](dependency_rules.md) and architecture checker enforce
-the allowed direction and private-header boundaries.
-
-## Developer tooling
-
-The `ombasic` executable provides `check`, `run`, `build`, `fmt`, `bind`,
-`check-omi`, `lsp`, and `version`. `check`, `run`, and `build` share the same
-compiler pipeline. The LSP server handles JSON-RPC framing and editor position
-conversion, then asks the compiler executable for analysis results; it does
-not implement another parser or type checker.
-
-Detailed format and ABI contracts are maintained alongside their owning
-capabilities: [OMBC](../../src/bytecode/README.md), [Native FFI](../../src/ffi/README.md),
-and [distribution](../../src/distribution/README.md).
+See [dependency rules](dependency_rules.md), the
+[Runtime ABI](../runtime/runtime_abi.md), and the [HIR](../compiler/hir.md)
+and [MIR](../compiler/mir.md) contracts. The phase-by-phase gate is tracked in
+[implementation status](../development/implementation_status.md).

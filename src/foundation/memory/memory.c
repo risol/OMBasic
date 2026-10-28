@@ -1,7 +1,8 @@
 #include "ombasic/foundation/memory.h"
 
-#include <stdckdint.h>
 #include <stdlib.h>
+
+#include "checked_size.h"
 
 bool om_checked_size_add(size_t left, size_t right, size_t *out)
 {
@@ -10,7 +11,7 @@ bool om_checked_size_add(size_t left, size_t right, size_t *out)
         return false;
     }
     *out = 0;
-    if (ckd_add(&result, left, right)) {
+    if (om_size_add_overflows(&result, left, right)) {
         return false;
     }
     *out = result;
@@ -24,7 +25,7 @@ bool om_checked_size_mul(size_t left, size_t right, size_t *out)
         return false;
     }
     *out = 0;
-    if (ckd_mul(&result, left, right)) {
+    if (om_size_mul_overflows(&result, left, right)) {
         return false;
     }
     *out = result;

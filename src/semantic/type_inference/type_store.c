@@ -300,7 +300,8 @@ Om_Status om_type_store_init(Om_Type_Store *store)
     static const Om_Type_Kind primitives[OM_TYPE_PRIMITIVE_COUNT] = {
         OM_TYPE_INT, OM_TYPE_FLOAT, OM_TYPE_BOOL,
         OM_TYPE_STRING, OM_TYPE_NULL, OM_TYPE_UNIT,
-        OM_TYPE_NODE_REF, OM_TYPE_ACTOR_ID, OM_TYPE_DOWN_REASON
+        OM_TYPE_NODE_REF, OM_TYPE_ACTOR_ID, OM_TYPE_DOWN_REASON,
+        OM_TYPE_NATIVE_POINTER
     };
     if (store == NULL || store->owned_storage != NULL) {
         return OM_STATUS_INVALID_ARGUMENT;
@@ -1049,6 +1050,7 @@ const char *om_type_kind_name(Om_Type_Kind kind)
     case OM_TYPE_ACTION: return "Action";
     case OM_TYPE_RESULT: return "Result";
     case OM_TYPE_VARIABLE: return "TypeVar";
+    case OM_TYPE_NATIVE_POINTER: return "CPointer";
     default: return "InvalidType";
     }
 }

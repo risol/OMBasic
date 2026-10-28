@@ -1,6 +1,8 @@
 /build/
 /out/
 /.cache/
+Testing/
+__pycache__/
 *.obj
 *.o
 *.exe

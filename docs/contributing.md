@@ -2,9 +2,12 @@
 
 ## Set up a build
 
-Use a C23-capable GCC or Clang toolchain, CMake, Ninja, Python 3, and libffi
-development headers and library. Clang must be available on `PATH` when using
-`ombasic bind`. See the root README for libffi installation notes.
+Use CMake, Ninja, Python 3, and LLVM 23.1.4. The standard build matrix is
+`clang-cl.exe` plus `lld-link.exe` on Windows, and `clang` plus `ld.lld` on
+Linux. Windows also needs Visual Studio C++ Build Tools and a Windows SDK for
+the MSVC ABI, UCRT, and system libraries; MinGW is not used. Linux needs the
+host system's C development headers and libraries. Clang must be available on
+`PATH` when using `ombasic bind`.
 
 From the repository root, configure and build with:
 
@@ -15,8 +18,9 @@ ctest --test-dir build/dev --output-on-failure
 cmake --build build/dev --target architecture-check
 ```
 
-The project also supports a clang-cl/MSVC frontend build. Sanitizer profiles
-are separate Linux GCC/Clang builds; set `OM_SANITIZER` to
+See the platform-specific configuration commands in
+[Native Linkers and Build Toolchains](compiler/linking.md). Sanitizer profiles
+are separate Linux Clang builds; set `OM_SANITIZER` to
 `address-undefined` or `thread`. Some container kernels require a non-PIE TSan
 binary and disabled address randomization for the test process.
 
@@ -32,8 +36,9 @@ binary and disabled address randomization for the test process.
   include malformed, truncated, oversized, or otherwise hostile inputs where
   applicable. Keep conformance fixtures and golden output deterministic.
 - For compiler changes, cover successful source and stable diagnostics. For
-  bytecode or protocol changes, test both encoding and rejection paths. For
-  concurrency changes, test ownership, shutdown, and stress behavior.
+  HIR/MIR changes, test valid invariants and verifier rejection. For protocol
+  changes, test both encoding and rejection paths. For concurrency changes,
+  test ownership, shutdown, and stress behavior.
 - Update the owning README and `docs/development/implementation_status.md` when
   behavior, limits, commands, or acceptance evidence changes.
 

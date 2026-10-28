@@ -36,6 +36,7 @@ Diagnostics are part of the compiler's public behavior. Invalid source must prod
 | E0307 | An assignment targets an immutable binding. |
 | E0401 | An expression, argument, field, return value, or exported field has an incompatible or unstable type. |
 | E0402 | An empty List or Map has no contextual type from which to infer its element, key, or value type. |
+| E0403 | A Native callback binding has no unique Message accepted by the current Actor, has a field-count mismatch, or is registered outside an Actor receive handler. |
 | E0501 | A Function or Actor state initializer has a forbidden effect, or WATCH/STOP appears outside an Actor receive handler. |
 | E0601 | A SEND target has an unknown Actor protocol or does not accept the Message. |
 | E0701 | A Message payload contains a value that cannot be serialized. |

@@ -3,26 +3,23 @@
 
 #include <stdint.h>
 
-/* Operands for OM_BC_LOAD_SYSTEM_ACTOR and the VM's reserved ActorRefs. */
-typedef enum Om_Bytecode_System_Actor {
-    OM_BYTECODE_SYSTEM_ACTOR_CONSOLE = 0,
-    OM_BYTECODE_SYSTEM_ACTOR_TIMER,
-    OM_BYTECODE_SYSTEM_ACTOR_FILE_SYSTEM,
-    OM_BYTECODE_SYSTEM_ACTOR_COUNT
-} Om_Bytecode_System_Actor;
-
+/* Reserved ActorRef identities shared by the compiler and Runtime ABI. */
 #define OM_SYSTEM_ACTOR_REF_CONSOLE UINT64_C(0xfffffffffffffff1)
 #define OM_SYSTEM_ACTOR_REF_TIMER UINT64_C(0xfffffffffffffff2)
 #define OM_SYSTEM_ACTOR_REF_FILE_SYSTEM UINT64_C(0xfffffffffffffff3)
 
-/* Reserved schema symbols for messages understood by built-in Actors. */
-#define OM_SYSTEM_MESSAGE_CONSOLE_WRITE (UINT32_MAX - UINT32_C(1))
-#define OM_SYSTEM_MESSAGE_CONSOLE_WRITE_COMPLETED (UINT32_MAX - UINT32_C(2))
-#define OM_SYSTEM_MESSAGE_FILE_READ (UINT32_MAX - UINT32_C(3))
-#define OM_SYSTEM_MESSAGE_FILE_READ_COMPLETED (UINT32_MAX - UINT32_C(4))
-#define OM_SYSTEM_MESSAGE_FILE_WRITE (UINT32_MAX - UINT32_C(5))
-#define OM_SYSTEM_MESSAGE_FILE_WRITE_COMPLETED (UINT32_MAX - UINT32_C(6))
-#define OM_SYSTEM_MESSAGE_TIMER_AFTER (UINT32_MAX - UINT32_C(7))
+typedef enum Om_System_Message_Id {
+    OM_SYSTEM_MESSAGE_ID_NONE = 0,
+    OM_SYSTEM_MESSAGE_ID_CONSOLE_WRITE,
+    OM_SYSTEM_MESSAGE_ID_CONSOLE_WRITE_COMPLETED,
+    OM_SYSTEM_MESSAGE_ID_FILE_READ,
+    OM_SYSTEM_MESSAGE_ID_FILE_READ_COMPLETED,
+    OM_SYSTEM_MESSAGE_ID_FILE_WRITE,
+    OM_SYSTEM_MESSAGE_ID_FILE_WRITE_COMPLETED,
+    OM_SYSTEM_MESSAGE_ID_TIMER_AFTER,
+    /* The value is a managed Message of any concrete generated type. */
+    OM_SYSTEM_MESSAGE_ID_ANY = 255
+} Om_System_Message_Id;
 
 #define OM_SYSTEM_ACTOR_NAME_CONSOLE "Console"
 #define OM_SYSTEM_ACTOR_NAME_TIMER "Timer"

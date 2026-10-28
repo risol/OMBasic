@@ -153,9 +153,83 @@ cleanup:
     return passed;
 }
 
+static bool test_large_nested_payload_budget(void)
+{
+    static char large_text[65536];
+    static const uint8_t map_key[] = {'r', 'e', 'c', 'o', 'r', 'd'};
+    (void)memset(large_text, 'x', sizeof(large_text));
+    Om_Distribution_Value record_fields[] = {
+        {.kind = OM_DISTRIBUTION_VALUE_STRING,
+         .as.string_value = {large_text, sizeof(large_text)}},
+    };
+    Om_Distribution_Value list_items[] = {
+        {.kind = OM_DISTRIBUTION_VALUE_RECORD,
+         .as.composite = {UINT64_C(0x1122334455667788), record_fields, 1}},
+    };
+    Om_Distribution_Map_Entry map_entries[] = {
+        {.key = {.kind = OM_DISTRIBUTION_VALUE_STRING,
+                 .as.string_value = {(const char *)map_key,
+                                     sizeof(map_key)}},
+         .value = {.kind = OM_DISTRIBUTION_VALUE_LIST,
+                   .as.list = {list_items, 1}}},
+    };
+    Om_Distribution_Value fields[] = {
+        {.kind = OM_DISTRIBUTION_VALUE_MAP,
+         .as.map = {map_entries, 1}},
+    };
+    Om_Byte_Slice payload = {0};
+    Om_Byte_Slice limited_payload = {0};
+    Om_Distribution_Message decoded = {0};
+    bool passed = false;
+    const Om_Distribution_Serializer_Limits limits = {
+        .maximum_payload_bytes = 131072,
+        .maximum_collection_length = 16,
+        .maximum_nesting_depth = 16,
+        .maximum_total_values = 16,
+    };
+    DIST_ASSERT_CLEANUP(om_distribution_message_serialize(fields, 1, limits,
+        &payload) == OM_STATUS_OK);
+    DIST_ASSERT_CLEANUP(payload.length > sizeof(large_text));
+    DIST_ASSERT_CLEANUP(om_distribution_message_serialize(fields, 1,
+        (Om_Distribution_Serializer_Limits){
+            .maximum_payload_bytes = 4096,
+            .maximum_collection_length = 16,
+            .maximum_nesting_depth = 16,
+            .maximum_total_values = 16,
+        }, &limited_payload) == OM_STATUS_OUT_OF_RANGE);
+    DIST_ASSERT_CLEANUP(limited_payload.data == NULL);
+    DIST_ASSERT_CLEANUP(om_distribution_message_deserialize(
+        (Om_Const_Byte_Slice){payload.data, payload.length},
+        UINT64_C(0x8877665544332211), UINT64_C(0x8877665544332211), 1,
+        limits, &decoded) == OM_STATUS_OK);
+    DIST_ASSERT_CLEANUP(decoded.fields[0].kind == OM_DISTRIBUTION_VALUE_MAP);
+    DIST_ASSERT_CLEANUP(decoded.fields[0].as.map.count == 1);
+    const Om_Distribution_Value *list =
+        &decoded.fields[0].as.map.entries[0].value;
+    DIST_ASSERT_CLEANUP(list->kind == OM_DISTRIBUTION_VALUE_LIST
+                        && list->as.list.count == 1);
+    const Om_Distribution_Value *record = &list->as.list.items[0];
+    DIST_ASSERT_CLEANUP(record->kind == OM_DISTRIBUTION_VALUE_RECORD
+                        && record->as.composite.field_count == 1);
+    const Om_Distribution_Value *text = &record->as.composite.fields[0];
+    DIST_ASSERT_CLEANUP(text->kind == OM_DISTRIBUTION_VALUE_STRING
+                        && text->as.string_value.length == sizeof(large_text)
+                        && memcmp(text->as.string_value.data, large_text,
+                                  sizeof(large_text)) == 0);
+    passed = true;
+
+cleanup:
+    om_distribution_message_destroy(&decoded);
+    om_free(payload.data);
+    om_free(limited_payload.data);
+    return passed;
+}
+
 static bool test_message_payload_serializer_rejections(void)
 {
-    static const char invalid_utf8[] = {(char)0xc3, 'x'};
+    static const uint8_t invalid_utf8_bytes[] = {
+        UINT8_C(0xc3), UINT8_C(0x78)
+    };
     static const Om_Distribution_Value nested_items[] = {
         {.kind = OM_DISTRIBUTION_VALUE_INT64, .as.integer_value = 1},
         {.kind = OM_DISTRIBUTION_VALUE_INT64, .as.integer_value = 2}
@@ -171,7 +245,8 @@ static bool test_message_payload_serializer_rejections(void)
     };
     const Om_Distribution_Value invalid_string = {
         .kind = OM_DISTRIBUTION_VALUE_STRING,
-        .as.string_value = {invalid_utf8, sizeof(invalid_utf8)}
+        .as.string_value = {(const char *)invalid_utf8_bytes,
+                            sizeof(invalid_utf8_bytes)}
     };
     Om_Byte_Slice payload = {0};
     Om_Byte_Slice nested_payload = {0};
@@ -429,7 +504,7 @@ static bool test_tcp_node_handshake(bool compatible)
     };
     Om_Distribution_Node_Id server_node = {0};
     Om_Distribution_Handshake_Worker server_worker = {0};
-    Om_Test_Thread server_thread;
+    Om_Test_Thread server_thread = {0};
     bool server_thread_started = false;
     bool passed = false;
     fill_node_id(&client_local.node_id, UINT8_C(0x10));
@@ -680,7 +755,7 @@ static bool test_malformed_message_payload_fuzz(void)
     return true;
 }
 
-static bool test_tcp_ordered_frame_transport(void)
+static bool test_tcp_ordered_frames_at_most_once(void)
 {
     static const uint8_t first_payload[] = {0x11, 0x12};
     static const uint8_t second_payload[] = {0x21, 0x22, 0x23};
@@ -746,6 +821,8 @@ int main(void)
          test_handshake_frame_and_validation},
         {"distribution_message_payload_roundtrip",
          test_message_payload_serializer_roundtrip},
+        {"distribution_large_nested_payload_budget",
+         test_large_nested_payload_budget},
         {"distribution_message_payload_rejections",
          test_message_payload_serializer_rejections},
         {"distribution_frame_bounds", test_frame_bounds_and_malformed_headers},
@@ -753,7 +830,8 @@ int main(void)
         {"distribution_malformed_frame_fuzz", test_malformed_frame_fuzz},
         {"distribution_malformed_message_fuzz",
          test_malformed_message_payload_fuzz},
-        {"distribution_tcp_ordered_frames", test_tcp_ordered_frame_transport},
+        {"distribution_tcp_ordered_at_most_once",
+         test_tcp_ordered_frames_at_most_once},
         {"distribution_tcp_handshake_compatible",
          test_tcp_handshake_compatible},
         {"distribution_tcp_handshake_rejects_mismatch",

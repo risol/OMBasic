@@ -218,19 +218,19 @@ bool om_distribution_actor_ref_equal(
 Om_Status om_distribution_message_fingerprint(
     Om_String_View canonical_module_path,
     Om_String_View message_name,
-    const uint64_t *field_type_ids,
+    const uint64_t *field_type_fingerprints,
     size_t field_count,
     uint64_t *fingerprint)
 {
     if (!string_view_is_valid(canonical_module_path)
         || !string_view_is_valid(message_name)
-        || (field_count != 0 && field_type_ids == NULL)
+        || (field_count != 0 && field_type_fingerprints == NULL)
         || fingerprint == NULL) {
         return OM_STATUS_INVALID_ARGUMENT;
     }
     return om_fingerprint64_schema(
         (Om_String_View){(const char *)schema_domain,
                          sizeof(schema_domain) - 1},
-        canonical_module_path, message_name, field_type_ids, field_count,
-        fingerprint);
+        canonical_module_path, message_name, field_type_fingerprints,
+        field_count, fingerprint);
 }

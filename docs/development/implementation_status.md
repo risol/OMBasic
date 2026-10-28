@@ -1,347 +1,351 @@
-# Implementation status
+# Native AOT implementation status
 
-This file tracks progress against the phases and gates in `OMBasic-Compiler-Development-Plan.md`.
+The migration follows [OMBasic-Native-AOT-Refactor-Plan.md](../../OMBasic-Native-AOT-Refactor-Plan.md).
+The source and architecture baseline is commit
+`ecbbacc5fb235c4a706a9c4eeb31bc7b41dec299` on branch
+`codex/native-aot-refactor`.
 
-## Phase 0 — Specification Audit: complete
+## Phase 0 — Architectural reset: complete
 
-- Resolved lexical, core-language, and `.omi` grammar bindings.
-- Added keyword/naming conformance fixtures and manifest validation.
-- Recorded architecture and diagnostic decisions in ADR-0001 through ADR-0007.
+- Recorded the last VM baseline commit and created the migration branch.
+- Adopted Native AOT as the only execution backend in ADR-0003.
+- Defined Native representation, managed-pointer policy, shadow roots, Actor
+  handler ABI, descriptors, LLVM version policy, and static-link model in the
+  Runtime ABI and HIR/MIR design documents.
+- Replaced the architecture overview and dependency graph with the Native AOT
+  boundaries.
 
-## Phase 1 — Foundation: complete
+## Phase 1 — Destructive VM / OMBC removal: complete
 
-- Implemented checked allocation, arena, vector, slices, string views, UTF-8 validation, typed IDs, and the U64 map.
-- Unit coverage includes overflow, alignment, and deterministic vector sizing cases.
-- Linux ASan+UBSan and both Windows toolchains passed the current Foundation suite.
+- Removed Bytecode, VM, VM-owned Value/Heap, VM distribution integration,
+  compiler/VM Native binding, and VM-only tests and ADRs.
+- Rebuilt the CMake graph around frontend, semantic, metadata, tooling, and
+  independent protocol/service capabilities.
+- At this phase, `build` and `run` only completed source/semantic validation;
+  Phase 6 below records the later native backend milestone.
+- Windows GCC/Ninja configure and build succeeded; CTest passed 14/14; the
+  architecture checker passed.
 
-## Phase 2 — Source / Module Loading: complete
+## Phase 2 — Native metadata capability: complete
 
-- Implemented immutable source text, byte spans, line maps, configurable file-size limits, canonical source roots, and import-path validation.
-- Implemented preamble import extraction, source-root-relative recursive loading, module deduplication, dependency-first ordering, and cycle-chain rendering.
-- Path tests include 4,096 deterministic randomized inputs. Loader tests cover missing and malformed imports, escaped path strings, symlink rejection, exact casing, and source spans. Cycle output has a golden string assertion.
-- Linux GCC ASan+UBSan, Windows GCC/Ninja, and Windows clang-cl/MSVC CTest suites passed after the Phase 2 changes.
+- Moved `.omi` parser/project loader and public contracts to
+  `src/native/metadata` and `include/ombasic/native/metadata`.
+- Removed runtime `libffi` and dynamic-library dispatch. Semantic resolution
+  consumes metadata contracts only.
+- Native metadata parser/project tests, malformed-input corpus, CLI, and the
+  full 14-test CTest suite pass.
 
-## Phase 3 — Lexer: complete
+## Phase 3 — HIR: complete
 
-- Added the token API, all 42 reserved keywords, identifier casing checks, integer/float scanning, string escapes, interpolation tokenization, comments, operators, and newline handling.
-- Added lexical fixtures for keyword/name casing, numeric range errors, malformed exponents, string escapes, interpolation, and finite underflow; tests assert diagnostic codes and spans.
-- Fuzz suites cover 4,096 arbitrary byte inputs, 2,048 string inputs, and 2,048 comment-boundary inputs. Token and diagnostic spans are checked for every case.
-- Windows GCC/Ninja and clang-cl/MSVC suites passed; Linux GCC ASan+UBSan and clang-tidy analysis passed.
+- Added typed HIR storage, AST/semantic lowering, deterministic dumps, and a
+  verifier for structure, symbols, types, effects, Actor protocols, message
+  serializability, Actor-state access, and `TRY` input types.
+- Deterministic lowering is covered by positive single-module and multi-module
+  semantic fixtures; six normalized golden dumps cover language entities,
+  control flow, `Result`, Actor operations, system Actor messages, module
+  imports, and Native declaration references. Verifier corruption checks cover
+  `TRY`, function effects, `SEND` protocol, and Actor-state placement.
+- HIR and the full 15-test CTest suite passed before Phase 4 work began; the
+  architecture check passes as part of CTest. The HIR is a structured tree;
+  CFG terminators are represented and verified in MIR.
 
-## Phase 4 — Parser / AST: complete
+## Phase 4 — Specialization: complete
 
-- Added an immutable syntax-only AST store with child IDs and source spans.
-- Implemented recursive-descent parsing for imports, declarations, blocks, control flow, Actor state/receives, and simple statements; Pratt parsing covers literals, names, calls, member/index access, collections, interpolation, `TRY`, `SPAWN`, and `WITH`.
-- Added stable E0202–E0208 parser diagnostics, synchronization at line/block boundaries, comparison-chain rejection, the direct-negative `INT64_MIN` rule, and 256-level expression/block nesting limits.
-- Added normalized AST golden comparison, full grammar coverage, malformed-source recovery assertions, conformance span fixtures, and 4,096 deterministic malformed inputs.
-- Windows GCC/Ninja and clang-cl/MSVC CTest suites passed after the Phase 4 changes; Linux GCC ASan+UBSan and clang-tidy gates also passed.
+- Added canonical type-argument matching, a deterministic worklist, reachable
+  roots for Actions, receive handlers, and Actor-state initializers, plus
+  diagnostics for calls whose generic arguments cannot be resolved.
+- Added coverage for concrete `identity(int)` and `identity(string)` instances
+  reachable from `main`, and unresolved calls in the broader inference fixture.
+  The focused HIR gate and full 15-test CTest suite pass. Specialization now
+  returns deduplicated concrete List/Map/Result type IDs. Static Runtime
+  descriptor records and callbacks are emitted with the Runtime in later phases.
 
-## Phase 5 — Name Resolution: complete
+## Phase 5 — MIR: complete
 
-- Added shared identifier-name rules, typed `Scope_Id`, a semantic resolver API, lexical scopes, symbol IDs, and node-to-symbol/scope side tables.
-- Added module import enumeration and default filename-stem qualifiers; qualified references resolve only exported declarations, with private-member diagnostics pointing at the member name.
-- Implemented built-in and prelude visibility, duplicate and case-only collision detection, shadowing checks, immutable assignment errors, and `Ok(name)` / `Error(name)` arm bindings.
-- Added resolver fixtures for export visibility, private members, colliding import aliases, declaration conflicts, shadowing, sibling scopes, loops, Actor state/receives, Result patterns, and unresolved names.
-- Windows GCC/Ninja, Windows clang-cl/MSVC, and Linux GCC ASan+UBSan CTest suites passed (8/8 each); clang-tidy `clang-analyzer-*` passed on parser, shared name rules, module loading, and name resolution.
+- Added MIR function/block/value/instruction IDs, a CFG construction API with
+  block parameters and explicit terminators, deterministic MIR dumps, and
+  verification for structural ranges, concrete signatures and values,
+  direct-call signatures, edge argument types, dominance, effects, operand
+  types, and field ownership/layout.
+- HIR-to-MIR covers concrete scalar Function/Action instances, direct and
+  indirect calls, assignments, returns, `IF`, `WHILE`, numeric `FOR`, and List
+  and Map `FOR EACH` loops with `BREAK` and `CONTINUE`. It lowers escaped and
+  interpolated strings (including Null), List/Map construction and indexing,
+  Record/Message construction and field access, Record `WITH`, Result
+  construction, `TRY`, and `SELECT`. MIR owns UTF-8 string bytes and records
+  nominal field layouts so the verifier can check field reads, writes, copies,
+  constructor arity, and argument types. The source-to-MIR fixture covers these
+  paths and deterministic dumps. `AND` and `OR` use short-circuit CFGs; the
+  MIR goldens cover both logical operators. The full 16-test CTest suite passed
+  at this phase.
+- Actor and Native operation lowering is intentionally deferred to their
+  dedicated runtime/FFI phases.
 
-## Phase 6 — Type Inference: complete
+## Phase 6 — Minimal LLVM Native Backend: complete
 
-- Added an interned Type Store for primitive, collection, nominal, callable, ActorRef, and Result types; all references use stable `Type_Id` values.
-- Implemented level-based TypeVars, transactional structural unification, an occurs check, HM-style generalization, and fresh scheme instantiation.
-- Added project-wide AST inference for primitive operations, calls, functions/actions, Record/Message constructors and fields, List/Map literals and indexing, `WITH`, `Result` constructors/patterns/`TRY`, loops, and Actor protocol references.
-- Added stable E0401 type diagnostics and E0402 empty-collection diagnostics; exported Record/Message fields must have a concrete inferred interface type. There is no dynamic `Any` fallback.
-- Added positive and mismatch fixtures covering polymorphic `identity`, independent call instantiations, Record/Message use, collections, Result branches, Actor spawn/send/receive, arithmetic and binding mismatches, and empty collections.
-- Added Type Store tests for constrained schemes and ActorRef protocol TypeVars, alongside structural/nominal unification, occurs-check rejection, rollback, and independent polymorphic instantiations.
-- Windows GCC/Ninja and clang-cl/MSVC builds and CTest suites pass (8/8 each); the semantic test binary reports 14/14.
-- Recorded the algorithm and reconciled the plan's ADR numbering with the accepted diagnostics and source-path decisions in ADR-0006 through ADR-0008.
+- Added LLVM 23.1.4 C API lowering from verified MIR to native object files.
+  The initial backend covers scalar values, calls, control flow, checked
+  integer arithmetic, and a `print(String)` console helper.
+- Connected `ombasic run` and `ombasic build` through source analysis, HIR,
+  specialization, MIR verification, LLVM object emission, and native linking.
+  `ACTION main()` can be selected by default; `run --entry <callable>` can
+  select another top-level action.
+- Split target ABI descriptions, compiler orchestration, and platform linking
+  into the `ombasic_target`, `ombasic_compiler`, and `ombasic_linker` targets.
+  The CLI coordinates these modules; the linker receives Runtime archive paths
+  and links generated programs without depending on Runtime implementation
+  code.
+- The standard build matrix is Windows `clang-cl.exe` with `lld-link.exe`
+  (MSVC ABI), and Linux `clang` with `ld.lld` selected through
+  `-fuse-ld=lld`, with CMake and Ninja on both platforms. Windows uses the
+  MSVC toolset and Windows SDK headers and libraries; MinGW is not required.
+  CMake rejects other compiler families on Windows and Linux.
+- On Windows, the clang-cl/LLD build compiles the compiler, links generated
+  COFF executables with the static MSVC/UCRT libraries, and does not load LLVM
+  at runtime. Hello World runs, and the full clang-cl CTest suite passes
+  (19/19).
+- Linux validation uses the extracted LLVM package at
+  `F:\LLVM-23.1.4-Linux-X64`, mounted read-only in Docker as `/opt/llvm`, with
+  Clang, `ld.lld`, CMake, and Ninja. No second LLVM download is needed. The
+  Release build and Hello World run succeeded;
+  the full 19-test CTest suite passes, including `tooling_cli` and the
+  two-million-message `native_actor_stress` case.
 
-## Phase 7 — Semantic Constraints: implemented; Native pointer gate pending FFI types
+## Phase 7 — Native Object Model + GC: complete on Windows and Linux
 
-- Added post-inference effect, Actor protocol, and serialization passes with queryable symbol/node summaries and protocol/type capability tables.
-- Propagated Function and Action effects across project call edges; rejected hidden effects in Function, invalid WATCH/STOP context, and effectful Actor state initializers while permitting reads of earlier state.
-- Collected Actor receive protocols, treated Actor_Down as universal, and checked each SEND against the receiver protocol.
-- Added recursive serializability checks for primitives, ActorRef, List, Map, Record, and Message payloads. Callable and unresolved types fail closed.
-- Added E0501, E0601, and E0701 diagnostics plus fixtures for indirect effect propagation, wrong protocol Message, nested non-serializable Record/List payloads, and valid nested serialization.
-- Verified unknown prelude calls default to Native effects; Actor_Down is accepted by every Actor protocol.
-- Windows GCC/Ninja and clang-cl/MSVC builds and CTest suites pass (8/8); the semantic test binary reports 15/15.
-- The source type system has no Native pointer value kind, and the serializer fails closed for unknown type kinds. Native `CPointer` remains confined to `.omi` and cannot be constructed as an ordinary Message field; callback binding validation also rejects pointer/string callback fields.
-- Recorded the pass boundaries and default-safe behavior in ADR-0009.
+- Added the C-callable Native Runtime ABI for execution contexts, descriptors,
+  shadow-root frames, Strings, Records/Messages, Lists, Maps, printing, and
+  collection statistics. Null and Unit are represented without payload.
+- Added a non-moving mark-and-sweep heap with descriptor-driven field tracing,
+  optional descriptor hooks, and managed-reference tracing through Record,
+  List, and Map contents. The root Action uses the same context/heap API
+  planned for later Actor-local heaps.
+- Collection thresholds grow with the live heap, and queued mailbox objects
+  are marked directly from their owned queue entries. This prevents repeated
+  small-heap collections from rescanning a large transit mailbox quadratically.
+  A focused runtime test verifies threshold growth while preserving rooted
+  objects.
+- Generated-native integration covers managed parameters and nested
+  Record/List/Map graphs across allocation safepoints, plus Actor state and a
+  transferred nested Message graph. Collection tests also cover live and
+  unreachable cycles.
+- LLVM now passes the hidden Context through direct and indirect OMBasic calls,
+  roots managed MIR values for each native function, and calls the Runtime for
+  String creation/formatting/concatenation/printing and Record/List/Map
+  operations. Concrete structural descriptors are emitted into the native
+  object, and the CLI statically links the Runtime and foundation archives.
+- Windows clang-cl/LLD build and all 19 CTest tests pass. Coverage includes
+  nested root-frame order, cyclic collection, Null/Unit containers, string-key
+  equality, references retained through containers, generated Strings
+  surviving a GC safepoint, interpolation, Record and Message field access,
+  List/Map indexing and iteration, direct and indirect calls, recursion,
+  floating-point arithmetic, Result/TRY matching, and the former non-Actor
+  integration fixture's expected output.
+- The former non-Actor integration fixture has been ported to Native CLI
+  coverage, including Records, `WITH`, Lists/Maps, numeric and collection
+  loops, Result propagation and pattern matching, Message construction and
+  field reads, string interpolation, recursive and indirect calls, and Float
+  arithmetic. Runtime fault cases remain covered by Phase 8.
 
-## Phase 8 — Bytecode: complete at the verified image/decoder boundary
+## Phase 8 — Result / TRY / Runtime Faults: complete
 
-- Froze the portable, field-wise little-endian OMBC v1 format in ADR-0010.
-- OMBC is currently version 3; ADR-0018 adds persistent schema fingerprints
-  derived from canonical module paths and structural field types.
-- Added an owned bytecode builder, versioned encoder/decoder, Actor handler
-  tables, Record/Message field schemas, and instruction source maps.
-- Added verifier checks for tags and UTF-8 strings, schemas and constructors,
-  functions and instruction ownership, operands, locals, Actor tables, source
-  spans, jump targets, control-flow stack agreement, and maximum stack depth.
-- Added AST and semantic lowering for literals, functions/actions, Records,
-  Messages, collections, calls, short-circuit logic, IF, WHILE, numeric and
-  collection FOR, SELECT including Ok/Error, TRY, Actor state, receive handlers,
-  SPAWN, SEND, WATCH, and STOP.
-- Added a complete 140-byte format golden, malformed image checks, source-map
-  checks, 4,096 random byte arrays, 4,096 mutations of a valid image, all
-  truncated prefixes, and an end-to-end fixture covering the main lowering
-  paths.
-- Windows GCC/Ninja, clang-cl/MSVC, Linux Clang, and Linux GCC ASan+UBSan
-  bytecode suites pass (4/4). The VM repeats image verification at load time,
-  and its tests reject a malformed image before retaining it.
-
-## Phase 9 — Single-thread VM: complete
-
-- Added explicit tagged values, immutable runtime objects, bounded VM-owned
-  heap lifetime, operand stack, local slots, direct and indirect call frames,
-  arithmetic, comparisons, strings, lists, maps, Record/Message constructors,
-  `WITH`, indexing, Result/TRY propagation, and collection iteration.
-- VM initialization verifies the image; execution returns structured runtime
-  errors with bytecode positions and source spans. Integer overflow, division
-  by zero, stack/frame/heap/step limits, and malformed images are covered.
-- Added 11 non-Actor integration tests that compile BASIC fixtures through
-  parsing, name resolution, type inference, semantic checks, bytecode emission,
-  and VM execution. They cover recursion, both loop forms, indirect calls,
-  records, collections, Result/error patterns, interpolation, and runtime
-  failures.
-- Windows GCC/Ninja, clang-cl/MSVC, Linux Clang, and Linux GCC ASan+UBSan
-  complete CTest suites passed for the Phase 9 runtime baseline (10/10).
-
-## Phase 10 — Single-thread Actor runtime: complete
-
-- Added VM-local Actor IDs and ActorRefs, an Actor registry with separate
-  state arrays, bounded FIFO mailboxes, FIFO ready scheduling, local SPAWN,
-  asynchronous SEND, handler dispatch, WATCH, and Actor_Down notifications.
-- The scheduler runs one message handler to completion per turn. Self-sends
-  enter the mailbox, STOP unwinds the current handler and drops pending
-  messages, and a Receive that propagates Error stops with reason FAILED.
-- Added execution counters for spawned Actors, processed messages, and
-  stopped Actors, plus configurable Actor and mailbox limits. Remote placement
-  remains unsupported pending the distributed runtime.
-- Added seven Actor integration checks covering deterministic scheduling,
-  repeated WATCH, normal and failed Actor_Down, per-instance state isolation,
-  watching an already-stopped Actor, STOP mailbox discard, and Actor/mailbox
-  limits. The runtime test binary passes 18/18.
-- Windows GCC/Ninja and clang-cl/MSVC CTest suites pass (10/10 each).
-- Recorded scheduler and Actor ownership decisions in ADR-0012.
-
-## Phase 11 — Actor-local GC: complete
-
-- Added stable per-Actor heaps with an aggregate VM heap-byte limit. The root
-  execution heap remains alive until VM destruction so public execution values
-  keep their existing lifetime.
-- Added iterative mark-and-sweep at Actor instruction safe points. Roots include
-  Actor state slots, the VM operand stack, Actor call-frame locals, the current
-  handler result, and mailbox messages.
-- Messages are graph-copied into the receiving Actor's heap at enqueue time;
-  copies preserve graph sharing and cycles. STOP and FAILED release the Actor's
-  state, queued messages, and heap after watcher notifications are copied.
-- Added a configurable GC threshold, deep-chain and cyclic-graph checks,
-  nested List/Map/Record/Result/Iterator tracing, repeated collection, 24 seeded
-  graph reachability property rounds, and Actor stress with a one-byte threshold.
-- Windows GCC/Ninja and clang-cl/MSVC CTest suites pass (10/10 each); their
-  runtime binary passes 21/21 checks, including the Phase 11 graph and Actor
-  stress cases.
-- Linux GCC ASan+UBSan through Docker passes the full CTest suite (10/10).
-  GCC 13 lacks `<stdckdint.h>`, so the container used a temporary include
-  overlay from its installed Clang 21 resource headers; no source shim was
-  added to the project.
-- `clang-analyzer-*` passes on the changed VM, heap, and runtime test files.
-- Recorded heap ownership, roots, message copies, and stop cleanup in ADR-0013.
-
-## Phase 12 — Multi-thread Scheduler: complete
-
-- Added a bounded worker pool (default four workers, capped at 64), a locked
-  FIFO ready queue, condition-variable shutdown coordination, and configurable
-  instruction quanta (default 256 bytecode instructions).
-- Workers keep independent VM stacks and call frames. The scheduler marks an
-  Actor running while holding its mutex and queues each Actor at most once;
-  saved Actor contexts are resumed after a quantum or moved to another worker.
-- Messages are copied into mailbox-owned transit heaps, then copied into the
-  recipient Actor heap when dispatched. No worker writes into another running
-  Actor's heap.
-- Added a one-worker, one-instruction fairness regression and a concurrent
-  two-pump stress test that processes 2,000,000 messages, checks both exact
-  per-Actor counts, and observes at least two Actors running at once.
-- Windows GCC/Ninja and clang-cl/MSVC full CTest suites pass (10/10 each); the
-  runtime binary passes 23/23 checks and passed five consecutive repeat runs.
-- Linux GCC ThreadSanitizer passes the runtime suite, including the two-million
-  message stress test. The container required a non-PIE TSan executable to
-  avoid an address-mapping failure before test startup.
-- Recorded worker ownership, mailbox transit heaps, and quantum scheduling in
-  ADR-0014.
-
-## Phase 13 — System Actors: complete
-
-- Added built-in `Console`, `File_System`, and `Timer` ActorRefs and the
-  `LOAD_SYSTEM_ACTOR` opcode. OMBC was advanced to v2 for the new instruction.
-- Added system request/completion schemas and compiler support for
-  `Console_Write`, `File_Read`, `File_Write`, and `Timer_After`; semantic
-  analysis checks their field types and Actor protocols.
-- Console and file operations run in the bounded blocking pool. Requests copy
-  their UTF-8 strings into native buffers; workers do not retain Actor-heap
-  pointers. I/O status is wrapped in `Result` and returned as a completion
-  Message through the ordinary mailbox path.
-- Added a separate ordered monotonic Timer queue. It sends the requested
-  Message to its recipient on expiry. The Actor scheduler waits for external
-  work and is notified when a completion is enqueued.
-- VM shutdown drains completed work on success. On scheduler failure it cancels
-  queued blocking requests, waits for active native calls, cancels pending
-  timers, and joins the service threads before releasing VM state.
-- Worker-local VM stacks and call-frame buffers are released after workers
-  join; Timer service test contexts are destroyed after completion/cancellation.
-- Added unit coverage for blocking-pool concurrency, bounds and cancellation;
-  Timer ordering, explicit cancellation and shutdown cancellation; and a
-  compiled OMBasic integration fixture that writes then reads UTF-8 text,
-  receives Console and Timer messages, and exits after all five messages are
-  processed.
-- Windows GCC/Ninja and clang-cl CTest suites pass (12/12); the runtime binary
-  passes 25/25 checks. Linux GCC ASan/UBSan passes the `runtime_vm`,
-  `blocking_pool`, and `timer_service` checks (3/3).
-- Linux TSan could not start `runtime_vm` in the current container because of
-  `unexpected memory mapping`; it failed before executing tests and produced no
-  race report. Recorded the system actor execution and shutdown policy in
-  ADR-0015.
-
-## Phase 14 — Native FFI: implemented
-
-- Added an independent `.omi` tokenizer/parser and metadata model for Native
-  functions, callback signatures, Native Records, effects, blocking status,
-  symbols, and ownership. Invalid pointer ownership and callback bindings
-  produce stable source-spanned diagnostics.
-- Added host C ABI size/alignment mapping and default struct layout calculation
-  for supported scalar/pointer fields.
-- Added UTF-8 dynamic library loading and symbol lookup for Windows and POSIX,
-  bounded CString conversion, and release through an `.omi`-declared Owned
-  pointer destructor.
-- Added a libffi-backed typed call engine that binds parsed `.omi` declarations
-  to library symbols. It marshals supported integer and floating-point types,
-  bounded UTF-8 strings, pointer values, and Owned return values; invalid scalar
-  ranges and malformed strings fail before entering native code.
-- Added `om_vm_native_callback_post` as a thread-safe Runtime ingress. It copies
-  primitive callback fields into a transit-heap Message, applies normal mailbox
-  bounds, and schedules delivery through the Actor scheduler. The VM now creates
-  temporary libffi callback closures, validates callback-to-Message bindings,
-  and never runs Actor handlers on the callback thread.
-- Resolver configuration can provide parsed `.omi` modules. Name resolution
-  imports supported Native function declarations; type inference imports their
-  ABI types and effects; bytecode emission creates fixed-arity external
-  declarations; `om_compiler_bind_native_module` checks callback Message types,
-  then asks the Runtime to own their call bindings. The Runtime public header no
-  longer depends on semantic types.
-- Added `Om_Omi_Project` to load an explicit list of canonical `.omi` paths
-  under the source root using the same case and reparse-point protections as
-  `.bas` loading. The Native dispatch integration fixture now reads its metadata
-  from disk and passes the loaded module into the compiler pipeline.
-- Actor calls marked `BLOCKING` execute in the bounded blocking pool. The caller
-  Actor saves its VM context and releases the scheduler worker; task completion
-  stores the result and schedules the Actor to resume. Root calls remain
-  synchronous because they do not occupy an Actor worker.
-- Added end-to-end BASIC-to-`.omi` typed dispatch and a one-worker Actor test
-  proving a second Actor can run while a blocking Native call waits. Existing
-  tests cover CString and Owned-return handling, the `extern "C"` C++ wrapper,
-  and a callback invoked from a foreign thread into a running Actor mailbox.
-- Callback closures are scoped to the Native call; the Native function must
-  finish callback threads before returning. Callback payloads are limited to
-  supported scalar fields, copied into Runtime-owned storage.
-- Native function parameters and return values can now reference a Native
-  Record declared in the same `.omi` block. The FFI binder builds libffi struct
-  types from the record fields and checks libffi's size/alignment against the
-  host C layout. Arguments are copied into aligned temporary storage; returned
-  records are owned by `Om_Native_Call_Result` until destruction. The C ABI
-  roundtrip gate covers a padded `{ int32_t, double }` argument and return.
-- clang-cl and GCC/Ninja full CTest suites both pass (14/14), including the
-  aggregate FFI roundtrip.
-- This aggregate support is at the FFI binding API. Resolver and VM imports
-  still expose only scalar Native values, so Native Record functions are not
-  callable from BASIC source yet. Nested records and callback Records are not
-  supported. Pointer fields copy their pointer values only; pointee ownership
-  remains the caller/wrapper's responsibility. Applications must list `.omi`
-  paths in project configuration; the loader does not scan or guess metadata
-  dependencies.
-
-## Phase 15 — Distribution: implemented
-
-- Added OS-random 128-bit Node identity generation, a version-3 big-endian
-  frame codec with a bounded length prefix, stable 64-bit Message schema
-  fingerprints, a bounded field-wise Message serializer, and blocking TCP
-  listener/connect/accept/send/receive APIs.
-- Sequential sends on one connection preserve stream order. The transport
-  never retries; malformed or oversized frames and partial writes close the
-  connection. Added localhost ordering, bounds, fingerprint, node identity,
-  nested-value roundtrip, and 5,000-case malformed-frame and payload checks.
-- Added a symmetric HELLO/HELLO_ACK handshake layered over TCP. It checks the
-  protocol version, distinct node identities, an optional expected peer, and
-  matching program and interface fingerprints. Incompatible peers close the
-  connection; localhost tests cover a compatible pair and fingerprint rejection.
-- The two-node test now sends a Message frame after a successful handshake.
-  Serializer limits include a total value budget, so many nested containers
-  cannot multiply a bounded payload into unbounded decoded allocations.
-- The schema-fingerprint API accepts 64-bit structural type IDs, and OMBC v3
-  stores program/interface fingerprints in its header and each emitted
-  Record/Message fingerprint for VM and serializer use.
-- clang-cl and GCC/Ninja full CTest suites pass (14/14).
-- Recorded the wire and transport decisions in ADR-0017.
-- Each initialized VM now owns a fresh 128-bit Node identity and exposes a
-  handshake descriptor populated from its loaded image's program/interface
-  fingerprints. The transport handshake can return the peer descriptor after
-  validating it.
-- Added VM-owned peer attachment with a receiver thread, recursive VM value
-  serialization/deserialization, remote ActorRef handles, schema-checked
-  remote `SEND`, remote `WATCH`, `Actor_Down` delivery when a watched Actor
-  stops, and `NODE_UNREACHABLE` delivery when a peer disconnects. Receiver
-  threads validate network frames and enqueue Messages; they do not execute
+- Lowered `Result<T, E>` as a concrete tagged LLVM aggregate and implemented
+  `TRY` using the existing MIR branch-and-return control flow. Managed values
+  nested in active Result payloads are included in per-function shadow roots.
+- Added checked fault paths for integer overflow, division by zero, list/map
+  index failures, missing map keys, and zero numeric-range steps. Runtime
+  boundaries report static source spans and restore the root chain after a
+  non-local fault. Nested boundaries support both the root entry and future
   Actor handlers.
-- Added a two-VM localhost Actor test covering remote List/Map payload delivery,
-  remote Watch/normal stop notification, typed `Actor_Id`/`Down_Reason` values,
-  peer-disconnect notification, remote spawn, and remote actor-limit rejection.
-  GCC/Ninja and clang-cl full CTest suites pass (14/14).
-- A remote spawn request waits for an acknowledgement that the peer allocated
-  the Actor. The peer queues its initializer and runs it before pending mailbox
-  messages on the next `om_vm_execute`. The host must keep pumping VM execution
-  for queued remote work. Automatic retry, reconnect deduplication, and peer
-  authentication remain future work.
+- Native CLI coverage verifies `Result` error propagation, a managed Result
+  payload surviving a GC safepoint, divide-by-zero, overflow, collection
+  bounds, zero range steps, and file/line fault locations. Runtime tests verify
+  root restoration and nested fault boundaries. `TRY` in a Receive lowers its
+  Error branch to a contained Actor failure, matching the language standard;
+  watchers observe the normal `FAILED` termination path.
+- The Windows clang-cl/LLD build and Phase 8 runtime/CLI tests pass. Phase 7's
+  former non-Actor integration fixture is covered by the Native CLI fixture
+  summarized above.
 
-## Phase 16 — Tooling: implemented
+## Phase 9 — Native Actor Runtime: complete on Windows and Linux
 
-- Added deterministic `ombasic fmt`, including syntax validation, normalized
-  indentation/spacing/blank lines/LF endings, and preservation of regular and
-  documentation comments. Formatter idempotence is covered by a regression
-  test.
-- Added `ombasic check` and structured JSON diagnostics for lexer, parser,
-  name-resolution, type-inference, and semantic errors. Ranges carry stable
-  codes, file paths, one-based lines, and one-based UTF-8 byte columns.
-- Added `ombasic run` to compile and execute an entry function and `ombasic
-  build` to write a portable OMBC bytecode image. The run command prints scalar
-  return values; runtime errors include source locations when available.
-- Added the in-memory `Om_Interface_Cache` API. It records exported symbols,
-  structural interface hashes, effects, serializability, and exported Actor
-  protocol pairs while borrowing the compiler results that own its names and
-  types.
-- Added an early stdio LSP server for diagnostics, hover, and type inlay hints.
-  It routes source through the existing compiler pipeline and refreshes types
-  after full or ranged document changes.
-- Added `ombasic bind`, which reads Clang's JSON AST and emits scalar and
-  single-pointer OMI signatures. Unsupported declarations are skipped. The
-  generated defaults for effect, blocking, and pointer ownership are explicit
-  placeholders that must be reviewed; `ombasic check-omi` validates output.
-- `tooling_formatter` and `tooling_cli` cover formatter idempotence, diagnostic
-  JSON, run/build output, bind generation/validation, and LSP hover/inlay
-  against edited source.
+- Added MIR Actor descriptors for state initializers, receive handlers, and the
+  built-in `Actor_Down` message layout. The MIR verifier checks Actor opcode
+  operand/result types and spawn targets.
+- The LLVM backend emits native Actor descriptors and callback adapters, lowers
+  spawn/self/send/watch/stop calls, and emits the Program descriptor. The native
+  entry wrapper starts the bounded Runtime worker pool and waits for outstanding
+  messages after the entry Action returns.
+- Runtime Actor state initialization now runs inside a recoverable fault
+  boundary. A native CLI integration case verifies spawn, message delivery,
+  state mutation, printing from a receive handler, and stop. A second CLI case
+  verifies a `SELF` reference sent through a message and a reply round trip.
+  Another case verifies watch delivery of `Actor_Down` after a failed handler
+  and checks the `FAILED` reason; initializer overflow is also contained by its
+  fault boundary. Additional CLI coverage verifies self-send countdowns,
+  independent state for two instances of the same Actor, and idempotent WATCH
+  after a target has terminated.
+- Runtime Actor tests verify one Actor never runs overlapping handlers,
+  separate Actors can run concurrently, STOP discards queued mailbox messages,
+  WATCH emits one terminal notification, and a two-million-message workload
+  drains successfully. On termination, the Runtime detaches and destroys the
+  Actor heap before publishing completion to waiters; a Native pointer
+  finalizer test verifies reclamation is complete when `actor_system_wait`
+  returns. The workload completes in 4.72 seconds on Windows and 43.60 seconds
+  in the single-core Linux Docker environment after mailbox GC scaling was
+  corrected.
+  Focused MIR, Runtime Actor, and CLI tests pass on Windows clang-cl/LLD. The
+  complete Windows CTest suite passes (19/19), and the architecture checker
+  passes.
+- The Windows linker driver trace confirms `clang-cl.exe -fuse-ld=lld`
+  invokes `lld-link.exe` with the MSVC and Windows SDK library directories.
+- The Linux Clang/LLD build and CLI integration pass. Its full 19-test CTest
+  suite also passes, including the actor stress workload.
 
-## Reference implementation release-gate review — 2026-10-28
+## Phase 10 — System Actors: complete on Windows and Linux
 
-- Windows GCC/Ninja and clang-cl/MSVC both build successfully and pass the full
-  CTest suite (16/16). The architecture checker is included and passes.
-- Linux GCC ASan/UBSan builds the current source and passes the full CTest
-  suite (16/16), including the VM concurrency stress test.
-- Linux GCC TSan passes the Runtime VM suite (33/33 checks), including the
-  two-million-message Actor stress test. In this Docker environment it needs a
-  non-PIE executable, address randomization disabled with `setarch -R`, and an
-  unconfined seccomp profile so the test process can set its address layout.
-- Deterministic fuzz-style tests cover 4,096 lexer byte inputs, 4,096 malformed
-  parser inputs, bytecode random images and mutations, GC object graphs, and
-  5,000 malformed distribution frames/payloads; no crashes are known.
-- The architecture overview, contribution guide, bytecode format, Native ABI,
-  wire protocol, and C23 safety profile are indexed from `docs/README.md`.
-- Phase 17 optimizations remain deferred: that phase is optional and requires
-  benchmark evidence and an ADR before introducing optimization work.
+- Console writes run on the blocking pool, preserve the supplied text without
+  adding a newline, and return `Console_Write_Completed(Result<Unit, String>)`.
+- File_System copies UTF-8 paths and write contents into owned native task data;
+  workers perform UTF-8 text reads/writes, and mailbox completions carry
+  `Result<String, String>` or `Result<Unit, String>`. Timer keeps a deep-cloned
+  message in a task-owned heap and sends it to the recipient when the timer
+  expires.
+- Runtime operation counts keep `actor_system_wait` open until asynchronous
+  completions have been enqueued and processed. Shutdown cancels pending timers
+  and queued blocking work before joining service threads.
+- CLI integration covers Console, File_System write/read, Timer delivery, and a
+  File_Read failure propagated by `TRY` in a Receive and observed as
+  `Actor_Down(FAILED)`. The Windows clang-cl/LLD full CTest suite passes (19/19).
+
+## Phase 11 — Direct Native FFI: complete on Windows and Linux
+
+- `check`, `build`, and `run` accept repeatable `--native file.omi` options;
+  `build` and `run` also accept `-L dir` for native library search paths.
+- `.omi` parses callback signatures and
+  `CALLBACK <parameter> FOREIGN_THREAD MESSAGE <Message>` bindings. It rejects
+  missing bindings and non-`CVoid` callback results; metadata tests cover both
+  valid and invalid forms. Type inference resolves each binding to one unique
+  OMBasic `MESSAGE`, checks the callback payload field count and types, and
+  requires registration from an Actor `RECEIVE` that accepts the bound Message.
+  CLI cases cover valid bindings, missing or unaccepted Messages, unsupported
+  pointer payloads, field-count/type mismatches, and calls outside `RECEIVE` on
+  Windows and Linux. Generated C ABI trampolines post supported scalar payloads
+  to the Actor mailbox from foreign threads. Registrations are scoped to the
+  Native call; unregister waits for in-flight ingress, and the Native library
+  must join its callback threads before returning. The concurrent two-Actor
+  callback fixture passes on Windows and Linux.
+- MIR carries the resolved native symbol to LLVM. Direct C calls now lower
+  fixed-width integers, C integer aliases, `CSize`, `CBool`, `CFloat`, and
+  `CDouble`, including target-aware `CLong` width and narrow integer extension
+  attributes. Native libraries link through the selected platform linker.
+- CString parameters reject embedded NUL and use stack-backed, NUL-terminated
+  copies for the duration of the call. CString results are copied into managed
+  UTF-8 strings; borrowed results are copied before temporary inputs expire,
+  and owned results invoke their declared release function after the copy
+  attempt.
+- The Windows CLI fixture links a C static library and executes calls using
+  `CInt`, `CInt8`, and `CUInt8`, including signed and unsigned narrow values.
+  It also covers borrowed and owned CString results, rejects embedded NUL, and
+  repeats CString calls 100,000 times to cover stack cleanup. The clang-cl/LLD
+  build succeeds and the full CTest suite passes (21/21).
+- Managed `CPointer` values wrap foreign addresses. Borrowed and static
+  parameters are unwrapped only for the call; owned parameters disarm their
+  wrapper before transferring ownership. Owned results receive a finalizer,
+  borrowed results retain their CPointer owner, and runtime tests cover explicit
+  take, automatic release, and owner tracing.
+- Native Records are opaque nominal values that can be passed to or returned
+  from Native functions. Separate Win64 x64, SysV AMD64, AAPCS64, and Darwin
+  ARM64 classifiers handle scalar field layouts, register coercions, indirect
+  parameters, and `sret`. AAPCS64 tests cover HFA arrays and partial aggregate
+  chunks; Linux HFA parameters use `alignstack(8)`, while Darwin ARM64 does not.
+  The C roundtrip fixture covers mixed integer/float fields, floating-point
+  register classes, pointer fields, and a 24-byte aggregate. The end-to-end
+  Native CLI test passes under both Linux `clang + ld.lld` and Windows
+  `clang-cl + lld-link`.
+- A C++ `extern "C"` fixture also returns and accepts a two-double Native
+  Record by value; the end-to-end CLI gate passes on Windows and Linux.
+- Native Records remain opaque in BASIC source, and nested records are
+  unsupported. Callback payload support is currently limited to integer
+  aliases, `CBool`, `CFloat`, and `CDouble`.
+- `BLOCKING` Native calls are rejected in Actor `RECEIVE` handlers with MIR
+  diagnostic `E1104`; the CLI compile-fail case passes on Windows and Linux.
+
+## Phase 12 — Distribution Native Integration: complete on Windows and Linux
+
+- Added a Native Runtime adapter over the existing v3 TCP protocol and
+  handshake. It uses generated Program/Message descriptors and program/interface
+  fingerprints; it does not consume VM or bytecode data.
+- Message fingerprints recursively include canonical module/entity identity
+  and ordered field type fingerprints. Actor protocol fingerprints include
+  their canonical identity and accepted Message schemas. The interface
+  fingerprint is separate from the program fingerprint; CLI integration checks
+  repeatability and schema-change detection.
+- Added stable peer `Node_Ref` handles, remote ActorRef proxies, descriptor-based
+  Message serialization, remote spawn, send, watch acknowledgements, and
+  `Actor_Down` delivery. Reader threads use cloned Runtime contexts and root
+  decoded managed values until mailbox enqueue.
+- `runtime_distribution_native` launches two native processes on localhost.
+  The integration covers handshake, remote spawn, String and ActorRef Message
+  fields, a response, Watch, and normal Actor termination on Windows and Linux.
+- The same integration verifies `NODE_UNREACHABLE` watcher delivery. Protocol
+  coverage checks ordered at-most-once sequential frames and a 64 KiB nested
+  Record/List/Map payload against accepting and rejecting budgets.
+- `CPointer` is rejected by the wire serializer. Failed sends are not retried;
+  peer authentication remains outside the protocol contract.
+
+## Phase 13 — CLI / Tooling Completion: complete on Windows and Linux
+
+- `version`, `fmt`, `check`, `build`, `run`, `bind`, `check-omi`, and `lsp`
+  remain available with the Native AOT pipeline.
+- `build --emit=hir|mir|llvm-ir|asm|obj` writes compiler artifacts without
+  linking an executable. CLI coverage inspects emitted object formats with
+  `llvm-readobj`, checks LLVM lowering patterns and executable imports, verifies
+  formatter idempotence and diagnostics, and exercises LSP hover/inlay requests.
+
+## Phase 15 — Release Gates: complete on Windows and Linux
+
+- The Windows clang-cl/LLD Debug and Release suites and the Linux Clang 23.1.4
+  Release suite each pass 23/23, including checked-size builtin fallback, the
+  target ABI model, AAPCS64/Darwin ARM64 ABI classifier checks, the two-process
+  distribution integration, and the two-million-message Actor stress test.
+- Linux Clang 23.1.4 ASan/UBSan passes the complete 23-test CTest suite,
+  including generated Native executables. Linux Clang TSan also passes the
+  complete 23-test suite in an isolated container with ASLR disabled.
+- The LLVM PassBuilder C API runs `default<O0>` for Debug and `default<O2>` for
+  optimized configurations. The program entry frame remains available to
+  debuggers while other O2 inlining remains enabled.
+- Runtime lookup storage uses each value's LLVM ABI size and alignment. The
+  system-file-read Actor integration exercises a `Result<String, String>`
+  payload larger than the former scalar-sized temporary. Checked-size helpers
+  use compiler builtins when `<stdckdint.h>` is unavailable, with an MSVC
+  arithmetic fallback.
+- Added nine optional Clang libFuzzer targets for import paths, the source
+  lexer/parser, `.omi` metadata, distribution frame/message decoding, HIR and
+  MIR verifier inputs, distribution payload serialization, and LLVM object
+  emission from verified MIR and descriptor-driven native Message codec
+  round trips. Eight targets build with the extracted Linux LLVM package and
+  pass a 10,000-run ASan/UBSan smoke pass; backend object emission passes a
+  100-run smoke pass.
+- The current fuzzers do not execute arbitrary generated native code.
+- The foreign-thread callback integration passes under Linux Clang 23.1.4
+  ASan/UBSan and TSan. Native Record by-value calls pass the current target-family
+  ABI classifiers; BASIC-level construction, field access, and nested Native
+  Records remain unsupported.
+
+## Phase 14 — Native Debugging: complete
+
+- MIR functions retain their source-level names for native debug metadata.
+- The LLVM backend now emits a compile unit, source files, function scopes, and
+  per-instruction source line locations. Windows modules request CodeView
+  metadata; Linux modules use DWARF.
+- Native Windows links now emit a sibling PDB. The CLI integration test reads
+  the PDB and checks that the canonical `.bas` path and line table survived
+  linking; a local `llvm-pdbutil` inspection confirmed the same for a built
+  Hello World executable.
+- The Linux CLI integration test runs `llvm-dwarfdump` against a native build
+  and verifies the `.bas` source file and line 2 are present in the DWARF line
+  table.
+- A Linux GDB breakpoint at `om_runtime_fault` showed the Native caller at
+  `main.bas:2` in the backtrace, confirming fault frames resolve to OMBasic
+  source locations.

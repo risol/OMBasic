@@ -1,7 +1,7 @@
 #include "../semantic_model/semantic_analysis_internal.h"
 
 #include "ombasic/semantic/type_store.h"
-#include "ombasic/foundation/system_actors.h"
+#include "ombasic/semantic/system_actors.h"
 #include "ombasic/syntax/ast.h"
 #include "ombasic/syntax/name_rules.h"
 
@@ -106,6 +106,10 @@ static Om_Status is_serializable_nominal(
             && owner->kind != OM_SYMBOL_MESSAGE
             && !(owner->kind == OM_SYMBOL_BUILTIN
                  && system_message_symbol(context, nominal_symbol)))) {
+        *serializable = false;
+        return OM_STATUS_OK;
+    }
+    if (owner->native_module != NULL) {
         *serializable = false;
         return OM_STATUS_OK;
     }
@@ -264,6 +268,7 @@ static Om_Status is_serializable_type(Om_Semantic_Analysis_Context *context,
         break;
     case OM_TYPE_ACTION:
     case OM_TYPE_FUNCTION:
+    case OM_TYPE_NATIVE_POINTER:
     case OM_TYPE_VARIABLE:
     default:
         result = false;

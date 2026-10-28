@@ -1,6 +1,7 @@
 #include "blocking_pool.h"
 
 #include <stdbool.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "ombasic/foundation/memory.h"
@@ -115,13 +116,17 @@ static void pool_mutex_destroy(Om_Blocking_Pool *pool)
 static void destroy_task_node(Om_Blocking_Task_Node *node,
                               Om_Status completion_status)
 {
+
     if (node->task.complete != NULL) {
         node->task.complete(node->task.context, completion_status);
     }
+
     if (node->task.destroy != NULL) {
         node->task.destroy(node->task.context);
     }
+
     om_free(node);
+
 }
 
 static void run_worker(Om_Blocking_Pool *pool)

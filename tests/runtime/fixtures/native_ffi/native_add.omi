@@ -1,7 +1,0 @@
-NATIVE "native_fixture"
-FUNCTION native_add(left: CInt, right: CInt): CInt
-    SYMBOL "om_ffi_add"
-    EFFECT PURE
-    NONBLOCKING
-END FUNCTION
-END NATIVE

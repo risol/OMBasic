@@ -25,9 +25,16 @@ bool om_test_type_store_structural_unification(void)
     Om_Type_Id int_type = OM_TYPE_ID_INVALID;
     Om_Type_Id string_type = OM_TYPE_ID_INVALID;
     Om_Type_Id bool_type = OM_TYPE_ID_INVALID;
+    Om_Type_Id native_pointer_type = OM_TYPE_ID_INVALID;
     TYPE_STORE_ASSERT(get_primitive(&store, OM_TYPE_INT, &int_type));
     TYPE_STORE_ASSERT(get_primitive(&store, OM_TYPE_STRING, &string_type));
     TYPE_STORE_ASSERT(get_primitive(&store, OM_TYPE_BOOL, &bool_type));
+    TYPE_STORE_ASSERT(get_primitive(&store, OM_TYPE_NATIVE_POINTER,
+                                    &native_pointer_type));
+    Om_Type_View native_pointer_view = {0};
+    TYPE_STORE_ASSERT(om_type_store_get(&store, native_pointer_type,
+        &native_pointer_view) == OM_STATUS_OK
+        && native_pointer_view.kind == OM_TYPE_NATIVE_POINTER);
 
     Om_Type_Id element = OM_TYPE_ID_INVALID;
     Om_Type_Id list = OM_TYPE_ID_INVALID;

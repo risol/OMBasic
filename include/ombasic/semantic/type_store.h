@@ -18,6 +18,7 @@ typedef enum Om_Type_Kind {
     OM_TYPE_NODE_REF,
     OM_TYPE_ACTOR_ID,
     OM_TYPE_DOWN_REASON,
+    OM_TYPE_NATIVE_POINTER,
     OM_TYPE_LIST,
     OM_TYPE_MAP,
     OM_TYPE_RECORD,
@@ -42,7 +43,7 @@ typedef enum Om_Type_Constraint {
     OM_TYPE_CONSTRAINT_MESSAGE = 1u << 7
 } Om_Type_Constraint;
 
-#define OM_TYPE_PRIMITIVE_COUNT 9u
+#define OM_TYPE_PRIMITIVE_COUNT 10u
 
 /* Pass a zero-initialized store to init. Treat an initialized store as move-only. */
 typedef struct Om_Type_Store {

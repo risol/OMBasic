@@ -1,21 +1,40 @@
 #include "cli_internal.h"
 
 #include <limits.h>
-#include <inttypes.h>
 #include <stdbool.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 
 #include "ombasic/foundation/memory.h"
-#include "ombasic/bytecode/bytecode.h"
+#include "ombasic/compiler/pipeline.h"
+#include "ombasic/linker/linker.h"
 #include "ombasic/module_graph/module_loader.h"
-#include "ombasic/runtime/vm.h"
 #include "ombasic/semantic/semantic_analysis.h"
 #include "ombasic/semantic/type_inference.h"
+#include "ombasic/source/source_text.h"
+#include "ombasic/native/metadata/omi_project.h"
 #include "ombasic/tooling/diagnostics_json.h"
 #include "ombasic/tooling/interface_cache.h"
 #include "ombasic/tooling/type_format.h"
+
+#ifdef _WIN32
+#include <io.h>
+#include <process.h>
+#else
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
+
+#ifdef _WIN32
+#define OM_NATIVE_EXECUTABLE_SUFFIX ".exe"
+#else
+#define OM_NATIVE_EXECUTABLE_SUFFIX ""
+#endif
 
 typedef struct Om_Cli_Diagnostic_List {
     Om_Tooling_Diagnostic *items;
@@ -87,6 +106,423 @@ static Om_Status read_stdin_source(uint8_t **bytes, size_t *length)
 static Om_String_View literal_view(const char *value)
 {
     return (Om_String_View){value, strlen(value)};
+}
+
+static bool symbol_name_matches(const Om_Symbol *symbol, const char *name)
+{
+    if (symbol == NULL || name == NULL) {
+        return false;
+    }
+    const size_t length = strlen(name);
+    return symbol->name.length == length
+        && (length == 0 || memcmp(symbol->name.data, name, length) == 0);
+}
+
+static const Om_Symbol *find_entry_symbol(
+    const Om_Resolution_Result *resolution,
+    const char *entry_name
+)
+{
+    const Om_Symbol *entry = NULL;
+    if (resolution == NULL || entry_name == NULL) {
+        return NULL;
+    }
+    for (size_t index = 0; index < resolution->symbol_count; ++index) {
+        const Om_Symbol *symbol = &resolution->symbols[index];
+        if (symbol->module_id.value != 0
+            || (symbol->kind != OM_SYMBOL_ACTION
+                && symbol->kind != OM_SYMBOL_FUNCTION)
+            || !symbol_name_matches(symbol, entry_name)) {
+            continue;
+        }
+        if (entry != NULL) {
+            return NULL;
+        }
+        entry = symbol;
+    }
+    return entry;
+}
+
+#ifdef _WIN32
+static int copy_windows_environment_variable(const char *name, char **value)
+{
+    *value = NULL;
+    size_t required_size = 0;
+    if (getenv_s(&required_size, NULL, 0, name) != 0) {
+        return -1;
+    }
+    if (required_size == 0) {
+        return 0;
+    }
+    char *copy = om_alloc(required_size);
+    if (copy == NULL) {
+        return -1;
+    }
+    size_t actual_size = 0;
+    if (getenv_s(&actual_size, copy, required_size, name) != 0
+        || actual_size > required_size) {
+        om_free(copy);
+        return -1;
+    }
+    *value = copy;
+    return 0;
+}
+#endif
+
+static bool path_exists(const char *path)
+{
+#ifdef _WIN32
+    return _access(path, 0) == 0;
+#else
+    return access(path, F_OK) == 0;
+#endif
+}
+
+static char *make_temporary_executable_path(void)
+{
+    static unsigned long sequence = 0;
+#ifdef _WIN32
+    char *environment_directory = NULL;
+    if (copy_windows_environment_variable("TEMP", &environment_directory)
+        != 0) {
+        return NULL;
+    }
+    const char *directory = environment_directory;
+    const unsigned long process_id = (unsigned long)_getpid();
+#else
+    const char *directory = getenv("TMPDIR");
+    const unsigned long process_id = (unsigned long)getpid();
+#endif
+    if (directory == NULL || directory[0] == '\0') {
+#ifdef _WIN32
+        directory = ".";
+#else
+        directory = "/tmp";
+#endif
+    }
+    const size_t directory_length = strlen(directory);
+    if (directory_length > SIZE_MAX - 96) {
+#ifdef _WIN32
+        om_free(environment_directory);
+#endif
+        return NULL;
+    }
+    char *path = om_alloc(directory_length + 96);
+    if (path == NULL) {
+#ifdef _WIN32
+        om_free(environment_directory);
+#endif
+        return NULL;
+    }
+    const bool has_separator = directory_length != 0
+        && (directory[directory_length - 1] == '/' ||
+            directory[directory_length - 1] == '\\');
+    const char *separator_text = has_separator ? "" :
+#ifdef _WIN32
+        "\\";
+#else
+        "/";
+#endif
+    for (unsigned int attempt = 0; attempt < 1024; ++attempt) {
+        ++sequence;
+        const int length = snprintf(path, directory_length + 96,
+            "%s%sombasic-run-%lu-%lu%s", directory, separator_text,
+            process_id, sequence, OM_NATIVE_EXECUTABLE_SUFFIX);
+        if (length < 0 || (size_t)length >= directory_length + 96) {
+            om_free(path);
+#ifdef _WIN32
+            om_free(environment_directory);
+#endif
+            return NULL;
+        }
+        const size_t path_length = (size_t)length;
+        if (path_length <= SIZE_MAX - sizeof(".obj")) {
+            char *object_path = om_alloc(path_length + sizeof(".obj"));
+            if (object_path == NULL) {
+                om_free(path);
+#ifdef _WIN32
+                om_free(environment_directory);
+#endif
+                return NULL;
+            }
+            (void)memcpy(object_path, path, path_length);
+            (void)memcpy(object_path + path_length, ".obj", sizeof(".obj"));
+            const bool unused = !path_exists(path) && !path_exists(object_path);
+            om_free(object_path);
+            if (unused) {
+#ifdef _WIN32
+                om_free(environment_directory);
+#endif
+                return path;
+            }
+        }
+    }
+    om_free(path);
+#ifdef _WIN32
+    om_free(environment_directory);
+#endif
+    return NULL;
+}
+
+static char *make_object_path(const char *executable_path)
+{
+    const size_t length = strlen(executable_path);
+    if (length > SIZE_MAX - sizeof(".obj")) {
+        return NULL;
+    }
+    char *path = om_alloc(length + sizeof(".obj"));
+    if (path == NULL) {
+        return NULL;
+    }
+    (void)memcpy(path, executable_path, length);
+    (void)memcpy(path + length, ".obj", sizeof(".obj"));
+    return path;
+}
+
+
+
+static const char *default_emit_path(const char *emit_kind)
+{
+    if (strcmp(emit_kind, "hir") == 0) return "ombasic.hir";
+    if (strcmp(emit_kind, "mir") == 0) return "ombasic.mir";
+    if (strcmp(emit_kind, "llvm-ir") == 0) return "ombasic.ll";
+    if (strcmp(emit_kind, "asm") == 0) return "ombasic.s";
+    if (strcmp(emit_kind, "obj") == 0) return "ombasic.obj";
+    return NULL;
+}
+
+static bool is_supported_emit_kind(const char *emit_kind)
+{
+    return emit_kind != NULL
+        && (strcmp(emit_kind, "hir") == 0
+            || strcmp(emit_kind, "mir") == 0
+            || strcmp(emit_kind, "llvm-ir") == 0
+            || strcmp(emit_kind, "asm") == 0
+            || strcmp(emit_kind, "obj") == 0);
+}
+
+static int generate_native_program(
+    const Om_Module_Project *source_project,
+    Om_String_View source_root,
+    const Om_Parser_Result *parsed,
+    size_t module_count,
+    const Om_Resolution_Result *resolution,
+    Om_Type_Inference_Result *inference,
+    const Om_Semantic_Analysis_Result *semantic,
+    const Om_Omi_Project *native_project,
+    const Om_String_View *library_directories,
+    size_t library_directory_count,
+    const char *entry_name,
+    const char *requested_output,
+    const char *emit_kind,
+    bool run_after_link
+)
+{
+    char *temporary_output = NULL;
+    char *object_path = NULL;
+    char *debug_symbols_path = NULL;
+    const char *output_path = requested_output;
+    bool keep_output = false;
+    int exit_code = 1;
+    Om_Status status = OM_STATUS_OK;
+    Om_Compiler_Emit_Result compilation = {0};
+
+    const Om_Symbol *entry = find_entry_symbol(resolution, entry_name);
+    if (entry == NULL) {
+        (void)fprintf(stderr,
+            "ombasic: entry '%s' was not found in the entry module\n",
+            entry_name);
+        goto cleanup;
+    }
+    if (emit_kind != NULL) {
+        if (run_after_link || !is_supported_emit_kind(emit_kind)) {
+            (void)fprintf(stderr, "ombasic: invalid emit mode\n");
+            goto cleanup;
+        }
+        output_path = requested_output != NULL ? requested_output
+            : default_emit_path(emit_kind);
+    } else if (run_after_link) {
+        temporary_output = make_temporary_executable_path();
+        output_path = temporary_output;
+    } else if (output_path == NULL) {
+        static const char default_output[] =
+            "ombasic" OM_NATIVE_EXECUTABLE_SUFFIX;
+        output_path = default_output;
+    }
+    if (output_path == NULL) {
+        (void)fprintf(stderr,
+            "ombasic: cannot create a temporary output path\n");
+        goto cleanup;
+    }
+    object_path = emit_kind == NULL ? make_object_path(output_path) : NULL;
+    if (emit_kind == NULL && object_path == NULL) {
+        (void)fprintf(stderr, "ombasic: out of memory\n");
+        goto cleanup;
+    }
+
+    Om_Compiler_Artifact artifact = OM_COMPILER_ARTIFACT_OBJECT;
+    const char *artifact_path = object_path;
+    if (emit_kind != NULL) {
+        artifact_path = output_path;
+        if (strcmp(emit_kind, "hir") == 0) {
+            artifact = OM_COMPILER_ARTIFACT_HIR;
+        } else if (strcmp(emit_kind, "mir") == 0) {
+            artifact = OM_COMPILER_ARTIFACT_MIR;
+        } else if (strcmp(emit_kind, "llvm-ir") == 0) {
+            artifact = OM_COMPILER_ARTIFACT_LLVM_IR;
+        } else if (strcmp(emit_kind, "asm") == 0) {
+            artifact = OM_COMPILER_ARTIFACT_ASSEMBLY;
+        } else {
+            artifact = OM_COMPILER_ARTIFACT_OBJECT;
+        }
+    }
+    Om_Compiler_Emit_Request request = {
+        .source_project = source_project,
+        .source_root = source_root,
+        .parsed_modules = parsed,
+        .parsed_module_count = module_count,
+        .resolution = resolution,
+        .inference = inference,
+        .semantic = semantic,
+        .entry_symbol = entry->id,
+        .artifact = artifact,
+        .output_path = artifact_path,
+    };
+    status = om_compiler_emit(&request, &compilation);
+    if (compilation.hir_verification.diagnostic_count != 0) {
+        for (size_t index = 0;
+             index < compilation.hir_verification.diagnostic_count; ++index) {
+            (void)fprintf(stderr, "ombasic: HIR verification failed (%s)\n",
+                om_hir_diagnostic_code_name(
+                    compilation.hir_verification.diagnostics[index].code));
+        }
+        goto cleanup;
+    }
+    if (compilation.specialization.diagnostic_count != 0) {
+        for (size_t index = 0;
+             index < compilation.specialization.diagnostic_count; ++index) {
+            (void)fprintf(stderr, "ombasic: specialization failed (%s)\n",
+                om_specialization_diagnostic_code_name(
+                    compilation.specialization.diagnostics[index].code));
+        }
+        goto cleanup;
+    }
+    if (compilation.mir_lowering.diagnostic_count != 0) {
+        for (size_t index = 0;
+             index < compilation.mir_lowering.diagnostic_count; ++index) {
+            (void)fprintf(stderr,
+                "ombasic: HIR-to-MIR lowering failed (%s)\n",
+                om_mir_diagnostic_code_name(
+                    compilation.mir_lowering.diagnostics[index].code));
+        }
+        goto cleanup;
+    }
+    if (compilation.mir_verification.diagnostic_count != 0) {
+        for (size_t index = 0;
+             index < compilation.mir_verification.diagnostic_count; ++index) {
+            (void)fprintf(stderr, "ombasic: MIR verification failed (%s)\n",
+                om_mir_diagnostic_code_name(
+                    compilation.mir_verification.diagnostics[index].code));
+        }
+        goto cleanup;
+    }
+    if (status != OM_STATUS_OK) {
+        if (compilation.failed_stage == OM_COMPILER_STAGE_BACKEND_EMIT) {
+            (void)fprintf(stderr,
+                "ombasic: LLVM object emission failed (%s)\n",
+                om_status_name(status));
+        } else if (compilation.failed_stage == OM_COMPILER_STAGE_HIR_EMIT) {
+            (void)fprintf(stderr, "ombasic: HIR emission failed (%s)\n",
+                          om_status_name(status));
+        } else if (compilation.failed_stage == OM_COMPILER_STAGE_MIR_EMIT) {
+            (void)fprintf(stderr, "ombasic: MIR emission failed (%s)\n",
+                          om_status_name(status));
+        } else {
+            (void)fprintf(stderr, "ombasic: native lowering failed (%s)\n",
+                          om_status_name(status));
+        }
+        goto cleanup;
+    }
+    if (emit_kind != NULL) {
+        (void)fprintf(stderr, "ombasic: emitted %s %s\n",
+                      emit_kind, output_path);
+        exit_code = 0;
+        keep_output = true;
+        goto cleanup;
+    }
+
+    Om_String_View *native_libraries = NULL;
+    size_t native_library_count = 0;
+    if (native_project != NULL && native_project->module_count != 0) {
+        native_library_count = native_project->module_count;
+        if (native_library_count > SIZE_MAX / sizeof(*native_libraries)) {
+            (void)fprintf(stderr, "ombasic: native library list is too large\n");
+            goto cleanup;
+        }
+        native_libraries = om_alloc_array(native_library_count,
+                                           sizeof(*native_libraries));
+        if (native_libraries == NULL) {
+            (void)fprintf(stderr, "ombasic: out of memory\n");
+            goto cleanup;
+        }
+        for (size_t index = 0; index < native_library_count; ++index) {
+            const Om_Omi_Module *module =
+                om_omi_project_module(native_project, index);
+            if (module == NULL) {
+                om_free(native_libraries);
+                (void)fprintf(stderr,
+                    "ombasic: invalid native library descriptor\n");
+                goto cleanup;
+            }
+            native_libraries[index] = module->library_path;
+        }
+    }
+    const Om_Linker_Request link_request = {
+        .object_path = object_path,
+        .executable_path = output_path,
+        .libraries = native_libraries,
+        .library_count = native_library_count,
+        .library_directories = library_directories,
+        .library_directory_count = library_directory_count,
+    };
+    const int linker_result = om_linker_link_native(&link_request,
+                                                     &debug_symbols_path);
+    om_free(native_libraries);
+    if (linker_result != 0) {
+        (void)fprintf(stderr, "ombasic: native linker failed (exit %d)\n",
+                      linker_result);
+        goto cleanup;
+    }
+    if (run_after_link) {
+        char *arguments[] = {(char *)output_path, NULL};
+        const int program_result = om_linker_run_executable(output_path, arguments);
+        if (program_result < 0) {
+            (void)fprintf(stderr,
+                "ombasic: could not start native executable\n");
+            goto cleanup;
+        }
+        exit_code = program_result;
+    } else {
+        (void)fprintf(stderr, "ombasic: built %s\n", output_path);
+        exit_code = 0;
+        keep_output = true;
+    }
+
+cleanup:
+    if (object_path != NULL) {
+        (void)remove(object_path);
+    }
+    if (!keep_output && output_path != NULL && run_after_link) {
+        (void)remove(output_path);
+    }
+    if (!keep_output && debug_symbols_path != NULL) {
+        (void)remove(debug_symbols_path);
+    }
+    om_free(debug_symbols_path);
+    om_free(object_path);
+    om_free(temporary_output);
+    om_compiler_emit_result_destroy(&compilation);
+    return exit_code;
 }
 
 static const Om_Source_Text *source_for_module(const Om_Module_Project *project,
@@ -185,6 +621,8 @@ static const char *type_message(Om_Type_Inference_Diagnostic_Code code)
         return "Expression, argument, field, return value, or exported field has an incompatible or unstable type.";
     case OM_TYPE_INFERENCE_DIAGNOSTIC_E0402:
         return "Empty collection has no contextual type for inference.";
+    case OM_TYPE_INFERENCE_DIAGNOSTIC_E0403:
+        return "Native callback must bind to a unique Message with matching fields and be registered inside an Actor RECEIVE.";
     default:
         return "Type inference error.";
     }
@@ -607,195 +1045,30 @@ cleanup:
     om_tooling_json_result_destroy(&diagnostics_json);
 }
 
-static bool write_encoded_bytecode(const char *path, Om_Const_Byte_Slice bytes)
-{
-    FILE *file = NULL;
-#ifdef _MSC_VER
-    if (fopen_s(&file, path, "wb") != 0) {
-        return false;
-    }
-#else
-    file = fopen(path, "wb");
-    if (file == NULL) {
-        return false;
-    }
-#endif
-    const bool wrote_all = fwrite(bytes.data, 1, bytes.length, file) == bytes.length;
-    const bool closed = fclose(file) == 0;
-    return wrote_all && closed;
-}
-
-static const char *backend_diagnostic_code(Om_Bytecode_Emit_Code code)
-{
-    switch (code) {
-    case OM_BYTECODE_EMIT_UNSUPPORTED_NODE: return "E0801";
-    case OM_BYTECODE_EMIT_UNRESOLVED_SYMBOL: return "E0802";
-    case OM_BYTECODE_EMIT_INVALID_INPUT: return "E0803";
-    default: return "E0899";
-    }
-}
-
-static const char *backend_diagnostic_message(Om_Bytecode_Emit_Code code)
-{
-    switch (code) {
-    case OM_BYTECODE_EMIT_UNSUPPORTED_NODE:
-        return "This valid source construct is not supported by the bytecode emitter.";
-    case OM_BYTECODE_EMIT_UNRESOLVED_SYMBOL:
-        return "The bytecode emitter could not resolve a semantic symbol.";
-    case OM_BYTECODE_EMIT_INVALID_INPUT:
-        return "The bytecode emitter received an invalid compiler model.";
-    default:
-        return "Bytecode emission failed.";
-    }
-}
-
-static Om_Status collect_backend_diagnostics(Om_Cli_Diagnostic_List *list,
-                                             const Om_Module_Project *project,
-                                             const Om_Parser_Result *parsed,
-                                             size_t module_count,
-                                             const Om_Bytecode_Emit_Result *emitted)
-{
-    Om_Status status = OM_STATUS_OK;
-    for (size_t index = 0; status == OM_STATUS_OK
-         && index < emitted->diagnostic_count; ++index) {
-        const Om_Bytecode_Emit_Diagnostic *item = &emitted->diagnostics[index];
-        if (item->module_id.value >= module_count) {
-            return OM_STATUS_INVALID_ARGUMENT;
-        }
-        const Om_Source_Text *source = source_for_module(project, item->module_id);
-        const Om_Ast_Node *node = om_ast_get_node(
-            &parsed[item->module_id.value].ast, item->node_id);
-        if (source == NULL || node == NULL) {
-            return OM_STATUS_INVALID_ARGUMENT;
-        }
-        status = push_diagnostic(list, (Om_Tooling_Diagnostic){
-            .stage = {"bytecode", 8},
-            .code = literal_view(backend_diagnostic_code(item->code)),
-            .message = literal_view(backend_diagnostic_message(item->code)),
-            .source = source,
-            .span = node->span
-        });
-    }
-    return status;
-}
-
-static const Om_Source_Text *source_for_source_id(const Om_Module_Project *project,
-                                                 Om_Source_Id source_id)
-{
-    const size_t count = om_module_project_module_count(project);
-    for (size_t index = 0; index < count; ++index) {
-        const Om_Source_Text *source = source_for_module(
-            project, (Om_Module_Id){(uint32_t)index});
-        if (source != NULL && source->id.value == source_id.value) {
-            return source;
-        }
-    }
-    return NULL;
-}
-
-static bool print_execution_value(Om_VM_Value value)
-{
-    switch (value.tag) {
-    case OM_VM_VALUE_UNIT:
-        return true;
-    case OM_VM_VALUE_NULL:
-        return fputs("NULL\n", stdout) != EOF;
-    case OM_VM_VALUE_BOOL:
-        return fprintf(stdout, "%s\n", value.as.boolean ? "TRUE" : "FALSE") >= 0;
-    case OM_VM_VALUE_INT:
-        return fprintf(stdout, "%" PRId64 "\n", value.as.integer) >= 0;
-    case OM_VM_VALUE_FLOAT:
-        return fprintf(stdout, "%.17g\n", value.as.floating) >= 0;
-    case OM_VM_VALUE_OBJECT: {
-        Om_String_View string = {0};
-        if (om_vm_value_as_string(value, &string)) {
-            return fwrite(string.data, 1, string.length, stdout) == string.length
-                && fputc('\n', stdout) != EOF;
-        }
-        return false;
-    }
-    default:
-        return false;
-    }
-}
-
-static int run_bytecode(const Om_Module_Project *project,
-                        const Om_Bytecode_Image *image,
-                        Om_String_View entry_name)
-{
-    Om_VM vm = {0};
-    uint32_t function_index = 0;
-    Om_Status status = om_vm_find_function(image, entry_name, &function_index);
-    if (status != OM_STATUS_OK) {
-        (void)fprintf(stderr, "ombasic: entry function '%.*s' was not found\n",
-                      entry_name.length > INT_MAX ? INT_MAX : (int)entry_name.length,
-                      entry_name.data);
-        return 1;
-    }
-    status = om_vm_init(&vm, image, (Om_VM_Limits){0});
-    if (status != OM_STATUS_OK) {
-        (void)fprintf(stderr, "ombasic: could not initialize VM (%s)\n",
-                      om_status_name(status));
-        return 1;
-    }
-    Om_VM_Execution_Result execution = {0};
-    status = om_vm_execute(&vm, function_index, NULL, 0, &execution);
-    if (status != OM_STATUS_OK) {
-        (void)fprintf(stderr, "ombasic: VM execution failed (%s)\n",
-                      om_status_name(status));
-        om_vm_destroy(&vm);
-        return 1;
-    }
-    if (!execution.succeeded) {
-        const Om_Source_Text *source = execution.error.has_source_span
-            ? source_for_source_id(project, execution.error.source_span.source) : NULL;
-        Om_Source_Location location = {0};
-        if (source != NULL) {
-            (void)om_source_text_location(source, execution.error.source_span.start,
-                                          &location);
-            (void)fprintf(stderr, "%.*s:%u:%u: runtime error: %s\n",
-                          source->canonical_path.length > INT_MAX
-                              ? INT_MAX : (int)source->canonical_path.length,
-                          source->canonical_path.data, location.line,
-                          location.byte_column,
-                          om_vm_runtime_error_name(execution.error.code));
-        } else {
-            (void)fprintf(stderr, "ombasic: runtime error: %s\n",
-                          om_vm_runtime_error_name(execution.error.code));
-        }
-        om_vm_destroy(&vm);
-        return 1;
-    }
-    const bool printed = print_execution_value(execution.value);
-    om_vm_destroy(&vm);
-    if (!printed) {
-        (void)fprintf(stderr,
-                      "ombasic: entry returned a value that the CLI cannot display\n");
-        return 1;
-    }
-    return 0;
-}
-
 int om_cli_compile_command(int argc, char **argv, const char *command)
 {
     Om_Source_Root root = {0};
     Om_Module_Project project = {0};
+    Om_Omi_Project native_project = {0};
     Om_Lexer_Result *lexed = NULL;
     Om_Parser_Result *parsed = NULL;
     Om_Resolution_Result resolution = {0};
     Om_Type_Inference_Result inference = {0};
     Om_Semantic_Analysis_Result semantic = {0};
     Om_Interface_Cache interfaces = {0};
-    Om_Bytecode_Emit_Result emitted = {0};
-    Om_Byte_Slice encoded = {0};
     Om_Cli_Diagnostic_List diagnostics = {0};
+    Om_String_View *native_metadata_paths = NULL;
+    Om_String_View *library_directories = NULL;
+    size_t native_metadata_path_count = 0;
+    size_t library_directory_count = 0;
     uint8_t *entry_source = NULL;
     size_t entry_source_length = 0;
     Om_Status status = OM_STATUS_OK;
     const char *root_path = NULL;
     const char *entry_path = NULL;
-    const char *output_path = "out.ombc";
+    const char *output_path = NULL;
     const char *entry_name = "main";
+    const char *emit_kind = NULL;
     bool json = false;
     bool read_source_stdin = false;
     bool include_inferred = false;
@@ -804,9 +1077,38 @@ int om_cli_compile_command(int argc, char **argv, const char *command)
     bool semantic_valid = false;
     int exit_code = 1;
 
+    const size_t option_capacity = argc > 2 ? (size_t)(argc - 2) : 0;
+    if (option_capacity != 0) {
+        native_metadata_paths = om_alloc_array(option_capacity,
+                                               sizeof(*native_metadata_paths));
+        library_directories = om_alloc_array(option_capacity,
+                                             sizeof(*library_directories));
+        if (native_metadata_paths == NULL || library_directories == NULL) {
+            status = OM_STATUS_OUT_OF_MEMORY;
+            goto cleanup;
+        }
+    }
+
     for (int index = 2; index < argc; ++index) {
         if (strcmp(argv[index], "--root") == 0 && index + 1 < argc) {
             root_path = argv[++index];
+        } else if (strcmp(argv[index], "--native") == 0
+                   && index + 1 < argc) {
+            const char *path = argv[++index];
+            native_metadata_paths[native_metadata_path_count++] =
+                literal_view(path);
+        } else if (strcmp(argv[index], "-L") == 0 && index + 1 < argc) {
+            const char *path = argv[++index];
+            library_directories[library_directory_count++] =
+                literal_view(path);
+        } else if (strcmp(command, "build") == 0
+                   && strncmp(argv[index], "--emit=", 7) == 0) {
+            emit_kind = argv[index] + 7;
+            if (!is_supported_emit_kind(emit_kind)) {
+                (void)fprintf(stderr,
+                    "Usage: ombasic build --emit=hir|mir|llvm-ir|asm|obj\\n");
+                goto cleanup;
+            }
         } else if (strcmp(argv[index], "--diagnostics=json") == 0) {
             json = true;
         } else if (strcmp(argv[index], "--source-stdin") == 0) {
@@ -827,13 +1129,15 @@ int om_cli_compile_command(int argc, char **argv, const char *command)
             entry_path = argv[index];
         } else {
             (void)fprintf(stderr,
-                "Usage: ombasic %s --root <source-root> <entry.bas>\n", command);
+                "Usage: ombasic %s --root <source-root> <entry.bas> [--native file.omi] [-L dir]\n",
+                command);
             goto cleanup;
         }
     }
     if (root_path == NULL || entry_path == NULL) {
         (void)fprintf(stderr,
-            "Usage: ombasic %s --root <source-root> <entry.bas>\n", command);
+            "Usage: ombasic %s --root <source-root> <entry.bas> [--native file.omi] [-L dir]\n",
+            command);
         goto cleanup;
     }
     status = om_source_root_init(&root, literal_view(root_path));
@@ -859,6 +1163,53 @@ int om_cli_compile_command(int argc, char **argv, const char *command)
     if (module_count == 0 || module_count > SIZE_MAX / sizeof(*lexed)) {
         status = OM_STATUS_INVALID_ARGUMENT;
         goto cleanup;
+    }
+    if (native_metadata_path_count != 0) {
+        if (module_count > UINT32_MAX
+            || native_metadata_path_count
+                > (size_t)(UINT32_MAX - (uint32_t)module_count)) {
+            status = OM_STATUS_OUT_OF_RANGE;
+            goto cleanup;
+        }
+        status = om_omi_project_load(&root, native_metadata_paths,
+            native_metadata_path_count, (uint32_t)module_count,
+            OM_SOURCE_TEXT_DEFAULT_MAX_BYTES, &native_project);
+        if (status != OM_STATUS_OK) {
+            (void)fprintf(stderr,
+                "ombasic: cannot load Native metadata (%s)\n",
+                om_status_name(status));
+            goto cleanup;
+        }
+        bool native_metadata_valid = true;
+        for (size_t module_index = 0;
+             module_index < native_project.module_count; ++module_index) {
+            const Om_Omi_Module *native_module =
+                om_omi_project_module(&native_project, module_index);
+            const Om_Source_Text *native_source =
+                om_omi_project_source(&native_project, module_index);
+            if (native_module == NULL || native_source == NULL) {
+                status = OM_STATUS_INVALID_ARGUMENT;
+                goto cleanup;
+            }
+            for (size_t diagnostic_index = 0;
+                 diagnostic_index < native_module->diagnostic_count;
+                 ++diagnostic_index) {
+                const Om_Omi_Diagnostic *diagnostic =
+                    &native_module->diagnostics[diagnostic_index];
+                Om_Source_Location location = {0};
+                (void)om_source_text_location(native_source,
+                    diagnostic->span.start, &location);
+                (void)fprintf(stderr, "%.*s:%u:%u: %s\n",
+                    (int)native_source->canonical_path.length,
+                    native_source->canonical_path.data, location.line,
+                    location.byte_column,
+                    om_omi_diagnostic_code_name(diagnostic->code));
+                native_metadata_valid = false;
+            }
+        }
+        if (!native_metadata_valid) {
+            goto cleanup;
+        }
     }
     lexed = om_alloc_array(module_count, sizeof(*lexed));
     parsed = om_alloc_array(module_count, sizeof(*parsed));
@@ -899,8 +1250,12 @@ int om_cli_compile_command(int argc, char **argv, const char *command)
     }
 
     if (all_syntax_valid) {
-        status = om_name_resolve_project(&project, parsed, module_count, NULL,
-                                         &resolution);
+        const Om_Resolver_Config resolver_config = {
+            .native_modules = native_project.modules,
+            .native_module_count = native_project.module_count,
+        };
+        status = om_name_resolve_project(&project, parsed, module_count,
+                                         &resolver_config, &resolution);
         if (status == OM_STATUS_OK) {
             status = collect_resolution_diagnostics(&diagnostics, &project,
                                                     &resolution);
@@ -943,50 +1298,23 @@ int om_cli_compile_command(int argc, char **argv, const char *command)
         print_diagnostics(&diagnostics, json);
     }
     exit_code = semantic_valid ? 0 : 1;
-    if (semantic_valid && strcmp(command, "check") != 0) {
-        status = om_bytecode_emit_project(&project, parsed, module_count,
-                                          &resolution, &inference, &semantic,
-                                          &emitted);
-        if (status == OM_STATUS_OK) {
-            status = collect_backend_diagnostics(&diagnostics, &project, parsed,
-                                                 module_count, &emitted);
-        }
-        if (status != OM_STATUS_OK) {
-            (void)fprintf(stderr, "ombasic: bytecode emission failed (%s)\n",
-                          om_status_name(status));
-            exit_code = 1;
-        } else if (diagnostics.length != 0) {
-            print_diagnostics(&diagnostics, json);
-            exit_code = 1;
-        } else if (strcmp(command, "build") == 0) {
-            status = om_bytecode_encode(&emitted.image, &encoded);
-            if (status != OM_STATUS_OK) {
-                (void)fprintf(stderr, "ombasic: bytecode encoding failed (%s)\n",
-                              om_status_name(status));
-                exit_code = 1;
-            } else if (!write_encoded_bytecode(output_path,
-                (Om_Const_Byte_Slice){encoded.data, encoded.length})) {
-                (void)fprintf(stderr, "ombasic: cannot write '%s'\n", output_path);
-                exit_code = 1;
-            } else {
-                (void)fprintf(stderr, "ombasic: wrote %s\n", output_path);
-                exit_code = 0;
-            }
-        } else {
-            exit_code = run_bytecode(&project, &emitted.image,
-                                     literal_view(entry_name));
-        }
+    if (semantic_valid && (strcmp(command, "run") == 0
+                           || strcmp(command, "build") == 0)) {
+        exit_code = generate_native_program(&project, root.canonical_path,
+            parsed, module_count, &resolution, &inference, &semantic,
+            &native_project, library_directories, library_directory_count,
+            entry_name, output_path, emit_kind,
+            strcmp(command, "run") == 0);
     }
 
 cleanup:
-    om_byte_slice_destroy(&encoded);
-    om_bytecode_emit_result_destroy(&emitted);
     om_free(entry_source);
     om_free(diagnostics.items);
     om_interface_cache_destroy(&interfaces);
     om_semantic_analysis_result_destroy(&semantic);
     om_type_inference_result_destroy(&inference);
     om_resolution_result_destroy(&resolution);
+    om_omi_project_destroy(&native_project);
     if (parsed != NULL) {
         for (size_t index = 0; index < om_module_project_module_count(&project); ++index) {
             om_parser_result_destroy(&parsed[index]);
@@ -1001,5 +1329,7 @@ cleanup:
     om_free(lexed);
     om_module_project_destroy(&project);
     om_source_root_destroy(&root);
+    om_free(library_directories);
+    om_free(native_metadata_paths);
     return exit_code;
 }

@@ -7,8 +7,8 @@
 #include "ombasic/foundation/ids.h"
 #include "ombasic/foundation/status.h"
 #include "ombasic/foundation/string_view.h"
-#include "ombasic/ffi/omi.h"
 #include "ombasic/module_graph/module_loader.h"
+#include "ombasic/native/metadata/omi.h"
 #include "ombasic/syntax/parser.h"
 
 typedef enum Om_Symbol_Kind {
@@ -65,6 +65,8 @@ typedef struct Om_Symbol {
        module must outlive resolution, inference, semantic analysis, and emit. */
     const Om_Omi_Module *native_module;
     size_t native_function_index;
+    /* Valid for OM_SYMBOL_RECORD entries imported from Native metadata. */
+    size_t native_record_index;
 } Om_Symbol;
 
 typedef struct Om_Scope {

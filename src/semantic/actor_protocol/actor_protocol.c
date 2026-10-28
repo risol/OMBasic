@@ -1,7 +1,7 @@
 #include "../semantic_model/semantic_analysis_internal.h"
 
 #include "ombasic/syntax/ast.h"
-#include "ombasic/foundation/system_actors.h"
+#include "ombasic/semantic/system_actors.h"
 #include "ombasic/syntax/name_rules.h"
 
 static bool is_actor_down(const Om_Semantic_Analysis_Context *context,

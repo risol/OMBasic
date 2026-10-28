@@ -1,0 +1,59 @@
+module 0 path="scopes/patterns.bas"
+  entity 0 kind=3 symbol=19 related=4294967295 name="Ping" span=0:0-19
+  entity 1 kind=4 symbol=20 related=4294967295 name="Worker" span=0:21-133
+  entity 2 kind=5 symbol=19 related=20 name="Ping" span=0:56-122
+  entity 3 kind=1 symbol=21 related=4294967295 name="main" span=0:133-523
+node 0 module=0 kind=program op=none type=4294967295 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:0-523 children=0:3
+node 1 module=0 kind=message op=none type=52 symbol=19 related=4294967295 effects=0 flags=0 span=0:0-19 children=3:1 name="Ping"
+node 2 module=0 kind=parameter op=none type=55 symbol=22 related=4294967295 effects=0 flags=0 span=0:13-18 children=4:0 name="value"
+node 3 module=0 kind=actor op=none type=53 symbol=20 related=4294967295 effects=0 flags=0 span=0:21-133 children=4:2 name="Worker"
+node 4 module=0 kind=actor-state-init op=none type=0 symbol=23 related=4294967295 effects=0 flags=8 span=0:38-51 children=6:1 name="count"
+node 5 module=0 kind=integer op=none type=0 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:50-51 children=7:0 name="0" magnitude=0
+node 6 module=0 kind=receive op=none type=5 symbol=19 related=4294967295 effects=0 flags=0 span=0:56-122 children=7:2 name="Ping"
+node 7 module=0 kind=parameter op=none type=55 symbol=24 related=4294967295 effects=0 flags=0 span=0:69-74 children=9:0 name="value"
+node 8 module=0 kind=block op=none type=5 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:84-106 children=9:1
+node 9 module=0 kind=actor-state-assign op=none type=0 symbol=23 related=4294967295 effects=2 flags=0 span=0:84-105 children=10:1 name="count"
+node 10 module=0 kind=binary op=add type=0 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:92-105 children=11:2 name="+"
+node 11 module=0 kind=local op=none type=0 symbol=23 related=4294967295 effects=2048 flags=0 span=0:92-97 children=13:0 name="count"
+node 12 module=0 kind=local op=none type=55 symbol=24 related=4294967295 effects=0 flags=0 span=0:100-105 children=13:0 name="value"
+node 13 module=0 kind=action op=none type=54 symbol=21 related=4294967295 effects=8 flags=0 span=0:133-523 children=13:1 name="main"
+node 14 module=0 kind=block op=none type=5 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:151-512 children=14:5
+node 15 module=0 kind=bind op=none type=58 symbol=25 related=4294967295 effects=0 flags=0 span=0:151-166 children=19:1 name="outcome"
+node 16 module=0 kind=result-ok op=none type=58 symbol=5 related=4294967295 effects=0 flags=0 span=0:161-166 children=20:2 name="Ok"
+node 17 module=0 kind=local op=none type=59 symbol=5 related=4294967295 effects=0 flags=0 span=0:161-163 children=22:0 name="Ok"
+node 18 module=0 kind=integer op=none type=0 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:164-165 children=22:0 name="1" magnitude=1
+node 19 module=0 kind=select op=none type=5 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:171-343 children=22:4
+node 20 module=0 kind=local op=none type=60 symbol=25 related=4294967295 effects=0 flags=0 span=0:178-185 children=26:0 name="outcome"
+node 21 module=0 kind=case-arm op=none type=5 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:190-236 children=26:2
+node 22 module=0 kind=result-ok op=none type=63 symbol=5 related=4294967295 effects=0 flags=0 span=0:195-204 children=28:2 name="Ok"
+node 23 module=0 kind=local op=none type=64 symbol=5 related=4294967295 effects=0 flags=0 span=0:195-197 children=30:0 name="Ok"
+node 24 module=0 kind=local op=none type=61 symbol=26 related=4294967295 effects=0 flags=0 span=0:198-203 children=30:0 name="value"
+node 25 module=0 kind=block op=none type=5 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:213-236 children=30:1
+node 26 module=0 kind=bind op=none type=0 symbol=27 related=4294967295 effects=0 flags=0 span=0:213-235 children=31:1 name="selected_value"
+node 27 module=0 kind=local op=none type=0 symbol=26 related=4294967295 effects=0 flags=0 span=0:230-235 children=32:0 name="value"
+node 28 module=0 kind=case-arm op=none type=5 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:240-293 children=32:2
+node 29 module=0 kind=result-error op=none type=67 symbol=6 related=4294967295 effects=0 flags=0 span=0:245-259 children=34:2 name="Error"
+node 30 module=0 kind=local op=none type=68 symbol=6 related=4294967295 effects=0 flags=0 span=0:245-250 children=36:0 name="Error"
+node 31 module=0 kind=local op=none type=66 symbol=28 related=4294967295 effects=0 flags=0 span=0:251-258 children=36:0 name="problem"
+node 32 module=0 kind=block op=none type=5 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:268-293 children=36:1
+node 33 module=0 kind=bind op=none type=66 symbol=29 related=4294967295 effects=0 flags=0 span=0:268-292 children=37:1 name="selected_error"
+node 34 module=0 kind=local op=none type=66 symbol=28 related=4294967295 effects=0 flags=0 span=0:285-292 children=38:0 name="problem"
+node 35 module=0 kind=case-arm op=none type=5 symbol=4294967295 related=4294967295 effects=0 flags=4 span=0:297-328 children=38:1
+node 36 module=0 kind=block op=none type=5 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:315-328 children=39:1
+node 37 module=0 kind=bind op=none type=0 symbol=30 related=4294967295 effects=0 flags=0 span=0:315-327 children=40:1 name="fallback"
+node 38 module=0 kind=integer op=none type=0 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:326-327 children=41:0 name="0" magnitude=0
+node 39 module=0 kind=for-range op=none type=5 symbol=31 related=4294967295 effects=0 flags=0 span=0:347-407 children=41:3 name="index"
+node 40 module=0 kind=integer op=none type=0 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:359-360 children=44:0 name="1" magnitude=1
+node 41 module=0 kind=integer op=none type=0 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:364-365 children=44:0 name="2" magnitude=2
+node 42 module=0 kind=block op=none type=5 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:374-395 children=44:1
+node 43 module=0 kind=bind op=none type=0 symbol=32 related=4294967295 effects=0 flags=0 span=0:374-394 children=45:1 name="numeric_item"
+node 44 module=0 kind=local op=none type=0 symbol=31 related=4294967295 effects=0 flags=0 span=0:389-394 children=46:0 name="index"
+node 45 module=0 kind=for-each op=none type=5 symbol=33 related=4294967295 effects=0 flags=0 span=0:411-479 children=46:2 name="element"
+node 46 module=0 kind=list op=none type=70 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:426-432 children=48:2
+node 47 module=0 kind=integer op=none type=0 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:427-428 children=50:0 name="1" magnitude=1
+node 48 module=0 kind=integer op=none type=0 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:430-431 children=50:0 name="2" magnitude=2
+node 49 module=0 kind=block op=none type=5 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:441-467 children=50:1
+node 50 module=0 kind=bind op=none type=0 symbol=34 related=4294967295 effects=0 flags=0 span=0:441-466 children=51:1 name="collection_item"
+node 51 module=0 kind=local op=none type=0 symbol=33 related=4294967295 effects=0 flags=0 span=0:459-466 children=52:0 name="element"
+node 52 module=0 kind=bind op=none type=71 symbol=35 related=4294967295 effects=0 flags=0 span=0:483-511 children=52:1 name="spawned_actor"
+node 53 module=0 kind=spawn op=none type=71 symbol=20 related=4294967295 effects=8 flags=0 span=0:499-511 children=53:0 name="Worker"

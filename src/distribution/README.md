@@ -57,15 +57,29 @@ does not authenticate the peer.
 
 Node identities use 128 bits from the operating system random source. Message
 schema fingerprints are stable FNV-1a 64-bit hashes over length-prefixed
-canonical module paths, Message names, and ordered field type IDs; they are
+canonical module paths, Message names, and ordered structural field type
+fingerprints; they are
 compatibility identifiers, not authentication tags.
 
-The VM can attach a negotiated peer, map remote ActorRefs to local handles,
-route `SEND` frames into normal Actor mailboxes, and process remote `WATCH` and
-`ACTOR_DOWN` frames. A stopped remote Actor notifies its watchers; loss of a
-peer reports `NODE_UNREACHABLE` through the same `Actor_Down` mailbox path.
-`SPAWN ... AT node` waits for the peer to allocate the Actor and acknowledge its
-remote ID. The peer queues its initializer and runs it before queued messages
-the next time its host calls `om_vm_execute`. The receiver thread performs
-validation and mailbox ingress only. Failed sends are never retried; reconnect
-deduplication and peer authentication remain unsupported.
+`include/ombasic/runtime/distribution.h` provides the Native Actor adapter over
+these primitives. Create it after starting the Actor system, then listen and
+accept peers or connect to them. Each accepted/connected peer is registered as
+a stable local `Node_Ref` handle for that adapter lifetime. The generated
+Program and Message descriptors supply Actor lookup, type layouts, and the
+program/interface fingerprints; the adapter does not consume VM values or
+bytecode schemas.
+
+The adapter supports descriptor-driven Message serialization, remote
+`SPAWN AT`, `SEND`, `WATCH`, watch acknowledgements, and `Actor_Down` delivery.
+Managed values decoded from the wire are built in a reader-thread Runtime
+context and rooted until the Message is enqueued. `CPointer` values are not
+serializable. The adapter must be destroyed before the Actor system's root
+execution context.
+
+`runtime_distribution_native` launches two native test processes on localhost
+for both a normal remote Actor lifecycle and a disconnected-node scenario. It
+covers the fingerprint handshake, remote spawn, String/ActorRef Message fields,
+watch notification, normal Actor termination, and `NODE_UNREACHABLE` delivery.
+The TCP transport test verifies ordered, at-most-once delivery for sequential
+sends on one connection; failed sends are not retried. Peer authentication
+remains outside the current protocol contract.

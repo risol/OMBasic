@@ -81,7 +81,7 @@ bool om_distribution_actor_ref_equal(
 Om_Status om_distribution_message_fingerprint(
     Om_String_View canonical_module_path,
     Om_String_View message_name,
-    const uint64_t *field_type_ids,
+    const uint64_t *field_type_fingerprints,
     size_t field_count,
     uint64_t *fingerprint
 );

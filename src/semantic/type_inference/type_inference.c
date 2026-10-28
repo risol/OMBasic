@@ -1,7 +1,7 @@
 #include "ombasic/semantic/type_inference.h"
 
 #include "ombasic/foundation/memory.h"
-#include "ombasic/foundation/system_actors.h"
+#include "ombasic/semantic/system_actors.h"
 #include "ombasic/foundation/vector.h"
 #include "ombasic/syntax/name_rules.h"
 
@@ -568,8 +568,30 @@ static Om_Status set_builtin_scheme(Om_Infer_Context *context,
     return status;
 }
 
+static Om_Status native_record_type(Om_Infer_Context *context,
+                                    const Om_Omi_Module *module,
+                                    size_t record_index,
+                                    Om_Type_Id *type_id)
+{
+    if (context == NULL || module == NULL || type_id == NULL
+        || record_index >= module->record_count || module->records == NULL) {
+        return OM_STATUS_INVALID_ARGUMENT;
+    }
+    for (size_t index = 0; index < context->resolution->symbol_count; ++index) {
+        const Om_Symbol *symbol = &context->resolution->symbols[index];
+        if (symbol->kind == OM_SYMBOL_RECORD
+            && symbol->native_module == module
+            && symbol->native_record_index == record_index) {
+            return om_type_store_nominal(&context->type_store,
+                                         OM_TYPE_RECORD, symbol->id, type_id);
+        }
+    }
+    return OM_STATUS_NOT_FOUND;
+}
+
 static Om_Status native_abi_type_to_language_type(
-    Om_Infer_Context *context, Om_Native_Abi_Type abi_type, bool is_result,
+    Om_Infer_Context *context, const Om_Omi_Module *module,
+    Om_Native_Abi_Type abi_type, size_t record_index, bool is_result,
     Om_Type_Id *type_id)
 {
     if (type_id == NULL) {
@@ -610,9 +632,12 @@ static Om_Status native_abi_type_to_language_type(
     case OM_NATIVE_ABI_CSTRING:
         kind = OM_TYPE_STRING;
         break;
-    case OM_NATIVE_ABI_INVALID:
     case OM_NATIVE_ABI_CPOINTER:
+        kind = OM_TYPE_NATIVE_POINTER;
+        break;
     case OM_NATIVE_ABI_RECORD:
+        return native_record_type(context, module, record_index, type_id);
+    case OM_NATIVE_ABI_INVALID:
         return OM_STATUS_INVALID_ARGUMENT;
     }
     return get_primitive_type(context, kind, type_id);
@@ -652,18 +677,25 @@ static Om_Status initialize_native_builtin(Om_Infer_Context *context,
             for (size_t callback_index = 0;
                  callback_index < parameter->callback_parameter_count;
                  ++callback_index) {
+                const Om_Native_Abi_Type callback_abi_type =
+                    module->callback_parameters[
+                        parameter->callback_parameter_start
+                            + callback_index].abi_type;
+                if (callback_abi_type == OM_NATIVE_ABI_CSTRING
+                    || callback_abi_type == OM_NATIVE_ABI_CPOINTER
+                    || callback_abi_type == OM_NATIVE_ABI_RECORD
+                    || callback_abi_type == OM_NATIVE_ABI_CVOID
+                    || callback_abi_type == OM_NATIVE_ABI_INVALID) {
+                    continue;
+                }
                 Om_Type_Id ignored = OM_TYPE_ID_INVALID;
                 const Om_Status callback_status =
                     native_abi_type_to_language_type(
                         context,
-                        module->callback_parameters[
-                            parameter->callback_parameter_start
-                                + callback_index].abi_type,
-                        false, &ignored);
-                if (callback_status != OM_STATUS_OK
-                    || module->callback_parameters[
-                        parameter->callback_parameter_start + callback_index]
-                           .abi_type == OM_NATIVE_ABI_CSTRING) {
+                        module,
+                        callback_abi_type,
+                        SIZE_MAX, false, &ignored);
+                if (callback_status != OM_STATUS_OK) {
                     return OM_STATUS_INVALID_ARGUMENT;
                 }
             }
@@ -686,13 +718,15 @@ static Om_Status initialize_native_builtin(Om_Infer_Context *context,
             continue;
         }
         status = native_abi_type_to_language_type(
-            context, parameter->abi_type, false,
+            context, module, parameter->abi_type, parameter->record_index,
+            false,
             &parameter_types[language_index++]);
     }
     Om_Type_Id result_type = OM_TYPE_ID_INVALID;
     if (status == OM_STATUS_OK) {
         status = native_abi_type_to_language_type(
-            context, function->result_type, true, &result_type);
+            context, module, function->result_type,
+            function->result_record_index, true, &result_type);
     }
     Om_Type_Id function_type = OM_TYPE_ID_INVALID;
     if (status == OM_STATUS_OK) {
@@ -890,6 +924,23 @@ static Om_Status initialize_builtin(Om_Infer_Context *context,
         primitive_kind = OM_TYPE_ACTOR_ID;
     } else if (name_is_ci(symbol->name, "Down_Reason", 11)) {
         primitive_kind = OM_TYPE_DOWN_REASON;
+    } else if (name_is(symbol->name, "print", 5)) {
+        Om_Type_Id string_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id unit_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id function_type = OM_TYPE_ID_INVALID;
+        Om_Status status = get_primitive_type(context, OM_TYPE_STRING,
+                                              &string_type);
+        if (status == OM_STATUS_OK) {
+            status = get_primitive_type(context, OM_TYPE_UNIT, &unit_type);
+        }
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_function(&context->type_store,
+                OM_TYPE_FUNCTION, &string_type, 1, unit_type, &function_type);
+        }
+        if (status == OM_STATUS_OK) {
+            status = set_builtin_scheme(context, symbol->id, function_type);
+        }
+        return status;
     } else if (name_is_ci(symbol->name, "Actor_Down", 10)) {
         Om_Type_Id actor_id = OM_TYPE_ID_INVALID;
         Om_Type_Id reason = OM_TYPE_ID_INVALID;
@@ -1200,7 +1251,9 @@ static Om_Status find_unique_field_owner(const Om_Infer_Context *context,
         const Om_Symbol_Id owner = resolved_symbol_for_node(
             context, candidate->module_id, scope->owner_node);
         const Om_Symbol *owner_symbol = infer_symbol(context, owner);
-        if (owner_symbol == NULL || owner_symbol->kind != OM_SYMBOL_RECORD) {
+        if (owner_symbol == NULL
+            || (owner_symbol->kind != OM_SYMBOL_RECORD
+                && owner_symbol->kind != OM_SYMBOL_MESSAGE)) {
             continue;
         }
         ++matches;
@@ -1272,6 +1325,213 @@ static Om_Status infer_record_constructor(Om_Infer_Context *context,
     return status;
 }
 
+static Om_Status add_native_callback_diagnostic(
+    Om_Infer_Context *context, Om_Module_Id module, Om_Source_Span span)
+{
+    return add_type_diagnostic(
+        context, OM_TYPE_INFERENCE_DIAGNOSTIC_E0403, module, span,
+        OM_TYPE_ID_INVALID, OM_TYPE_ID_INVALID);
+}
+
+static bool actor_accepts_message(const Om_Infer_Context *context,
+                                  Om_Symbol_Id actor_symbol_id,
+                                  Om_Symbol_Id message_symbol_id)
+{
+    const Om_Symbol *actor = infer_symbol(context, actor_symbol_id);
+    if (actor == NULL || actor->kind != OM_SYMBOL_ACTOR
+        || actor->module_id.value >= context->module_count) {
+        return false;
+    }
+    const Om_Ast_Node *declaration = infer_node(context, actor->module_id,
+                                                actor->declaration_node);
+    if (declaration == NULL || declaration->kind != OM_AST_ACTOR_DECLARATION) {
+        return false;
+    }
+    for (size_t index = 0; index < declaration->child_count; ++index) {
+        const Om_Ast_Node_Id receive_id = infer_child(
+            context, actor->module_id, declaration, index);
+        const Om_Ast_Node *receive = infer_node(context, actor->module_id,
+                                                receive_id);
+        if (receive == NULL
+            || receive->kind != OM_AST_RECEIVE_DECLARATION) {
+            continue;
+        }
+        const Om_Symbol_Id received_message = resolved_symbol_for_node(
+            context, actor->module_id, receive_id);
+        if (received_message.value == message_symbol_id.value) return true;
+    }
+    return false;
+}
+
+static Om_Status infer_native_callback_bindings(
+    Om_Infer_Context *context, Om_Module_Id module,
+    const Om_Ast_Node *call, const Om_Symbol *native_symbol)
+{
+    if (context == NULL || call == NULL || native_symbol == NULL
+        || native_symbol->native_module == NULL
+        || native_symbol->native_function_index
+            >= native_symbol->native_module->function_count
+        || native_symbol->native_module->functions == NULL) {
+        return OM_STATUS_INVALID_ARGUMENT;
+    }
+    const Om_Omi_Module *native_module = native_symbol->native_module;
+    const Om_Omi_Native_Function *function =
+        &native_module->functions[native_symbol->native_function_index];
+    if (function->parameter_start > native_module->parameter_count
+        || function->parameter_count
+            > native_module->parameter_count - function->parameter_start
+        || (function->parameter_count != 0 && native_module->parameters == NULL)
+        || function->callback_binding_start
+            > native_module->callback_binding_count
+        || function->callback_binding_count
+            > native_module->callback_binding_count
+                - function->callback_binding_start
+        || (function->callback_binding_count != 0
+            && native_module->callback_bindings == NULL)) {
+        return OM_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (function->callback_binding_count != 0) {
+        bool has_native_record =
+            function->result_type == OM_NATIVE_ABI_RECORD;
+        for (size_t index = 0; !has_native_record
+             && index < function->parameter_count; ++index) {
+            const Om_Omi_Parameter *parameter = &native_module->parameters[
+                function->parameter_start + index];
+            has_native_record = !parameter->is_callback
+                && parameter->abi_type == OM_NATIVE_ABI_RECORD;
+        }
+        if (has_native_record) {
+            return add_native_callback_diagnostic(context, module,
+                                                   call->span);
+        }
+    }
+
+    Om_Status status = OM_STATUS_OK;
+    for (size_t binding_index = 0;
+         status == OM_STATUS_OK
+             && binding_index < function->callback_binding_count;
+         ++binding_index) {
+        const Om_Omi_Callback_Binding *binding =
+            &native_module->callback_bindings[
+                function->callback_binding_start + binding_index];
+        if (binding->parameter_index >= function->parameter_count) {
+            return OM_STATUS_INVALID_ARGUMENT;
+        }
+        const Om_Omi_Parameter *parameter = &native_module->parameters[
+            function->parameter_start + binding->parameter_index];
+        if (!parameter->is_callback
+            || parameter->callback_parameter_start
+                > native_module->callback_parameter_count
+            || parameter->callback_parameter_count
+                > native_module->callback_parameter_count
+                    - parameter->callback_parameter_start
+            || (parameter->callback_parameter_count != 0
+                && native_module->callback_parameters == NULL)) {
+            return OM_STATUS_INVALID_ARGUMENT;
+        }
+
+        if (!context->in_actor_receive
+            || context->current_actor.value == UINT32_MAX) {
+            status = add_native_callback_diagnostic(context, module,
+                                                    call->span);
+        }
+
+        const Om_Symbol *message_symbol = NULL;
+        bool ambiguous_message = false;
+        for (size_t symbol_index = 0;
+             symbol_index < context->resolution->symbol_count;
+             ++symbol_index) {
+            const Om_Symbol *candidate =
+                &context->resolution->symbols[symbol_index];
+            if (candidate->kind != OM_SYMBOL_MESSAGE
+                || !om_name_equal_case_insensitive(candidate->name,
+                                                   binding->message_name)) {
+                continue;
+            }
+            if (message_symbol != NULL) {
+                ambiguous_message = true;
+                break;
+            }
+            message_symbol = candidate;
+        }
+        if (status == OM_STATUS_OK
+            && (message_symbol == NULL || ambiguous_message)) {
+            status = add_native_callback_diagnostic(context, module,
+                                                    call->span);
+            continue;
+        }
+        if (status != OM_STATUS_OK) {
+            break;
+        }
+        if (!actor_accepts_message(context, context->current_actor,
+                                   message_symbol->id)) {
+            status = add_native_callback_diagnostic(context, module,
+                                                    call->span);
+            continue;
+        }
+
+        const Om_Ast_Node *message_declaration = infer_node(
+            context, message_symbol->module_id,
+            message_symbol->declaration_node);
+        if (message_declaration == NULL
+            || message_declaration->kind != OM_AST_MESSAGE_DECLARATION) {
+            return OM_STATUS_INVALID_ARGUMENT;
+        }
+        if (message_declaration->child_count
+            != parameter->callback_parameter_count) {
+            status = add_native_callback_diagnostic(context, module,
+                                                    call->span);
+            continue;
+        }
+
+        for (size_t field_index = 0;
+             status == OM_STATUS_OK
+                 && field_index < parameter->callback_parameter_count;
+             ++field_index) {
+            const Om_Omi_Callback_Parameter *callback_parameter =
+                &native_module->callback_parameters[
+                    parameter->callback_parameter_start + field_index];
+            if (callback_parameter->abi_type == OM_NATIVE_ABI_CSTRING
+                || callback_parameter->abi_type == OM_NATIVE_ABI_CPOINTER
+                || callback_parameter->abi_type == OM_NATIVE_ABI_RECORD
+                || callback_parameter->abi_type == OM_NATIVE_ABI_CVOID
+                || callback_parameter->abi_type == OM_NATIVE_ABI_INVALID) {
+                status = add_native_callback_diagnostic(context, module,
+                                                        call->span);
+                continue;
+            }
+
+            const Om_Ast_Node_Id field_id = infer_child(
+                context, message_symbol->module_id, message_declaration,
+                field_index);
+            const Om_Symbol_Id field_symbol = resolved_symbol_for_node(
+                context, message_symbol->module_id, field_id);
+            const Om_Symbol *field = infer_symbol(context, field_symbol);
+            if (field == NULL || field->kind != OM_SYMBOL_FIELD) {
+                return OM_STATUS_INVALID_ARGUMENT;
+            }
+
+            Om_Type_Id callback_type = OM_TYPE_ID_INVALID;
+            status = native_abi_type_to_language_type(
+                context, native_module, callback_parameter->abi_type,
+                SIZE_MAX, false, &callback_type);
+            if (status == OM_STATUS_INVALID_ARGUMENT) {
+                status = add_native_callback_diagnostic(context, module,
+                                                        call->span);
+                continue;
+            }
+            if (status == OM_STATUS_OK) {
+                status = unify_at(
+                    context, module, call->span,
+                    type_for_symbol_scheme(context, field_symbol),
+                    callback_type);
+            }
+        }
+    }
+    return status;
+}
+
 static Om_Status infer_call(Om_Infer_Context *context,
                             Om_Module_Id module,
                             Om_Ast_Node_Id node_id,
@@ -1289,6 +1549,9 @@ static Om_Status infer_call(Om_Infer_Context *context,
     if (callee_symbol != NULL
         && (callee_symbol->kind == OM_SYMBOL_RECORD
             || callee_symbol->kind == OM_SYMBOL_MESSAGE)) {
+        if (callee_symbol->native_module != NULL) {
+            return OM_STATUS_INVALID_ARGUMENT;
+        }
         return infer_record_constructor(context, module, node_id, node,
                                         callee_symbol_id, level, type_id);
     }
@@ -1400,6 +1663,11 @@ static Om_Status infer_call(Om_Infer_Context *context,
         }
     }
     om_free(argument_types);
+    if (status == OM_STATUS_OK && callee_symbol != NULL
+        && callee_symbol->native_module != NULL) {
+        status = infer_native_callback_bindings(context, module, node,
+                                                callee_symbol);
+    }
     if (status == OM_STATUS_OK) {
         status = set_node_type(context, module, node_id, *type_id);
     }
@@ -1434,7 +1702,9 @@ static Om_Status infer_member(Om_Infer_Context *context,
     status = om_type_store_get(&context->type_store, receiver_type,
                                &receiver_view);
     Om_Symbol_Id record_symbol = OM_SYMBOL_ID_INVALID;
-    if (status == OM_STATUS_OK && receiver_view.kind == OM_TYPE_RECORD) {
+    if (status == OM_STATUS_OK
+        && (receiver_view.kind == OM_TYPE_RECORD
+            || receiver_view.kind == OM_TYPE_MESSAGE)) {
         record_symbol = receiver_view.nominal_symbol;
     } else if (status == OM_STATUS_OK
                && receiver_view.kind == OM_TYPE_VARIABLE) {
@@ -2965,6 +3235,7 @@ const char *om_type_inference_diagnostic_code_name(
     switch (code) {
     case OM_TYPE_INFERENCE_DIAGNOSTIC_E0401: return "E0401";
     case OM_TYPE_INFERENCE_DIAGNOSTIC_E0402: return "E0402";
+    case OM_TYPE_INFERENCE_DIAGNOSTIC_E0403: return "E0403";
     default: return "E0000";
     }
 }

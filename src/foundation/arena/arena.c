@@ -10,11 +10,17 @@
 _Static_assert(sizeof(uintptr_t) >= sizeof(size_t),
                "Arena requires uintptr_t to represent size_t offsets.");
 
+typedef union Om_Arena_Alignment {
+    long double floating;
+    void *pointer;
+    uintmax_t integer;
+} Om_Arena_Alignment;
+
 struct Om_Arena_Segment {
     size_t capacity;
     size_t used;
     struct Om_Arena_Segment *next;
-    max_align_t payload[];
+    Om_Arena_Alignment payload[];
 };
 
 static unsigned char *segment_bytes(Om_Arena_Segment *segment)
@@ -26,7 +32,7 @@ static Om_Status segment_create(size_t capacity, Om_Arena_Segment **out)
 {
     size_t rounded = 0;
     size_t total = 0;
-    size_t unit = sizeof(max_align_t);
+    size_t unit = sizeof(Om_Arena_Alignment);
     Om_Arena_Segment *segment = NULL;
 
     if (out == NULL || unit == 0 || capacity == 0) {

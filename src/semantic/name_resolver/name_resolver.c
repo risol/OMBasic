@@ -5,7 +5,7 @@
 #include <string.h>
 
 #include "ombasic/foundation/memory.h"
-#include "ombasic/foundation/system_actors.h"
+#include "ombasic/semantic/system_actors.h"
 #include "ombasic/foundation/vector.h"
 #include "ombasic/syntax/name_rules.h"
 
@@ -358,12 +358,12 @@ static bool source_native_abi_type_supported(Om_Native_Abi_Type type,
     case OM_NATIVE_ABI_CDOUBLE:
     case OM_NATIVE_ABI_CSIZE:
     case OM_NATIVE_ABI_CBOOL:
+    case OM_NATIVE_ABI_CPOINTER:
     case OM_NATIVE_ABI_CSTRING:
+    case OM_NATIVE_ABI_RECORD:
         return true;
     case OM_NATIVE_ABI_INVALID:
     case OM_NATIVE_ABI_CVOID:
-    case OM_NATIVE_ABI_CPOINTER:
-    case OM_NATIVE_ABI_RECORD:
         return false;
     }
     return false;
@@ -382,6 +382,9 @@ static bool native_function_source_callable(const Om_Omi_Module *module,
         || function->parameter_count
             > module->parameter_count - function->parameter_start
         || (function->parameter_count != 0 && module->parameters == NULL)
+        || (function->result_type == OM_NATIVE_ABI_RECORD
+            && (function->result_record_index >= module->record_count
+                || module->records == NULL))
         || !source_native_abi_type_supported(function->result_type, true)) {
         return false;
     }
@@ -389,7 +392,10 @@ static bool native_function_source_callable(const Om_Omi_Module *module,
         const Om_Omi_Parameter *parameter =
             &module->parameters[function->parameter_start + index];
         if (!parameter->is_callback) {
-            if (!source_native_abi_type_supported(parameter->abi_type, false)) {
+            if (!source_native_abi_type_supported(parameter->abi_type, false)
+                || (parameter->abi_type == OM_NATIVE_ABI_RECORD
+                    && (parameter->record_index >= module->record_count
+                        || module->records == NULL))) {
                 return false;
             }
             continue;
@@ -412,7 +418,8 @@ static bool native_function_source_callable(const Om_Omi_Module *module,
                     parameter->callback_parameter_start + callback_index]
                     .abi_type;
             if (!source_native_abi_type_supported(callback_type, false)
-                || callback_type == OM_NATIVE_ABI_CSTRING) {
+                || callback_type == OM_NATIVE_ABI_CSTRING
+                || callback_type == OM_NATIVE_ABI_RECORD) {
                 return false;
             }
         }
@@ -457,12 +464,45 @@ static Om_Status add_native_builtin(Om_Resolver *resolver,
     return status;
 }
 
+static Om_Status add_native_record(Om_Resolver *resolver,
+                                   const Om_Omi_Module *module,
+                                   size_t record_index)
+{
+    if (resolver == NULL || module == NULL
+        || record_index >= module->record_count || module->records == NULL) {
+        return OM_STATUS_INVALID_ARGUMENT;
+    }
+    const Om_Omi_Native_Record *record = &module->records[record_index];
+    if (record->name.data == NULL || record->name.length == 0
+        || om_name_classify(record->name) == OM_NAME_CLASS_INVALID
+        || find_in_scope(resolver, resolver->prelude_scope, record->name,
+                         true).value != UINT32_MAX) {
+        return OM_STATUS_INVALID_ARGUMENT;
+    }
+    Om_Symbol_Id symbol_id = OM_SYMBOL_ID_INVALID;
+    Om_Status status = create_symbol(
+        resolver, OM_MODULE_ID_INVALID, resolver->prelude_scope,
+        record->name, OM_SYMBOL_RECORD,
+        (Om_Source_Span){OM_SOURCE_ID_INVALID, 0, 0},
+        OM_AST_NODE_ID_INVALID, true, false, OM_MODULE_ID_INVALID,
+        &symbol_id);
+    if (status == OM_STATUS_OK) {
+        Om_Symbol *symbol = om_vector_at(&resolver->symbols, symbol_id.value);
+        if (symbol == NULL) {
+            return OM_STATUS_INVALID_ARGUMENT;
+        }
+        symbol->native_module = module;
+        symbol->native_record_index = record_index;
+    }
+    return status;
+}
+
 static Om_Status setup_prelude(Om_Resolver *resolver,
                                const Om_Resolver_Config *config)
 {
     static const char *const builtin_names[] = {
         "Unit", "Result", "Node_Ref", "Actor_Id", "Down_Reason",
-        "Ok", "Error", "Actor_Down",
+        "Ok", "Error", "Actor_Down", "print",
         OM_SYSTEM_ACTOR_NAME_CONSOLE, OM_SYSTEM_ACTOR_NAME_TIMER,
         OM_SYSTEM_ACTOR_NAME_FILE_SYSTEM,
         OM_SYSTEM_MESSAGE_NAME_CONSOLE_WRITE,
@@ -495,8 +535,14 @@ static Om_Status setup_prelude(Om_Resolver *resolver,
          ++module_index) {
         const Om_Omi_Module *module = &config->native_modules[module_index];
         if (module->diagnostic_count != 0
-            || (module->function_count != 0 && module->functions == NULL)) {
+            || (module->function_count != 0 && module->functions == NULL)
+            || (module->record_count != 0 && module->records == NULL)) {
             return OM_STATUS_INVALID_ARGUMENT;
+        }
+        for (size_t record_index = 0;
+             status == OM_STATUS_OK && record_index < module->record_count;
+             ++record_index) {
+            status = add_native_record(resolver, module, record_index);
         }
         for (size_t function_index = 0;
              status == OM_STATUS_OK && function_index < module->function_count;

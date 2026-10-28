@@ -41,7 +41,17 @@ FUNCTION choose(flag)
     END IF
 END FUNCTION
 
+FUNCTION make_result(flag)
+    IF flag THEN
+        RETURN Ok(1)
+    ELSE
+        RETURN Error("failed")
+    END IF
+END FUNCTION
+
 ACTION main()
+    identity_value = use_identity()
+    concrete_result = make_result(TRUE)
     contextual_list = has_text([])
     contextual_map = has_key({})
     unwrapped = unwrap_result(Ok(2))
