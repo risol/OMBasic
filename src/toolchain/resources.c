@@ -185,15 +185,25 @@ static char *current_executable_path(void)
 static bool is_regular_file(const char *path)
 {
     struct stat information;
+#ifdef _WIN32
+    return path != NULL && stat(path, &information) == 0
+        && (information.st_mode & S_IFMT) == S_IFREG;
+#else
     return path != NULL && stat(path, &information) == 0
         && S_ISREG(information.st_mode);
+#endif
 }
 
 static bool is_directory(const char *path)
 {
     struct stat information;
+#ifdef _WIN32
+    return path != NULL && stat(path, &information) == 0
+        && (information.st_mode & S_IFMT) == S_IFDIR;
+#else
     return path != NULL && stat(path, &information) == 0
         && S_ISDIR(information.st_mode);
+#endif
 }
 
 static const char *const *archive_names(void)

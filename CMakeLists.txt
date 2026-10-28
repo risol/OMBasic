@@ -389,7 +389,19 @@ add_library(ombasic_backend_llvm STATIC
     src/backend/llvm/abi/darwin_arm64.c
     src/backend/llvm/abi/sysv_amd64.c
     src/backend/llvm/abi/win64.c
-    src/backend/llvm/llvm_backend.c
+    src/backend/llvm/actors.c
+    src/backend/llvm/backend.c
+    src/backend/llvm/callbacks.c
+    src/backend/llvm/control_flow.c
+    src/backend/llvm/debug_info.c
+    src/backend/llvm/descriptors.c
+    src/backend/llvm/emit.c
+    src/backend/llvm/function.c
+    src/backend/llvm/gc_roots.c
+    src/backend/llvm/module.c
+    src/backend/llvm/native_ffi.c
+    src/backend/llvm/runtime_calls.c
+    src/backend/llvm/types.c
 )
 add_library(ombasic::backend_llvm ALIAS ombasic_backend_llvm)
 target_include_directories(ombasic_backend_llvm

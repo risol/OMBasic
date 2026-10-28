@@ -210,9 +210,17 @@ Om_Status om_compiler_emit(const Om_Compiler_Emit_Request *request,
         } else if (request->artifact == OM_COMPILER_ARTIFACT_ASSEMBLY) {
             artifact = OM_LLVM_ARTIFACT_ASSEMBLY;
         }
-        status = om_llvm_emit_artifact(&result->mir, request->entry_symbol,
-            request->source_root, locations, result->mir.instruction_count,
-            artifact, request->output_path);
+        const Om_Llvm_Emit_Request emit_request = {
+            .project = &result->mir,
+            .entry_symbol = request->entry_symbol,
+            .source_root = request->source_root,
+            .source_locations = locations,
+            .source_location_count = result->mir.instruction_count,
+            .artifact = artifact,
+            .output_path = request->output_path,
+            .optimization_level = OM_LLVM_OPTIMIZATION_DEFAULT,
+        };
+        status = om_llvm_emit(&emit_request, NULL);
     }
     om_free(locations);
 
