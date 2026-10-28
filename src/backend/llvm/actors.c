@@ -55,9 +55,16 @@ Om_Status emit_actor_instruction(Om_Llvm_Backend_Context *backend,
             if (initial_state == NULL) {
                 return OM_STATUS_INVALID_ARGUMENT;
             }
+            LLVMValueRef actor_reference_slot = LLVMBuildBitCast(
+                backend->builder, actor_id_slot,
+                LLVMPointerType(backend->runtime_actor_ref_type, 0),
+                "actor_reference_slot");
+            if (actor_reference_slot == NULL) {
+                return OM_STATUS_OUT_OF_MEMORY;
+            }
             LLVMValueRef arguments[4] = {
                 context_for_function(backend, function), actor_descriptor,
-                initial_state, actor_id_slot,
+                initial_state, actor_reference_slot,
             };
             Om_Status status = emit_runtime_status_call(backend, block_id,
                 backend->runtime_actor_spawn_at, arguments, 4);

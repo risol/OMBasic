@@ -319,6 +319,7 @@ add_library(ombasic_runtime STATIC
     src/runtime/actor/mailbox.c
     src/runtime/actor/watch.c
     src/runtime/callback/callback.c
+    src/runtime/core/abi.c
     src/runtime/core/context.c
     src/runtime/core/object.c
     src/runtime/core/value.c
@@ -365,7 +366,8 @@ add_library(ombasic_runtime_distribution STATIC
 )
 add_library(ombasic::runtime_distribution ALIAS ombasic_runtime_distribution)
 target_include_directories(ombasic_runtime_distribution
-    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/core")
 target_link_libraries(ombasic_runtime_distribution
     PUBLIC ombasic::runtime ombasic::distribution ombasic::foundation
     PRIVATE Threads::Threads ombasic_warnings ombasic_sanitizers
@@ -846,6 +848,8 @@ if(BUILD_TESTING)
     add_test(NAME timer_service COMMAND ombasic_timer_service_tests)
 
     add_executable(ombasic_native_runtime_tests tests/runtime/native_heap_tests.c)
+    target_include_directories(ombasic_native_runtime_tests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/core")
     target_link_libraries(ombasic_native_runtime_tests PRIVATE
         ombasic::runtime ombasic::runtime_services
         ombasic_warnings ombasic_sanitizers)
@@ -853,6 +857,8 @@ if(BUILD_TESTING)
 
     add_library(ombasic_runtime_test_support STATIC
         tests/runtime/native_heap_tests.c)
+    target_include_directories(ombasic_runtime_test_support PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/core")
     target_compile_definitions(ombasic_runtime_test_support PRIVATE
         OM_RUNTIME_TEST_SUPPORT_ONLY=1)
     target_link_libraries(ombasic_runtime_test_support PRIVATE
@@ -884,6 +890,8 @@ if(BUILD_TESTING)
         tests/runtime/native_pointer_tests.c runtime_native_pointer)
 
     add_executable(ombasic_native_actor_tests tests/runtime/native_actor_tests.c)
+    target_include_directories(ombasic_native_actor_tests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/core")
     target_link_libraries(ombasic_native_actor_tests PRIVATE
         ombasic::runtime ombasic::runtime_services
         ombasic_warnings ombasic_sanitizers)
@@ -892,6 +900,12 @@ if(BUILD_TESTING)
         COMMAND ombasic_native_actor_tests --stress)
     set_tests_properties(native_actor_stress PROPERTIES TIMEOUT 120)
 
+    add_executable(ombasic_runtime_abi_tests tests/runtime/runtime_abi_tests.c)
+    target_link_libraries(ombasic_runtime_abi_tests PRIVATE
+        ombasic::runtime ombasic::runtime_services
+        ombasic_warnings ombasic_sanitizers)
+    add_test(NAME runtime_abi COMMAND ombasic_runtime_abi_tests)
+
     add_executable(ombasic_distribution_tests tests/distribution/protocol_tests.c)
     target_link_libraries(ombasic_distribution_tests PRIVATE
         ombasic::distribution Threads::Threads ombasic_warnings ombasic_sanitizers)
@@ -899,6 +913,8 @@ if(BUILD_TESTING)
 
     add_executable(ombasic_runtime_distribution_tests
         tests/distribution/runtime_node_tests.c)
+    target_include_directories(ombasic_runtime_distribution_tests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/core")
     target_link_libraries(ombasic_runtime_distribution_tests PRIVATE
         ombasic::runtime_distribution ombasic::runtime_services
         Threads::Threads ombasic_warnings ombasic_sanitizers)
@@ -941,7 +957,8 @@ if(BUILD_TESTING)
                 "${CMAKE_COMMAND}"
                 "${CMAKE_BINARY_DIR}"
                 "${CMAKE_CURRENT_SOURCE_DIR}"
-                "$<CONFIG>")
+                "$<CONFIG>"
+                "${CMAKE_C_COMPILER}")
     set_tests_properties(install_sdk_relocation PROPERTIES TIMEOUT 180)
 endif()
 

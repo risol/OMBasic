@@ -215,7 +215,13 @@ def check(root: Path) -> list[str]:
                             f"{relative}: cross-capability include of private header {include}"
                         )
                 included_capability, _ = capability(include_path)
-                if included_capability in FORBIDDEN_INCLUDES.get(owner, set()):
+                generated_runtime_abi = (
+                    owner == "backend"
+                    and include_path.startswith("ombasic/runtime/abi/")
+                )
+                if (included_capability in FORBIDDEN_INCLUDES.get(owner, set())
+                        and not (included_capability == "runtime"
+                                 and generated_runtime_abi)):
                     errors.append(
                         f"{relative}: {owner} may not include {included_capability} ({include})"
                     )

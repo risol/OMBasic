@@ -19,6 +19,7 @@
 #include "abi/native_abi.h"
 #include "ombasic/foundation/fingerprint.h"
 #include "ombasic/foundation/memory.h"
+#include "ombasic/runtime/abi/base.h"
 #include "ombasic/semantic/system_actors.h"
 #include "ombasic/target/target.h"
 
@@ -99,6 +100,7 @@ typedef struct Om_Llvm_Backend_Context {
     LLVMTypeRef runtime_field_descriptor_type;
     LLVMTypeRef runtime_actor_handler_descriptor_type;
     LLVMTypeRef runtime_actor_descriptor_type;
+    LLVMTypeRef runtime_actor_ref_type;
     LLVMTypeRef runtime_program_descriptor_type;
     LLVMValueRef *functions;
     LLVMBasicBlockRef *blocks;
@@ -107,6 +109,7 @@ typedef struct Om_Llvm_Backend_Context {
     LLVMValueRef runtime_context_create;
     LLVMValueRef runtime_context_destroy;
     LLVMValueRef runtime_set_source_spans;
+    LLVMValueRef runtime_validate_program;
     LLVMValueRef runtime_run;
     LLVMValueRef runtime_fault;
     LLVMValueRef runtime_roots_push;
@@ -249,7 +252,7 @@ Om_Status runtime_descriptor(Om_Llvm_Backend_Context *backend,
                                     unsigned depth,
                                     LLVMValueRef *descriptor);
 Om_Status create_actor_runtime_descriptors(Om_Llvm_Backend_Context *backend);
-Om_Status create_actor_program_descriptor(
+Om_Status create_program_descriptor(
     Om_Llvm_Backend_Context *backend,
     LLVMValueRef source_span_table,
     LLVMValueRef entry_thunk);

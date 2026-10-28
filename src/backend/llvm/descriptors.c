@@ -1051,13 +1051,12 @@ static Om_Status program_fingerprints(Om_Llvm_Backend_Context *backend,
     return status;
 }
 
-Om_Status create_actor_program_descriptor(
+Om_Status create_program_descriptor(
     Om_Llvm_Backend_Context *backend,
     LLVMValueRef source_span_table,
     LLVMValueRef entry_thunk)
 {
     if (backend == NULL || source_span_table == NULL || entry_thunk == NULL
-        || backend->project->actor_count == 0
         || backend->project->actor_count > UINT_MAX
         || backend->descriptor_count > UINT_MAX) {
         return OM_STATUS_INVALID_ARGUMENT;
@@ -1069,9 +1068,12 @@ Om_Status create_actor_program_descriptor(
     LLVMValueRef actor_down_descriptor = NULL;
     uint64_t actor_id_offset = 0;
     uint64_t reason_offset = 0;
-    Om_Status status = actor_down_layout(backend, &actor_down_descriptor,
-                                        &actor_id_offset, &reason_offset);
-    if (status != OM_STATUS_OK) return status;
+    Om_Status status = OM_STATUS_OK;
+    if (backend->project->actor_count != 0) {
+        status = actor_down_layout(backend, &actor_down_descriptor,
+                                   &actor_id_offset, &reason_offset);
+        if (status != OM_STATUS_OK) return status;
+    }
 
     LLVMValueRef *type_values = backend->descriptor_count == 0 ? NULL
         : om_alloc_array(backend->descriptor_count, sizeof(*type_values));
@@ -1103,9 +1105,11 @@ Om_Status create_actor_program_descriptor(
     om_free(type_values);
 
     LLVMValueRef *actor_values = status == OM_STATUS_OK
+        && backend->project->actor_count != 0
         ? om_alloc_array(backend->project->actor_count, sizeof(*actor_values))
         : NULL;
-    if (status == OM_STATUS_OK && actor_values == NULL) {
+    if (status == OM_STATUS_OK && backend->project->actor_count != 0
+        && actor_values == NULL) {
         status = OM_STATUS_OUT_OF_MEMORY;
     }
     for (size_t index = 0; status == OM_STATUS_OK
@@ -1119,7 +1123,7 @@ Om_Status create_actor_program_descriptor(
             backend->actor_descriptors[index], backend->byte_pointer_type);
     }
     LLVMValueRef actors_pointer = LLVMConstNull(backend->byte_pointer_type);
-    if (status == OM_STATUS_OK) {
+    if (status == OM_STATUS_OK && backend->project->actor_count != 0) {
         LLVMTypeRef array_type = LLVMArrayType(backend->byte_pointer_type,
             (unsigned)backend->project->actor_count);
         LLVMValueRef initializer = LLVMConstArray(backend->byte_pointer_type,
@@ -1145,14 +1149,18 @@ Om_Status create_actor_program_descriptor(
     status = program_fingerprints(backend, &program_fingerprint,
                                   &interface_fingerprint);
     if (status != OM_STATUS_OK) return status;
-    LLVMValueRef members[13] = {
+    LLVMValueRef members[14] = {
+        LLVMConstInt(backend->i32_type, OM_RUNTIME_ABI_VERSION, 0),
         LLVMConstInt(backend->i64_type, program_fingerprint, 0),
         LLVMConstInt(backend->i64_type, interface_fingerprint, 0),
         types_pointer,
         LLVMConstInt(backend->i64_type, backend->descriptor_count, 0),
         actors_pointer,
         LLVMConstInt(backend->i64_type, backend->project->actor_count, 0),
-        LLVMConstBitCast(actor_down_descriptor, backend->byte_pointer_type),
+        actor_down_descriptor == NULL
+            ? LLVMConstNull(backend->byte_pointer_type)
+            : LLVMConstBitCast(actor_down_descriptor,
+                               backend->byte_pointer_type),
         LLVMConstInt(backend->i64_type, actor_id_offset, 0),
         LLVMConstInt(backend->i64_type, reason_offset, 0),
         LLVMConstBitCast(source_span_table, backend->byte_pointer_type),
@@ -1162,7 +1170,7 @@ Om_Status create_actor_program_descriptor(
         LLVMConstInt(backend->i64_type, 0, 0),
     };
     LLVMValueRef initializer = LLVMConstNamedStruct(
-        backend->runtime_program_descriptor_type, members, 13);
+        backend->runtime_program_descriptor_type, members, 14);
     LLVMValueRef global = LLVMAddGlobal(backend->module,
         backend->runtime_program_descriptor_type, ".om_program_descriptor");
     if (initializer == NULL || global == NULL) {

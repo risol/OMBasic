@@ -3,7 +3,31 @@
 
 #include <setjmp.h>
 
-#include "ombasic/runtime/native_runtime.h"
+#include "ombasic/runtime/abi.h"
+#include "ombasic/runtime/embedding.h"
+
+typedef struct Om_Runtime_Actor Om_Runtime_Actor;
+typedef struct Om_Runtime_Actor_System Om_Runtime_Actor_System;
+
+typedef struct Om_Runtime_Distribution_Hooks {
+    Om_Status (*spawn)(void *state,
+                      Om_Execution_Context *context,
+                      const Om_Runtime_Actor_Descriptor *descriptor,
+                      uint64_t node_ref,
+                      Om_Runtime_Actor_Ref *result);
+    Om_Status (*send)(void *state,
+                      Om_Execution_Context *context,
+                      uint64_t remote_actor_ref,
+                      const void *message_object);
+    Om_Status (*watch)(void *state,
+                       Om_Execution_Context *context,
+                       uint64_t remote_actor_ref);
+    Om_Status (*notify_watcher)(void *state,
+                                Om_Execution_Context *context,
+                                uint64_t remote_watcher_ref,
+                                uint64_t terminated_actor_id,
+                                Om_Runtime_Actor_Down_Reason reason);
+} Om_Runtime_Distribution_Hooks;
 
 typedef union Om_Runtime_Object_Header {
     struct {
@@ -98,6 +122,69 @@ Om_Status allocate_object(Om_Execution_Context *context,
                           Om_Runtime_Object_Header **result);
 Om_Status allocation_safepoint(Om_Execution_Context *context,
                                size_t expected_bytes);
+
+/* Runtime-private operations. These are intentionally absent from installed
+   headers and may change without incrementing the generated-code ABI. */
+Om_Status om_runtime_actor_system_context_create(
+    Om_Execution_Context *context,
+    Om_Execution_Context **result);
+Om_Status om_runtime_actor_spawn(
+    Om_Execution_Context *context,
+    const Om_Runtime_Actor_Descriptor *descriptor,
+    Om_Runtime_Actor_Ref *result);
+Om_Status om_runtime_actor_spawn_assigned(
+    Om_Execution_Context *context,
+    const Om_Runtime_Actor_Descriptor *descriptor,
+    uint64_t assigned_id,
+    Om_Runtime_Actor_Ref *result);
+Om_Status om_runtime_actor_self(Om_Execution_Context *context,
+                                Om_Runtime_Actor_Ref *result);
+Om_Status om_runtime_actor_send(Om_Execution_Context *context,
+                                Om_Runtime_Actor_Ref target,
+                                const void *message_object);
+Om_Status om_runtime_actor_watch(Om_Execution_Context *context,
+                                 Om_Runtime_Actor_Ref target);
+Om_Status om_runtime_actor_watch_remote(
+    Om_Execution_Context *context,
+    uint64_t target_local_actor_id,
+    uint64_t remote_watcher_ref);
+Om_Status om_runtime_actor_post_remote_down(
+    Om_Execution_Context *context,
+    uint64_t watcher_local_actor_id,
+    uint64_t terminated_actor_id,
+    Om_Runtime_Actor_Down_Reason reason);
+Om_Status om_runtime_distribution_attach(
+    Om_Execution_Context *context,
+    const Om_Runtime_Distribution_Hooks *hooks,
+    void *state);
+Om_Status om_runtime_distribution_detach(Om_Execution_Context *context,
+                                         void *state);
+Om_Status om_runtime_collect(Om_Execution_Context *context);
+size_t om_runtime_live_object_count(const Om_Execution_Context *context);
+size_t om_runtime_collection_count(const Om_Execution_Context *context);
+Om_Status om_runtime_object_clone(Om_Execution_Context *source_context,
+                                  Om_Execution_Context *destination_context,
+                                  const void *source_object,
+                                  void **result);
+Om_Status om_runtime_object_type(
+    const Om_Execution_Context *context,
+    const void *object,
+    const Om_Runtime_Type_Descriptor **result);
+Om_Status om_runtime_record_set(Om_Execution_Context *context,
+                                void *record,
+                                size_t field_index,
+                                Om_Runtime_Value value);
+Om_Status om_runtime_list_append(Om_Execution_Context *context,
+                                 void *list,
+                                 Om_Runtime_Value value);
+Om_Status om_runtime_map_set(Om_Execution_Context *context,
+                             void *map,
+                             Om_Runtime_Value key,
+                             Om_Runtime_Value value);
+Om_Status om_runtime_map_get(const Om_Execution_Context *context,
+                             const void *map,
+                             Om_Runtime_Value key,
+                             Om_Runtime_Value *result);
 
 struct Om_Runtime_Root_Frame {
     struct Om_Runtime_Root_Frame *previous;

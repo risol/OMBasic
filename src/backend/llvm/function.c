@@ -529,11 +529,26 @@ Om_Status add_entry_wrapper(Om_Llvm_Backend_Context *backend,
     if (status != OM_STATUS_OK) {
         return status;
     }
-    if (backend->project->actor_count != 0) {
-        status = create_actor_program_descriptor(backend, source_span_table,
-                                                  entry_thunk);
-        if (status != OM_STATUS_OK) return status;
-    }
+    status = create_program_descriptor(backend, source_span_table,
+                                       entry_thunk);
+    if (status != OM_STATUS_OK) return status;
+    LLVMValueRef validate_program_arguments[2] = {
+        execution_context,
+        LLVMConstBitCast(backend->program_descriptor,
+                         backend->byte_pointer_type),
+    };
+    LLVMValueRef validate_program_status = LLVMBuildCall2(backend->builder,
+        LLVMGlobalGetValueType(backend->runtime_validate_program),
+        backend->runtime_validate_program, validate_program_arguments, 2,
+        "program_abi_status");
+    LLVMValueRef validate_program_failed = validate_program_status == NULL
+        ? NULL : LLVMBuildICmp(backend->builder, LLVMIntNE,
+            validate_program_status, LLVMConstInt(backend->i32_type, 0, 0),
+            "program_abi_failed");
+    if (validate_program_failed == NULL) return OM_STATUS_OUT_OF_MEMORY;
+    status = add_wrapper_failure_check(backend, wrapper,
+        validate_program_failed, execution_context);
+    if (status != OM_STATUS_OK) return status;
     LLVMValueRef span_arguments[3] = {
         execution_context,
         source_span_table,

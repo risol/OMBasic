@@ -3,6 +3,15 @@
 The Runtime ABI is the stable internal boundary between generated native code
 and `libombasic_runtime`. It is C-callable and compiler-independent. ABI
 versioning applies to compiler/runtime pairs; it is not a public C API promise.
+Generated programs include `ombasic/runtime/abi.h`; embedders include the small
+`ombasic/runtime/embedding.h` lifecycle surface. Runtime implementation and
+test operations live in private headers under `src/runtime/` and are not
+installed.
+
+`OM_RUNTIME_ABI_VERSION` is stored as the first field in each Program
+descriptor. The Runtime checks that field before reading any other Program
+descriptor member. An incompatible pair reports a version mismatch and stops
+before it can interpret descriptor memory using the wrong layout.
 
 ## Execution context
 
@@ -59,7 +68,11 @@ The non-local boundary is limited to runtime faults; `TRY`, returns, and
 ## Descriptors
 
 The compiler emits linked static descriptors for concrete types, Messages,
-Actors, and the Program. Type descriptors carry kind, size/alignment,
+Actors, and the Program. They are immutable generated data owned by the native
+program module; descriptor arrays, source-span paths, entry functions, and
+handler/callback functions are borrowed. Keep the module loaded and its data
+unchanged until its Runtime context and Actor system have stopped. Type
+descriptors carry kind, size/alignment,
 fingerprint, structural field/element/key/value metadata, and optional trace,
 copy, equality, hash, and serialization callbacks. Trace callbacks visit
 managed references and must not allocate or mutate the heap. Actor descriptors carry

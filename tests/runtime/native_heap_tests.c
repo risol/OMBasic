@@ -1,4 +1,4 @@
-#include "ombasic/runtime/native_runtime.h"
+#include "runtime_internal.h"
 
 #include <stddef.h>
 #include <stdint.h>

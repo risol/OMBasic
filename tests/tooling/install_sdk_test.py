@@ -12,6 +12,7 @@ def main() -> int:
     build_root = pathlib.Path(sys.argv[2]).resolve()
     repository = pathlib.Path(sys.argv[3]).resolve()
     configuration = sys.argv[4]
+    c_compiler = pathlib.Path(sys.argv[5]).resolve()
     executable_name = "ombasic.exe" if sys.platform == "win32" else "ombasic"
 
     with tempfile.TemporaryDirectory(prefix="ombasic-sdk-relocation-") as temporary:
@@ -26,6 +27,31 @@ def main() -> int:
             raise AssertionError(
                 f"SDK installation failed: {installed.stdout}\n{installed.stderr}")
         shutil.move(staged_sdk, moved_sdk)
+
+        legacy_runtime_header = (moved_sdk / "include" / "ombasic" / "runtime"
+                                 / "native_runtime.h")
+        if legacy_runtime_header.exists():
+            raise AssertionError("legacy native_runtime.h was installed")
+
+        header_smoke = repository / "tests" / "runtime" \
+            / "runtime_abi_header_smoke.c"
+        if c_compiler.name.lower().startswith("clang-cl"):
+            compiler_arguments = [
+                str(c_compiler), "/nologo", "/clang:-std=c23",
+                "/clang:-fsyntax-only", "/I", str(moved_sdk / "include"),
+                str(header_smoke),
+            ]
+        else:
+            compiler_arguments = [
+                str(c_compiler), "-std=c23", "-fsyntax-only", "-I",
+                str(moved_sdk / "include"), str(header_smoke),
+            ]
+        header_check = subprocess.run(compiler_arguments, cwd=temporary_root,
+                                      capture_output=True, text=True, check=False)
+        if header_check.returncode != 0:
+            raise AssertionError(
+                f"installed SDK C23 header smoke failed: "
+                f"{header_check.stdout!r} {header_check.stderr!r}")
 
         compiler = moved_sdk / "bin" / executable_name
         version = subprocess.run([str(compiler), "version"], capture_output=True,

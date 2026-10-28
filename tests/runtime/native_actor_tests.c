@@ -1,4 +1,4 @@
-#include "ombasic/runtime/native_runtime.h"
+#include "runtime_internal.h"
 
 #include <stdatomic.h>
 #include <stddef.h>
@@ -242,6 +242,7 @@ static const Om_Runtime_Actor_Descriptor *const ACTORS[] = {
 };
 
 static const Om_Runtime_Program_Descriptor PROGRAM = {
+    .abi_version = OM_RUNTIME_ABI_VERSION,
     .actors = ACTORS,
     .actor_count = sizeof(ACTORS) / sizeof(ACTORS[0]),
     .actor_down_message_type = &ACTOR_DOWN_TYPE,

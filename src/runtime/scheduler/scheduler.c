@@ -342,7 +342,10 @@ Om_Status om_runtime_actor_system_start(
         || context->current_actor != NULL || worker_count > 64) {
         return OM_STATUS_INVALID_ARGUMENT;
     }
-    Om_Status status = actor_program_validate(program);
+    Om_Status status = om_runtime_validate_program(context, program);
+    if (status == OM_STATUS_OK) {
+        status = actor_program_validate(program);
+    }
     if (status != OM_STATUS_OK) {
         return status;
     }

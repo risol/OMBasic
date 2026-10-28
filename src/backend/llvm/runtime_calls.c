@@ -63,9 +63,15 @@ Om_Status initialize_types(Om_Llvm_Backend_Context *backend)
     };
     LLVMStructSetBody(backend->runtime_actor_descriptor_type,
                       actor_members, 6, 0);
+    backend->runtime_actor_ref_type = LLVMStructCreateNamed(
+        backend->context, "Om_Runtime_Actor_Ref");
+    LLVMTypeRef actor_ref_members[1] = {backend->i64_type};
+    LLVMStructSetBody(backend->runtime_actor_ref_type, actor_ref_members, 1,
+                      0);
     backend->runtime_program_descriptor_type = LLVMStructCreateNamed(
         backend->context, "Om_Runtime_Program_Descriptor");
-    LLVMTypeRef program_members[13] = {
+    LLVMTypeRef program_members[14] = {
+        backend->i32_type,
         backend->i64_type,
         backend->i64_type,
         backend->byte_pointer_type,
@@ -81,7 +87,7 @@ Om_Status initialize_types(Om_Llvm_Backend_Context *backend)
         backend->i64_type,
     };
     LLVMStructSetBody(backend->runtime_program_descriptor_type,
-                      program_members, 13, 0);
+                      program_members, 14, 0);
 
     LLVMTypeRef context_create_parameters[1] = {backend->i64_type};
     LLVMTypeRef context_create_type = LLVMFunctionType(
@@ -103,6 +109,13 @@ Om_Status initialize_types(Om_Llvm_Backend_Context *backend)
         set_source_spans_parameters, 3, 0);
     backend->runtime_set_source_spans = LLVMAddFunction(backend->module,
         "om_runtime_set_source_spans", set_source_spans_type);
+    LLVMTypeRef validate_program_parameters[2] = {
+        backend->byte_pointer_type, backend->byte_pointer_type,
+    };
+    LLVMTypeRef validate_program_type = LLVMFunctionType(backend->i32_type,
+        validate_program_parameters, 2, 0);
+    backend->runtime_validate_program = LLVMAddFunction(backend->module,
+        "om_runtime_validate_program", validate_program_type);
     LLVMTypeRef entry_function_parameters[1] = {
         backend->byte_pointer_type,
     };
@@ -349,7 +362,7 @@ Om_Status initialize_types(Om_Llvm_Backend_Context *backend)
         "om_runtime_actor_spawn_id", actor_spawn_type);
     LLVMTypeRef actor_spawn_at_parameters[4] = {
         backend->byte_pointer_type, backend->byte_pointer_type,
-        backend->i64_type, LLVMPointerType(backend->i64_type, 0),
+        backend->i64_type, LLVMPointerType(backend->runtime_actor_ref_type, 0),
     };
     LLVMTypeRef actor_spawn_at_type = LLVMFunctionType(backend->i32_type,
         actor_spawn_at_parameters, 4, 0);
@@ -453,6 +466,7 @@ Om_Status initialize_types(Om_Llvm_Backend_Context *backend)
     return backend->runtime_context_create == NULL
         || backend->runtime_context_destroy == NULL
         || backend->runtime_set_source_spans == NULL
+        || backend->runtime_validate_program == NULL
         || backend->runtime_run == NULL
         || backend->runtime_fault == NULL
         || backend->runtime_roots_push == NULL
@@ -500,6 +514,7 @@ Om_Status initialize_types(Om_Llvm_Backend_Context *backend)
         || backend->runtime_source_span_type == NULL
         || backend->runtime_actor_handler_descriptor_type == NULL
         || backend->runtime_actor_descriptor_type == NULL
+        || backend->runtime_actor_ref_type == NULL
         || backend->runtime_program_descriptor_type == NULL
         ? OM_STATUS_OUT_OF_MEMORY : OM_STATUS_OK;
 }

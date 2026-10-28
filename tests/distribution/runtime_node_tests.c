@@ -3,6 +3,7 @@
 #endif
 
 #include "ombasic/runtime/distribution.h"
+#include "runtime_internal.h"
 
 #include <stdatomic.h>
 #include <stddef.h>
@@ -313,6 +314,7 @@ static const Om_Runtime_Actor_Descriptor *const ACTORS[] = {
     &WORKER_ACTOR, &CLIENT_ACTOR,
 };
 static const Om_Runtime_Program_Descriptor PROGRAM = {
+    .abi_version = OM_RUNTIME_ABI_VERSION,
     .fingerprint = UINT64_C(0x850001),
     .interface_fingerprint = UINT64_C(0x850002),
     .types = TYPES,

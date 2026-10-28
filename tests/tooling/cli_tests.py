@@ -209,10 +209,13 @@ def main() -> int:
             ir = emit_llvm_ir(root, "main.bas", output_name)
             descriptor = re.search(
                 r"@\.om_program_descriptor\s*=\s*private constant "
-                r"%[^\{]+\{\s*i64\s+(-?\d+),\s*i64\s+(-?\d+)", ir)
+                r"%[^\{]+\{\s*i32\s+(\d+),\s*i64\s+(-?\d+),"
+                r"\s*i64\s+(-?\d+)", ir)
             require(descriptor is not None,
                     "LLVM IR omitted Program/interface fingerprints")
-            return int(descriptor.group(1)), int(descriptor.group(2))
+            require(int(descriptor.group(1)) == 1,
+                    "LLVM Program descriptor omitted Runtime ABI version")
+            return int(descriptor.group(2)), int(descriptor.group(3))
 
         same_fingerprints_a = read_program_fingerprints(
             fingerprint_roots[0], "same-a.ll")

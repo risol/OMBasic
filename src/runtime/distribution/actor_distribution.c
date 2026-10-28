@@ -13,6 +13,7 @@
 #include "ombasic/distribution/serializer.h"
 #include "ombasic/distribution/transport.h"
 #include "ombasic/foundation/memory.h"
+#include "runtime_internal.h"
 
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
