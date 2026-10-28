@@ -8,7 +8,7 @@ pushes to `master`:
 | `linux-release` | LLVM 23 Clang Release build, CTest, architecture/spec audit, native Hello World |
 | `windows-release` | LLVM 23.1.4 `clang-cl`, MSVC ABI, LLD, CTest, PDB/FFI inspection, native Hello World |
 | `architecture` | Fast capability-boundary and language-specification checks |
-| `install-sdk` | Install, move, then use the SDK for header smoke, version, check, Hello World and Actor build/run |
+| `install-sdk` | Install, move, then use the SDK for header smoke, version, check, Hello World and Actor build/run; repeat with the build tree removed |
 | `sanitizers / asan-ubsan` | Full Linux ASan and UBSan CTest suite |
 | `sanitizers / tsan` | Full Linux ThreadSanitizer CTest suite, including Actor and distribution concurrency tests |
 | `fuzz / fuzz-smoke` | Build all libFuzzer targets and run a bounded smoke set on pull requests |
@@ -18,7 +18,9 @@ The host-build CTest suite includes native Actor stress and two-process
 distribution integration tests. The Windows CLI test inspects generated PDB
 debug information and links the native C and C++ FFI fixtures. The installed
 SDK check moves the install prefix before invoking its compiler and generated
-programs, so it cannot use the original build-tree archive paths.
+programs. A separate smoke test moves the exact CMake build tree out of its
+configured path, then repeats version, check, Hello World, and Actor build/run
+using only the installed SDK.
 
 For `master`, branch protection should require the successful checks
 `architecture`, `linux-release`, `windows-release`, `install-sdk`,

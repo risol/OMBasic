@@ -41,3 +41,5 @@ jobs:
       - run: cmake --build build/install-sdk --parallel 2
       - name: Install, relocate, check, build, and run SDK fixtures
         run: ctest --test-dir build/install-sdk -R '^install_sdk_relocation$' --output-on-failure
+      - name: Verify installed SDK with build tree removed
+        run: python tests/tooling/install_sdk_without_build_tree_test.py cmake build/install-sdk . Release

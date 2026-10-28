@@ -55,3 +55,5 @@ jobs:
           $hello = Join-Path $env:RUNNER_TEMP 'hello.exe'
           build/windows-release/ombasic.exe build examples/hello/main.bas -o $hello
           & $hello
+      - name: Verify installed SDK with build tree removed
+        run: python tests/tooling/install_sdk_without_build_tree_test.py cmake build/windows-release . Release
