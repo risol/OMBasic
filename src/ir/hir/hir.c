@@ -92,6 +92,24 @@ static bool name_is(Om_String_View name, const char *known_name,
         name, (Om_String_View){known_name, known_name_length});
 }
 
+static bool actor_down_reason_member(Om_String_View name,
+                                     uint64_t *member_index)
+{
+    static const Om_String_View members[] = {
+        {"normal", 6}, {"failed", 6}, {"node_unreachable", 16}
+    };
+    for (size_t index = 0; index < sizeof(members) / sizeof(members[0]);
+         ++index) {
+        if (om_string_view_equal(name, members[index])) {
+            if (member_index != NULL) {
+                *member_index = index;
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
 static bool is_system_actor_name(Om_String_View name)
 {
     return name_is(name, OM_SYSTEM_ACTOR_NAME_CONSOLE,
@@ -289,7 +307,6 @@ static Om_Hir_Kind kind_for_ast(const Om_Hir_Lower_Context *context,
     case OM_AST_BOOLEAN_LITERAL: return OM_HIR_BOOLEAN;
     case OM_AST_NULL_LITERAL: return OM_HIR_NULL;
     case OM_AST_SELF: return OM_HIR_SELF;
-    case OM_AST_DOWN_REASON_LITERAL: return OM_HIR_DOWN_REASON;
     case OM_AST_UNARY:
         return node->keyword == OM_KEYWORD_TRY ? OM_HIR_TRY : OM_HIR_UNARY;
     case OM_AST_BINARY: return OM_HIR_BINARY;
@@ -300,6 +317,11 @@ static Om_Hir_Kind kind_for_ast(const Om_Hir_Lower_Context *context,
             (Om_Ast_Node_Id){(uint32_t)(node - ast->nodes)});
         const Om_Symbol *symbol = om_resolution_symbol_by_id(
             context->resolution, symbol_id);
+        if (symbol != NULL && symbol->kind == OM_SYMBOL_BUILTIN
+            && name_is(symbol->name, "Actor_Down_Reason", 17)
+            && actor_down_reason_member(node->name, NULL)) {
+            return OM_HIR_NOMINAL_VALUE;
+        }
         return (symbol != NULL && symbol->kind == OM_SYMBOL_FIELD)
                 || inferred_record_field_symbol(context, module_id, ast, node)
                     .value != UINT32_MAX
@@ -392,11 +414,15 @@ static Om_Status lower_node(Om_Hir_Lower_Context *context,
                                                source_id),
         .flags = flags_for_ast(source),
         .child_start = (uint32_t)context->storage->children.length,
-        .child_count = source->child_count,
+        .child_count = kind == OM_HIR_NOMINAL_VALUE ? 0 : source->child_count,
         .name = source->name,
         .integer_magnitude = source->integer_magnitude,
         .float_value = source->float_value,
     };
+    if (kind == OM_HIR_NOMINAL_VALUE
+        && !actor_down_reason_member(source->name, &node.integer_magnitude)) {
+        return OM_STATUS_INVALID_ARGUMENT;
+    }
     if (kind == OM_HIR_UNARY && source->keyword == OM_KEYWORD_NOT) {
         node.operator_kind = OM_HIR_OPERATOR_NOT;
     } else if (kind == OM_HIR_UNARY && source->token_kind == OM_TOKEN_MINUS) {
@@ -413,12 +439,12 @@ static Om_Status lower_node(Om_Hir_Lower_Context *context,
     }
     *out = node.id;
 
-    for (size_t index = 0; status == OM_STATUS_OK && index < source->child_count;
+    for (size_t index = 0; status == OM_STATUS_OK && index < node.child_count;
          ++index) {
         const Om_Hir_Node_Id invalid = OM_HIR_NODE_ID_INVALID;
         status = om_vector_push(&context->storage->children, &invalid);
     }
-    for (size_t index = 0; status == OM_STATUS_OK && index < source->child_count;
+    for (size_t index = 0; status == OM_STATUS_OK && index < node.child_count;
          ++index) {
         const Om_Ast_Node_Id source_child = om_ast_get_child(ast, source, index);
         const Om_Ast_Node *child_node = om_ast_get_node(ast, source_child);
@@ -760,7 +786,7 @@ static bool kind_requires_value_type(Om_Hir_Kind kind)
     case OM_HIR_BOOLEAN:
     case OM_HIR_NULL:
     case OM_HIR_SELF:
-    case OM_HIR_DOWN_REASON:
+    case OM_HIR_NOMINAL_VALUE:
     case OM_HIR_UNARY:
     case OM_HIR_TRY:
     case OM_HIR_BINARY:
@@ -804,6 +830,7 @@ static bool kind_requires_symbol(Om_Hir_Kind kind)
     case OM_HIR_SYSTEM_ACTOR_REF:
     case OM_HIR_CALL_DIRECT:
     case OM_HIR_CALL_INDIRECT:
+    case OM_HIR_NOMINAL_VALUE:
     case OM_HIR_RESULT_OK:
     case OM_HIR_RESULT_ERROR:
     case OM_HIR_RECORD_CONSTRUCT:
@@ -1013,6 +1040,25 @@ Om_Status om_hir_verify_project(const Om_Hir_Project *project,
             && (node->effects & forbidden_function_effects) != 0) {
             status = push_diagnostic(&diagnostics,
                                      OM_HIR_DIAGNOSTIC_E0907, node);
+        }
+        if (status == OM_STATUS_OK && node->kind == OM_HIR_NOMINAL_VALUE) {
+            const Om_Symbol *type_symbol = om_resolution_symbol_by_id(
+                project->resolution, node->symbol_id);
+            Om_Type_Id resolved_type = OM_TYPE_ID_INVALID;
+            Om_Type_View type_view = {0};
+            uint64_t member_index = UINT64_MAX;
+            if (type_symbol == NULL
+                || type_symbol->kind != OM_SYMBOL_BUILTIN
+                || !name_is(type_symbol->name, "Actor_Down_Reason", 17)
+                || !actor_down_reason_member(node->name, &member_index)
+                || member_index != node->integer_magnitude
+                || resolved_type_view(project, node->type_id, &resolved_type,
+                                      &type_view) != OM_STATUS_OK
+                || type_view.kind != OM_TYPE_DOWN_REASON
+                || type_view.nominal_symbol.value != node->symbol_id.value) {
+                status = push_diagnostic(&diagnostics,
+                                         OM_HIR_DIAGNOSTIC_E0904, node);
+            }
         }
         if (status == OM_STATUS_OK && node->kind == OM_HIR_TRY) {
             const Om_Hir_Node *input = node->child_count == 1
@@ -1261,7 +1307,7 @@ const char *om_hir_kind_name(Om_Hir_Kind kind)
         "break", "continue", "send", "watch", "stop", "call-statement",
         "if", "if-arm", "while", "for-range", "for-each", "select",
         "case-arm", "local", "integer", "float", "string", "string-text",
-        "interpolated-string", "boolean", "null", "self", "down-reason",
+        "interpolated-string", "boolean", "null", "self", "nominal-value",
         "unary", "try", "binary", "call-direct", "call-indirect",
         "result-ok", "result-error", "record-construct", "message-construct",
         "field-read", "symbol-ref", "system-actor-ref", "index",
@@ -1337,7 +1383,12 @@ Om_Status om_hir_dump(const Om_Hir_Project *project, Om_Hir_Text *result)
             node->symbol_id.value, node->related_symbol_id.value, node->effects,
             node->flags, node->span.source.value, node->span.start,
             node->span.end, node->child_start, node->child_count);
-        if (status == OM_STATUS_OK && node->name.length != 0) {
+        if (status == OM_STATUS_OK
+            && node->kind == OM_HIR_NOMINAL_VALUE) {
+            status = text_append(&buffer,
+                " value=builtin::Actor_Down_Reason.%.*s : Actor_Down_Reason",
+                (int)node->name.length, node->name.data);
+        } else if (status == OM_STATUS_OK && node->name.length != 0) {
             status = text_append(&buffer, " name=");
             if (status == OM_STATUS_OK) {
                 status = text_append_escaped(&buffer, node->name);

@@ -11,6 +11,7 @@
 #include "ombasic/semantic/semantic_analysis.h"
 #include "ombasic/semantic/type_inference.h"
 #include "ombasic/syntax/parser.h"
+#include "ombasic/target/target.h"
 
 typedef enum Om_Compiler_Artifact {
     OM_COMPILER_ARTIFACT_HIR = 0,
@@ -35,6 +36,7 @@ typedef enum Om_Compiler_Stage {
 } Om_Compiler_Stage;
 
 typedef struct Om_Compiler_Emit_Request {
+    const Om_Target *target;
     const Om_Module_Project *source_project;
     Om_String_View source_root;
     const Om_Parser_Result *parsed_modules;

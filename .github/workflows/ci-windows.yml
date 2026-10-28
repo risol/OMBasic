@@ -1,0 +1,59 @@
+name: windows-release
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-release:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Install LLVM 23.1.4
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'llvm-23.1.4.tar.xz'
+          $uri = 'https://github.com/llvm/llvm-project/releases/download/llvmorg-23.1.4/clang%2Bllvm-23.1.4-x86_64-pc-windows-msvc.tar.xz'
+          Invoke-WebRequest -Uri $uri -OutFile $archive
+          tar -xf $archive -C $env:RUNNER_TEMP
+          $llvmRoot = Join-Path $env:RUNNER_TEMP 'clang+llvm-23.1.4-x86_64-pc-windows-msvc'
+          $llvmBin = Join-Path $llvmRoot 'bin'
+          Add-Content -Path $env:GITHUB_PATH -Value $llvmBin
+          Add-Content -Path $env:GITHUB_ENV -Value "LLVM_ROOT=$llvmRoot"
+          python -m pip install --upgrade "cmake>=4.2" ninja
+      - name: Configure clang-cl Release build
+        shell: pwsh
+        run: |
+          cmake -S . -B build/windows-release -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_C_COMPILER="$env:LLVM_ROOT/bin/clang-cl.exe" `
+            -DCMAKE_CXX_COMPILER="$env:LLVM_ROOT/bin/clang-cl.exe" `
+            -DLLVM_DIR="$env:LLVM_ROOT/lib/cmake/llvm" `
+            -DOM_LLVM_TARGET_TRIPLE=x86_64-pc-windows-msvc
+      - name: Build
+        run: cmake --build build/windows-release --parallel 2
+      - name: Architecture and language checks
+        run: |
+          python tools/architecture_check/check.py --root .
+          python tools/spec_check/check.py --root .
+      - name: Run CTest release gates
+        run: ctest --test-dir build/windows-release -C Release --output-on-failure
+      - name: Build and run Hello World
+        shell: pwsh
+        run: |
+          build/windows-release/ombasic.exe check examples/hello/main.bas
+          $hello = Join-Path $env:RUNNER_TEMP 'hello.exe'
+          build/windows-release/ombasic.exe build examples/hello/main.bas -o $hello
+          & $hello
+      - name: Verify installed SDK with build tree removed
+        run: python tests/tooling/install_sdk_without_build_tree_test.py cmake build/windows-release . Release

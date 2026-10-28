@@ -42,6 +42,12 @@ LEGACY_SYMBOLS = re.compile(
     r"om_bytecode_[A-Za-z0-9_]*\b|OM_BYTECODE_[A-Za-z0-9_]*\b|"
     r"OMBC\b|LOAD_SYSTEM_ACTOR\b)"
 )
+LEGACY_DOWN_REASON_KEYWORDS = re.compile(
+    r"\bOM_KEYWORD_(?:NORMAL|FAILED|NODE_UNREACHABLE)\b"
+)
+BUILD_TREE_RESOURCE_MACROS = re.compile(
+    r"\bOM_(?:RUNTIME(?:_SERVICES|_DISTRIBUTION)?|DISTRIBUTION|FOUNDATION)_ARCHIVE\b"
+)
 
 CORE_TARGET_EDGES = {
     "ombasic_source": {"ombasic::foundation"},
@@ -55,8 +61,10 @@ CORE_TARGET_EDGES = {
     "ombasic_mir": {"ombasic::specialization"},
     "ombasic_target": {"ombasic::foundation"},
     "ombasic_backend_llvm": {"ombasic::mir", "ombasic::target"},
-    "ombasic_compiler": {"ombasic::mir", "ombasic::backend_llvm"},
-    "ombasic_linker": {"ombasic::foundation"},
+    "ombasic_compiler": {"ombasic::mir", "ombasic::target",
+                         "ombasic::backend_llvm"},
+    "ombasic_toolchain": {"ombasic::foundation"},
+    "ombasic_linker": {"ombasic::foundation", "ombasic::toolchain"},
     "ombasic_distribution": {"ombasic::foundation"},
     "ombasic_runtime": {"ombasic::foundation"},
     "ombasic_runtime_services": {"ombasic::foundation"},
@@ -65,7 +73,7 @@ CORE_TARGET_EDGES = {
                                      "ombasic::foundation"},
     "ombasic_tooling": {"ombasic::syntax", "ombasic::semantic"},
     "ombasic": {"ombasic::tooling", "ombasic::native_metadata",
-                "ombasic::compiler", "ombasic::linker"},
+                "ombasic::compiler", "ombasic::linker", "ombasic::target"},
 }
 ALIAS_TARGETS = {
     "ombasic::foundation": "ombasic_foundation",
@@ -80,6 +88,7 @@ ALIAS_TARGETS = {
     "ombasic::target": "ombasic_target",
     "ombasic::backend_llvm": "ombasic_backend_llvm",
     "ombasic::compiler": "ombasic_compiler",
+    "ombasic::toolchain": "ombasic_toolchain",
     "ombasic::linker": "ombasic_linker",
     "ombasic::distribution": "ombasic_distribution",
     "ombasic::runtime": "ombasic_runtime",
@@ -173,6 +182,15 @@ def check(root: Path) -> list[str]:
 
         if LEGACY_SYMBOLS.search(code):
             errors.append(f"{relative}: legacy VM/bytecode symbol is forbidden")
+        if LEGACY_DOWN_REASON_KEYWORDS.search(code):
+            errors.append(
+                f"{relative}: do not add dependencies on legacy Actor down reason keywords"
+            )
+        if (relative != "src/linker/linker.c"
+                and BUILD_TREE_RESOURCE_MACROS.search(code)):
+            errors.append(
+                f"{relative}: do not add dependencies on build-tree Runtime archive macros"
+            )
         if not relative.startswith("tests/") and RAW_ALLOCATORS.search(code) and not any(
             relative.startswith(allowed) for allowed in ALLOCATOR_OWNERS
         ):
@@ -187,6 +205,10 @@ def check(root: Path) -> list[str]:
         if owner is not None:
             for include in INCLUDE.findall(source):
                 include_path = include.replace("\\", "/")
+                if ("runtime_internal.h" in include_path
+                        and not relative.startswith("src/runtime/")):
+                    errors.append(
+                        f"{relative}: Runtime private headers may only be included from src/runtime")
                 if "/internal/" in f"/{include_path}/":
                     included_owner, _ = capability(include_path)
                     if included_owner is not None and included_owner != owner:
@@ -194,9 +216,29 @@ def check(root: Path) -> list[str]:
                             f"{relative}: cross-capability include of private header {include}"
                         )
                 included_capability, _ = capability(include_path)
-                if included_capability in FORBIDDEN_INCLUDES.get(owner, set()):
+                generated_runtime_abi = (
+                    owner == "backend"
+                    and include_path.startswith("ombasic/runtime/abi/")
+                )
+                if (included_capability in FORBIDDEN_INCLUDES.get(owner, set())
+                        and not (included_capability == "runtime"
+                                 and generated_runtime_abi)):
                     errors.append(
                         f"{relative}: {owner} may not include {included_capability} ({include})"
+                    )
+                normalized_include = include_path.replace("\\", "/").lower()
+                include_name = normalized_include.rsplit("/", 1)[-1]
+                is_runtime_internal = (
+                    "runtime" in normalized_include
+                    and "internal" in include_name
+                    and include_name.endswith(".h")
+                    and not normalized_include.startswith(
+                        "ombasic/runtime/abi/")
+                )
+                if (relative.startswith(("src/backend/", "src/compiler/"))
+                        and is_runtime_internal):
+                    errors.append(
+                        f"{relative}: compiler/backend may not include Runtime private header {include}"
                     )
 
     return errors

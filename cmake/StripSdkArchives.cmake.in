@@ -1,0 +1,18 @@
+set(_om_sdk_prefix "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}")
+set(_om_sdk_runtime_dir
+    "${_om_sdk_prefix}/lib/ombasic/@OM_LLVM_TARGET_TRIPLE@")
+file(GLOB _om_sdk_archives
+    "${_om_sdk_runtime_dir}/*.lib"
+    "${_om_sdk_runtime_dir}/*.a")
+if(NOT _om_sdk_archives)
+    message(FATAL_ERROR "No runtime archives were installed to ${_om_sdk_runtime_dir}")
+endif()
+foreach(_om_sdk_archive IN LISTS _om_sdk_archives)
+    execute_process(
+        COMMAND "@OM_LLVM_STRIP@" --strip-debug "${_om_sdk_archive}"
+        RESULT_VARIABLE _om_sdk_strip_result)
+    if(NOT _om_sdk_strip_result EQUAL 0)
+        message(FATAL_ERROR
+            "Could not remove development paths from installed SDK archive: ${_om_sdk_archive}")
+    endif()
+endforeach()

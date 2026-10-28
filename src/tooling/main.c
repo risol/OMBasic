@@ -9,23 +9,9 @@
 #include "ombasic/foundation/memory.h"
 #include "ombasic/tooling/formatter.h"
 #include "ombasic/native/metadata/omi.h"
+#include "ombasic/linker/linker.h"
+#include "ombasic/toolchain/resources.h"
 #include "cli_internal.h"
-
-#ifdef _WIN32
-#include <process.h>
-#else
-#include <unistd.h>
-#endif
-
-#ifndef OM_PYTHON_EXECUTABLE
-#define OM_PYTHON_EXECUTABLE "python"
-#endif
-#ifndef OM_BIND_SCRIPT_PATH
-#define OM_BIND_SCRIPT_PATH "tools/ombasic_bind.py"
-#endif
-#ifndef OM_LSP_SCRIPT_PATH
-#define OM_LSP_SCRIPT_PATH "tools/ombasic_lsp.py"
-#endif
 
 #define OM_CLI_MAX_SOURCE_BYTES ((size_t)16 * (size_t)1024 * (size_t)1024)
 
@@ -125,9 +111,9 @@ static void print_usage(FILE *stream)
                   "Usage:\n"
                   "  ombasic version\n"
                   "  ombasic fmt [--write|--check] <file.bas>\n"
-                  "  ombasic check --root <source-root> <entry.bas> [--native file.omi] [-L dir] [--diagnostics=json]\n"
-                  "  ombasic run --root <source-root> <entry.bas> [--native file.omi] [-L dir] [--entry callable]\n"
-                  "  ombasic build --root <source-root> <entry.bas> [--native file.omi] [-L dir] [--emit=hir|mir|llvm-ir|asm|obj] [-o output]\n"
+                  "  ombasic check <entry.bas> [--root <source-root>] [--native file.omi] [-L dir] [--diagnostics=json]\n"
+                  "  ombasic run <entry.bas> [--root <source-root>] [--target <llvm-triple>] [--sysroot path] [--resource-dir <sdk-root>] [--native file.omi] [-L dir] [--entry callable]\n"
+                  "  ombasic build <entry.bas> [--root <source-root>] [--target <llvm-triple>] [--sysroot path] [--resource-dir <sdk-root>] [--native file.omi] [-L dir] [--emit=hir|mir|llvm-ir|asm|obj] [-o output]\n"
                   "  ombasic lsp --root <source-root>\n"
                   "  ombasic bind --header <file.h> --library <path> --output <file.omi> [-I dir]\n"
                   "  ombasic check-omi <file.omi>\n");
@@ -173,60 +159,74 @@ cleanup:
     return result;
 }
 
-static int bind_header(int argc, char **argv)
+static const char *python_executable(void)
 {
-    char **arguments = om_alloc_array((size_t)argc + 1, sizeof(*arguments));
-    if (arguments == NULL) {
+#ifdef _WIN32
+    return "python";
+#else
+    return "python3";
+#endif
+}
+
+static int run_python_tool(int argc, char **argv,
+                           const char *script_name, bool lsp)
+{
+    char *script_path = NULL;
+    size_t argument_count = 0;
+    const char *relative_script = NULL;
+    if (strcmp(script_name, "bind") == 0) {
+        relative_script = "share/ombasic/tools/ombasic_bind.py";
+    } else {
+        relative_script = "share/ombasic/tools/ombasic_lsp.py";
+    }
+    const Om_Status path_status = om_toolchain_resource_path(relative_script,
+                                                              &script_path);
+    if (path_status != OM_STATUS_OK) {
+        (void)fprintf(stderr,
+            "ombasic: SDK tool '%s' is missing; set OMBASIC_RESOURCE_DIR\n",
+            relative_script);
+        return 1;
+    }
+    const size_t forwarded_count = argc > 2 ? (size_t)(argc - 2) : 0;
+    const size_t capacity = forwarded_count + (lsp ? 5u : 3u);
+    char **owned_arguments = om_alloc_array(capacity, sizeof(*owned_arguments));
+    if (owned_arguments == NULL) {
+        om_free(script_path);
         (void)fprintf(stderr, "ombasic: out of memory\n");
         return 1;
     }
-    (void)memset(arguments, 0, ((size_t)argc + 1) * sizeof(*arguments));
-    arguments[0] = (char *)OM_PYTHON_EXECUTABLE;
-    arguments[1] = (char *)OM_BIND_SCRIPT_PATH;
-    for (int index = 2; index < argc; ++index) {
-        arguments[index] = argv[index];
+    (void)memset(owned_arguments, 0,
+                 capacity * sizeof(*owned_arguments));
+    owned_arguments[argument_count++] = (char *)python_executable();
+    owned_arguments[argument_count++] = script_path;
+    if (lsp) {
+        owned_arguments[argument_count++] = (char *)"--compiler";
+        owned_arguments[argument_count++] = argv[0];
     }
-    arguments[argc] = NULL;
-#ifdef _WIN32
-    const intptr_t result = _spawnv(_P_WAIT, OM_PYTHON_EXECUTABLE,
-                                    (const char *const *)arguments);
-    om_free(arguments);
-    return result < 0 || result > INT_MAX ? 1 : (int)result;
-#else
-    execv(OM_PYTHON_EXECUTABLE, arguments);
-    om_free(arguments);
-    (void)fprintf(stderr, "ombasic: could not start Python tooling\n");
-    return 1;
-#endif
+    for (int index = 2; index < argc; ++index) {
+        owned_arguments[argument_count++] = argv[index];
+    }
+    owned_arguments[argument_count] = NULL;
+    const int result = om_linker_run_executable(
+        python_executable(), owned_arguments);
+    if (result < 0) {
+        (void)fprintf(stderr,
+            "ombasic: could not start Python tooling with '%s'\n",
+            python_executable());
+    }
+    om_free(script_path);
+    om_free(owned_arguments);
+    return result < 0 ? 1 : result;
+}
+
+static int bind_header(int argc, char **argv)
+{
+    return run_python_tool(argc, argv, "bind", false);
 }
 
 static int launch_lsp(int argc, char **argv)
 {
-    char **arguments = om_alloc_array((size_t)argc + 3, sizeof(*arguments));
-    if (arguments == NULL) {
-        (void)fprintf(stderr, "ombasic: out of memory\n");
-        return 1;
-    }
-    (void)memset(arguments, 0, ((size_t)argc + 3) * sizeof(*arguments));
-    arguments[0] = (char *)OM_PYTHON_EXECUTABLE;
-    arguments[1] = (char *)OM_LSP_SCRIPT_PATH;
-    arguments[2] = (char *)"--compiler";
-    arguments[3] = argv[0];
-    for (int index = 2; index < argc; ++index) {
-        arguments[index + 2] = argv[index];
-    }
-    arguments[argc + 2] = NULL;
-#ifdef _WIN32
-    const intptr_t result = _spawnv(_P_WAIT, OM_PYTHON_EXECUTABLE,
-                                    (const char *const *)arguments);
-    om_free(arguments);
-    return result < 0 || result > INT_MAX ? 1 : (int)result;
-#else
-    execv(OM_PYTHON_EXECUTABLE, arguments);
-    om_free(arguments);
-    (void)fprintf(stderr, "ombasic: could not start Python tooling\n");
-    return 1;
-#endif
+    return run_python_tool(argc, argv, "lsp", true);
 }
 
 static int format_file(const char *path, bool write_back, bool check_only)

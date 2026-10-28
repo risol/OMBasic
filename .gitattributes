@@ -1,0 +1,3 @@
+*.bas text eol=lf
+*.hir text eol=lf
+*.mir text eol=lf

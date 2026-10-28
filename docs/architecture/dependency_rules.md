@@ -19,7 +19,7 @@ foundation
   -> compiler pipeline
   -> tooling / CLI
 
-foundation -> linker -> tooling / CLI
+foundation -> toolchain -> linker -> tooling / CLI
 ```
 
 Native metadata depends on source and syntax contracts. Semantic analysis may
@@ -28,17 +28,18 @@ or Runtime. Runtime consumes only public Runtime ABI and foundation contracts.
 
 The target module owns target ABI descriptions shared by compiler components.
 The compiler pipeline coordinates HIR, specialization, MIR, and LLVM emission.
-The linker module owns platform linker invocation and native executable
-launching; it consumes object paths, library names, and Runtime archive paths
-through its request contract. It does not link against Runtime implementation
-code. The CLI coordinates these modules and owns user-facing diagnostics.
+The toolchain module locates SDK resources and target Runtime archives. The
+linker module owns platform linker invocation and native executable launching;
+it consumes resolved archive paths through its request contract and does not
+link against Runtime implementation code. The CLI coordinates these modules
+and owns user-facing diagnostics.
 
 ## Runtime graph
 
 ```text
 runtime_abi
   -> runtime_core
-  -> runtime_gc / runtime_data
+  -> runtime_fault / runtime_gc / runtime_data
   -> runtime_actor
   -> runtime_scheduler
   -> runtime_system_actor / runtime_distribution
@@ -67,6 +68,8 @@ descriptors.
 ## Enforcement
 
 CMake target edges and C includes are checked by
-`tools/architecture_check/check.py`. Legacy VM/bytecode symbols are rejected
-from source, public headers, and tests. Changes to an allowed edge require an
-ADR naming the owner and invariant.
+`tools/architecture_check/check.py` and the language-example audit in
+`tools/spec_check/check.py`. The checks reject Runtime private-header includes
+from the compiler/backend, LLVM includes outside the backend, legacy
+VM/bytecode symbols, allocator violations, and obsolete Actor reason keywords.
+Changes to an allowed edge require an ADR naming the owner and invariant.

@@ -22,7 +22,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
         OM_HIR_BOOLEAN,
         OM_HIR_NULL,
         OM_HIR_SELF,
-        OM_HIR_DOWN_REASON,
+        OM_HIR_NOMINAL_VALUE,
     };
     const Om_Type_Kind leaf_types[] = {
         OM_TYPE_INT,

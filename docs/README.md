@@ -9,6 +9,8 @@
 - [Fuzzing](development/fuzzing.md)
 - [C23 safety profile](development/c23_safety_profile.md)
 - [Implementation status](development/implementation_status.md)
+- [Engineering convergence status](development/engineering_convergence_status.md)
+- [Release gates](development/release_gates.md)
 
 ## Compiler and Runtime contracts
 
@@ -20,7 +22,13 @@
 - [LLVM backend](compiler/llvm_backend.md)
 - [Native FFI](compiler/native_ffi.md)
 - [Native linkers and Windows toolchains](compiler/linking.md)
+- [SDK resource layout](compiler/resource_layout.md)
+- [Target model](compiler/target_model.md)
 - [Runtime ABI](runtime/runtime_abi.md)
+- [Generated-code ABI](runtime/generated_abi.md)
+- [Embedding API](runtime/embedding_api.md)
+- [Garbage collection](runtime/gc.md)
+- [Actor Runtime](runtime/actor_runtime.md)
 - [Native callback ingress](runtime/native_callbacks.md)
 - [Native metadata and `.omi`](../include/ombasic/native/metadata/omi.h)
 - [Distribution transport](../src/distribution/README.md)

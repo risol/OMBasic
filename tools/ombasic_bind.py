@@ -114,9 +114,9 @@ def make_binding(function: dict, used_names: set[str]) -> tuple[str | None, str 
         return None, "unnamed function"
     name = ordinary_name(source_name, "native_function")
     if name in {"action", "actor", "and", "at", "break", "case", "continue",
-                "else", "end", "export", "failed", "false", "for", "from",
+                "else", "end", "export", "false", "for", "from",
                 "function", "if", "import", "in", "message", "native", "not",
-                "normal", "null", "or", "record", "receive", "return", "select",
+                "null", "or", "record", "receive", "return", "select",
                 "self", "send", "spawn", "stop", "step", "then", "to", "true",
                 "try", "var", "watch", "while", "with"}:
         name = "native_" + name

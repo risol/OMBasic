@@ -5,19 +5,7 @@
 
 #include "ombasic/foundation/status.h"
 #include "ombasic/foundation/string_view.h"
-#include "ombasic/runtime/native_runtime.h"
-
-typedef struct Om_Runtime_Distribution {
-    void *owned_state;
-} Om_Runtime_Distribution;
-
-/* Start after actor_system_start and destroy before the actor system's root
-   execution context. The program descriptor is borrowed for this lifetime. */
-Om_Status om_runtime_distribution_create(
-    Om_Execution_Context *context,
-    const Om_Runtime_Program_Descriptor *program,
-    Om_Runtime_Distribution *distribution
-);
+#include "ombasic/runtime/abi/distribution.h"
 
 Om_Status om_runtime_distribution_listen(
     Om_Runtime_Distribution *distribution,
@@ -39,10 +27,6 @@ Om_Status om_runtime_distribution_connect(
     Om_String_View host,
     uint16_t port,
     uint64_t *node_ref
-);
-
-void om_runtime_distribution_destroy(
-    Om_Runtime_Distribution *distribution
 );
 
 #endif

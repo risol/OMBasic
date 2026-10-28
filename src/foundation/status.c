@@ -29,6 +29,8 @@ const char *om_status_name(Om_Status status)
         return "not a directory";
     case OM_STATUS_CANCELLED:
         return "cancelled";
+    case OM_STATUS_ABI_MISMATCH:
+        return "runtime ABI version mismatch";
     }
     return "unknown status";
 }

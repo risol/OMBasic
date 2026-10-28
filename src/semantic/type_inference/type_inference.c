@@ -557,6 +557,23 @@ static bool name_is_ci(Om_String_View name, const char *expected, size_t length)
                                           (Om_String_View){expected, length});
 }
 
+static Om_Status get_actor_down_reason_type(Om_Infer_Context *context,
+                                            Om_Type_Id *type)
+{
+    if (context == NULL || type == NULL) {
+        return OM_STATUS_INVALID_ARGUMENT;
+    }
+    for (size_t index = 0; index < context->resolution->symbol_count; ++index) {
+        const Om_Symbol *symbol = &context->resolution->symbols[index];
+        if (symbol->kind == OM_SYMBOL_BUILTIN
+            && name_is_ci(symbol->name, "Actor_Down_Reason", 17)) {
+            return om_type_store_nominal(&context->type_store,
+                OM_TYPE_DOWN_REASON, symbol->id, type);
+        }
+    }
+    return OM_STATUS_NOT_FOUND;
+}
+
 static Om_Status set_builtin_scheme(Om_Infer_Context *context,
                                     Om_Symbol_Id symbol_id,
                                     Om_Type_Id type_id)
@@ -915,6 +932,15 @@ static Om_Status initialize_builtin(Om_Infer_Context *context,
     if (system_message_name(symbol->name)) {
         return initialize_system_message_builtin(context, symbol);
     }
+    if (name_is_ci(symbol->name, "Actor_Down_Reason", 17)) {
+        Om_Type_Id type_id = OM_TYPE_ID_INVALID;
+        Om_Status status = om_type_store_nominal(&context->type_store,
+            OM_TYPE_DOWN_REASON, symbol->id, &type_id);
+        if (status == OM_STATUS_OK) {
+            status = set_builtin_scheme(context, symbol->id, type_id);
+        }
+        return status;
+    }
     Om_Type_Kind primitive_kind = OM_TYPE_VARIABLE;
     if (name_is_ci(symbol->name, "Unit", 4)) {
         primitive_kind = OM_TYPE_UNIT;
@@ -922,8 +948,6 @@ static Om_Status initialize_builtin(Om_Infer_Context *context,
         primitive_kind = OM_TYPE_NODE_REF;
     } else if (name_is_ci(symbol->name, "Actor_Id", 8)) {
         primitive_kind = OM_TYPE_ACTOR_ID;
-    } else if (name_is_ci(symbol->name, "Down_Reason", 11)) {
-        primitive_kind = OM_TYPE_DOWN_REASON;
     } else if (name_is(symbol->name, "print", 5)) {
         Om_Type_Id string_type = OM_TYPE_ID_INVALID;
         Om_Type_Id unit_type = OM_TYPE_ID_INVALID;
@@ -949,7 +973,7 @@ static Om_Status initialize_builtin(Om_Infer_Context *context,
         Om_Status status = get_primitive_type(context, OM_TYPE_ACTOR_ID,
                                               &actor_id);
         if (status == OM_STATUS_OK) {
-            status = get_primitive_type(context, OM_TYPE_DOWN_REASON, &reason);
+            status = get_actor_down_reason_type(context, &reason);
         }
         if (status == OM_STATUS_OK) {
             status = om_type_store_nominal(&context->type_store, OM_TYPE_MESSAGE,
@@ -1966,9 +1990,6 @@ static Om_Status infer_expression(Om_Infer_Context *context,
     case OM_AST_NULL_LITERAL:
         status = get_primitive_type(context, OM_TYPE_NULL, &inferred);
         break;
-    case OM_AST_DOWN_REASON_LITERAL:
-        status = get_primitive_type(context, OM_TYPE_DOWN_REASON, &inferred);
-        break;
     case OM_AST_SELF:
         if (context->in_actor_receive
             && context->current_actor.value != UINT32_MAX) {
@@ -2803,9 +2824,9 @@ static Om_Status infer_receive(Om_Infer_Context *context,
             status = om_type_store_variable(&context->type_store, level + 1,
                                             &parameter_type);
         } else if (actor_down) {
-            const Om_Type_Kind builtin_kind = index == 0
-                ? OM_TYPE_ACTOR_ID : OM_TYPE_DOWN_REASON;
-            status = get_primitive_type(context, builtin_kind, &parameter_type);
+            status = index == 0
+                ? get_primitive_type(context, OM_TYPE_ACTOR_ID, &parameter_type)
+                : get_actor_down_reason_type(context, &parameter_type);
         } else if (system_message) {
             status = om_type_store_child_at(&context->type_store,
                                             system_constructor_type,

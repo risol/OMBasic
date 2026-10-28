@@ -1,64 +1,44 @@
-# OMBasic Native AOT
+# OMBasic 0.1
 
 OMBasic is a statically typed, BASIC-style language with explicit effects and
-Actor concurrency. The language rules are in
-[OMBasic-Language-Standard.md](OMBasic-Language-Standard.md). The execution
-architecture is being replaced with a Native AOT pipeline described in
-[OMBasic-Native-AOT-Refactor-Plan.md](OMBasic-Native-AOT-Refactor-Plan.md).
-
-The migration starts at the recorded VM baseline
-`ecbbacc5fb235c4a706a9c4eeb31bc7b41dec299`. The intended compiler path is:
+Actor concurrency. Source is compiled ahead of time to a native executable:
 
 ```text
-.bas -> frontend/semantic -> typed HIR -> native MIR -> LLVM -> object -> linker -> executable
+.bas -> semantic analysis -> typed HIR -> native MIR -> LLVM -> executable
 ```
 
-The VM and portable bytecode execution path have been removed. The compiler now
-uses the LLVM Native AOT pipeline. The current milestone includes native scalar
-execution, managed runtime values, local Actors, system Actors, and the first
-direct Native FFI slice; remaining work is tracked in the implementation status
-and refactor plan.
+The language rules are in the
+[OMBasic Language Standard](OMBasic-Language-Standard.md). The installed SDK
+contains the `ombasic` compiler, public Runtime headers, and target Runtime
+archives. See the [SDK resource layout](docs/compiler/resource_layout.md) for
+the installed files and external toolchain requirements.
 
-## Build on Windows with clang-cl and LLD
+## Install and build a program
 
-Install Visual Studio C++ Build Tools, a Windows SDK, CMake 4.2 or newer,
-Ninja, Python 3.10 or newer, and LLVM 23.1.4. For example, if LLVM is installed
-at `F:\clang+llvm-23.1.4-x86_64-pc-windows-msvc`:
+Install the OMBasic SDK and put its `bin/` directory on `PATH`. Building a
+native program also requires LLVM 23 Clang/LLD and the host C development
+toolchain. On Windows, use `clang-cl` with Visual Studio C++ Build Tools and a
+Windows SDK; MinGW is not part of the supported toolchain.
 
-```powershell
-cmake -S . -B build\windows-clang -G Ninja `
-  -DCMAKE_C_COMPILER="F:/clang+llvm-23.1.4-x86_64-pc-windows-msvc/bin/clang-cl.exe" `
-  -DLLVM_DIR="F:/clang+llvm-23.1.4-x86_64-pc-windows-msvc/lib/cmake/llvm" `
-  -DOM_LLVM_TARGET_TRIPLE=x86_64-pc-windows-msvc
-cmake --build build\windows-clang --parallel
-ctest --test-dir build\windows-clang --output-on-failure
+From the directory containing `main.bas`:
+
+```sh
+ombasic check main.bas
+ombasic build main.bas -o app
+./app
 ```
 
-`clang-cl.exe` compiles OMBasic and `lld-link.exe` links the Windows executable
-with the MSVC ABI. MSVC C++ Build Tools and the Windows SDK provide the required
-headers, UCRT, and system libraries; `cl.exe` is not the selected compiler and
-MinGW GCC is not part of this build. Linux uses `clang` with `ld.lld`, selected
-through `-fuse-ld=lld`. Both platforms use CMake and Ninja.
+On Windows PowerShell, use `ombasic.exe`, build with `-o app.exe`, and run
+the result as `./app.exe`.
 
-## Run Hello World
+The Hello World and Actor examples are in [`examples/hello`](examples/hello)
+and [`examples/actor`](examples/actor). `ombasic run main.bas` compiles a
+temporary native executable and runs it.
 
-The sample is in [examples/hello/main.bas](examples/hello/main.bas). From the
-repository root, run:
+## Development
 
-```powershell
-build\windows-clang\ombasic.exe run --root examples\hello main.bas
-```
-
-It prints `Hello, OMBasic!`. To create a standalone executable instead:
-
-```powershell
-build/windows-clang/ombasic.exe build `
-  --root examples/hello main.bas -o build/windows-clang/hello.exe
-build/windows-clang/hello.exe
-```
-
-The remaining language coverage, aggregate and callback FFI, distribution,
-Linux validation, and release gates are tracked in the implementation status
-and refactor plan.
-
-Architecture decisions and progress are indexed in [docs/README.md](docs/README.md).
+Compiler build instructions, contribution rules, and release gates are in the
+[contribution guide](docs/contributing.md) and
+[release gates](docs/development/release_gates.md). The
+[documentation index](docs/README.md) links the language, compiler, Runtime,
+and architecture documents.

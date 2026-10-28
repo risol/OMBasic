@@ -216,7 +216,7 @@ The source and architecture baseline is commit
   and queued blocking work before joining service threads.
 - CLI integration covers Console, File_System write/read, Timer delivery, and a
   File_Read failure propagated by `TRY` in a Receive and observed as
-  `Actor_Down(FAILED)`. The Windows clang-cl/LLD full CTest suite passes (19/19).
+  `Actor_Down(Actor_Down_Reason.failed)`. The Windows clang-cl/LLD full CTest suite passes (19/19).
 
 ## Phase 11 — Direct Native FFI: complete on Windows and Linux
 
@@ -288,7 +288,7 @@ The source and architecture baseline is commit
 - `runtime_distribution_native` launches two native processes on localhost.
   The integration covers handshake, remote spawn, String and ActorRef Message
   fields, a response, Watch, and normal Actor termination on Windows and Linux.
-- The same integration verifies `NODE_UNREACHABLE` watcher delivery. Protocol
+- The same integration verifies `Actor_Down_Reason.node_unreachable` watcher delivery. Protocol
   coverage checks ordered at-most-once sequential frames and a 64 KiB nested
   Record/List/Map payload against accepting and rejecting budgets.
 - `CPointer` is rejected by the wire serializer. Failed sends are not retried;

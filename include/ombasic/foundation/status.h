@@ -14,7 +14,8 @@ typedef enum Om_Status {
     OM_STATUS_IO_ERROR,
     OM_STATUS_PATH_ESCAPE,
     OM_STATUS_NOT_A_DIRECTORY,
-    OM_STATUS_CANCELLED
+    OM_STATUS_CANCELLED,
+    OM_STATUS_ABI_MISMATCH
 } Om_Status;
 
 const char *om_status_name(Om_Status status);

@@ -189,6 +189,8 @@ bool om_test_type_store_nominal_identity(void)
     Om_Type_Id user_again = OM_TYPE_ID_INVALID;
     Om_Type_Id order = OM_TYPE_ID_INVALID;
     Om_Type_Id message = OM_TYPE_ID_INVALID;
+    Om_Type_Id reason = OM_TYPE_ID_INVALID;
+    Om_Type_Id other_reason = OM_TYPE_ID_INVALID;
     TYPE_STORE_ASSERT(om_type_store_nominal(&store, OM_TYPE_RECORD,
                                             user_symbol, &user) == OM_STATUS_OK);
     TYPE_STORE_ASSERT(om_type_store_nominal(&store, OM_TYPE_RECORD,
@@ -198,6 +200,12 @@ bool om_test_type_store_nominal_identity(void)
                                             order_symbol, &order) == OM_STATUS_OK);
     TYPE_STORE_ASSERT(om_type_store_nominal(&store, OM_TYPE_MESSAGE,
                                             user_symbol, &message) == OM_STATUS_OK);
+    TYPE_STORE_ASSERT(om_type_store_nominal(&store, OM_TYPE_DOWN_REASON,
+                                            (Om_Symbol_Id){12}, &reason)
+                      == OM_STATUS_OK);
+    TYPE_STORE_ASSERT(om_type_store_nominal(&store, OM_TYPE_DOWN_REASON,
+                                            (Om_Symbol_Id){13}, &other_reason)
+                      == OM_STATUS_OK);
     bool unified = true;
     TYPE_STORE_ASSERT(om_type_store_unify(&store, user, order,
                                           &unified) == OM_STATUS_OK
@@ -208,6 +216,17 @@ bool om_test_type_store_nominal_identity(void)
     TYPE_STORE_ASSERT(om_type_store_unify(&store, user, user_again,
                                           &unified) == OM_STATUS_OK
                       && unified);
+    TYPE_STORE_ASSERT(om_type_store_unify(&store, reason, other_reason,
+                                          &unified) == OM_STATUS_OK
+                      && !unified);
+    TYPE_STORE_ASSERT(om_type_store_unify(
+        &store, reason, store.primitive_types[OM_TYPE_INT], &unified)
+        == OM_STATUS_OK && !unified);
+    Om_Type_View reason_view = {0};
+    TYPE_STORE_ASSERT(om_type_store_get(&store, reason, &reason_view)
+                      == OM_STATUS_OK
+                      && reason_view.kind == OM_TYPE_DOWN_REASON
+                      && reason_view.nominal_symbol.value == 12);
     passed = true;
 
 cleanup:

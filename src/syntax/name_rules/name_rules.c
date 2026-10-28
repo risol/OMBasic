@@ -91,7 +91,7 @@ bool om_name_equal_case_insensitive(Om_String_View left, Om_String_View right)
 bool om_name_is_reserved_builtin(Om_String_View name)
 {
     static const char *const builtins[] = {
-        "Unit", "Result", "Node_Ref", "Actor_Id", "Down_Reason",
+        "Unit", "Result", "Node_Ref", "Actor_Id", "Actor_Down_Reason",
         "Ok", "Error", "Actor_Down"
     };
     for (size_t index = 0; index < sizeof(builtins) / sizeof(builtins[0]); ++index) {

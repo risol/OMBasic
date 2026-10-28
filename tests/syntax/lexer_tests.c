@@ -130,8 +130,8 @@ cleanup:
 bool om_test_lexer_all_keywords(void)
 {
     static const uint8_t input[] =
-        "ACTION ACTOR AND AT BREAK CASE CONTINUE ELSE END EXPORT FAILED FALSE FOR FROM "
-        "FUNCTION IF IMPORT IN MESSAGE NATIVE NODE_UNREACHABLE NOT NORMAL NULL OR RECORD "
+        "ACTION ACTOR AND AT BREAK CASE CONTINUE ELSE END EXPORT FALSE FOR FROM "
+        "FUNCTION IF IMPORT IN MESSAGE NATIVE NOT NULL OR RECORD "
         "RECEIVE RETURN SELECT SELF SEND SPAWN STOP STEP THEN TO TRUE TRY VAR WATCH WHILE WITH";
     Om_Source_Text source = {0};
     Om_Lexer_Result result = {0};
@@ -154,6 +154,32 @@ bool om_test_lexer_all_keywords(void)
     for (size_t keyword = 1; keyword <= (size_t)OM_KEYWORD_WITH; ++keyword) {
         LEX_ASSERT(seen[keyword]);
     }
+    passed = true;
+
+cleanup:
+    om_lexer_result_destroy(&result);
+    om_source_text_destroy(&source);
+    return passed;
+}
+
+bool om_test_lexer_down_reason_names_are_identifiers(void)
+{
+    static const uint8_t input[] = "normal failed node_unreachable NORMAL FAILED NODE_UNREACHABLE";
+    Om_Source_Text source = {0};
+    Om_Lexer_Result result = {0};
+    bool passed = false;
+    LEX_ASSERT(scan_text(&source, &result, input, sizeof(input) - 1));
+    LEX_ASSERT(result.diagnostic_count == 3);
+    LEX_ASSERT(result.token_count == 7);
+    for (size_t index = 0; index < 6; ++index) {
+        LEX_ASSERT(result.tokens[index].kind != OM_TOKEN_KEYWORD);
+    }
+    LEX_ASSERT(result.tokens[0].kind == OM_TOKEN_IDENTIFIER);
+    LEX_ASSERT(result.tokens[1].kind == OM_TOKEN_IDENTIFIER);
+    LEX_ASSERT(result.tokens[2].kind == OM_TOKEN_IDENTIFIER);
+    LEX_ASSERT(result.tokens[3].kind == OM_TOKEN_INVALID_IDENTIFIER);
+    LEX_ASSERT(result.tokens[4].kind == OM_TOKEN_INVALID_IDENTIFIER);
+    LEX_ASSERT(result.tokens[5].kind == OM_TOKEN_INVALID_IDENTIFIER);
     passed = true;
 
 cleanup:

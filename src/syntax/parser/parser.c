@@ -435,13 +435,6 @@ static Om_Status parse_primary(Om_Parser *parser, Om_Ast_Node_Id *out)
                          token->kind, token->keyword, OM_AST_FLAG_NONE, 0,
                          0, 0.0, NULL, 0, out);
     }
-    if (at_keyword(parser, OM_KEYWORD_NORMAL) || at_keyword(parser, OM_KEYWORD_FAILED)
-        || at_keyword(parser, OM_KEYWORD_NODE_UNREACHABLE)) {
-        (void)advance(parser);
-        return make_node(parser, OM_AST_DOWN_REASON_LITERAL, token->span,
-                         token->lexeme, token->kind, token->keyword,
-                         OM_AST_FLAG_NONE, 0, 0, 0.0, NULL, 0, out);
-    }
     if (at_kind(parser, OM_TOKEN_LEFT_PAREN)) {
         const Om_Token *open = advance(parser);
         Om_Ast_Node_Id expression = OM_AST_NODE_ID_INVALID;

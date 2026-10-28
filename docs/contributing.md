@@ -2,27 +2,44 @@
 
 ## Set up a build
 
-Use CMake, Ninja, Python 3, and LLVM 23.1.4. The standard build matrix is
+Use CMake 4.2 or newer, Ninja, Python 3.10 or newer, and LLVM 23.x. The standard build matrix is
 `clang-cl.exe` plus `lld-link.exe` on Windows, and `clang` plus `ld.lld` on
 Linux. Windows also needs Visual Studio C++ Build Tools and a Windows SDK for
 the MSVC ABI, UCRT, and system libraries; MinGW is not used. Linux needs the
 host system's C development headers and libraries. Clang must be available on
 `PATH` when using `ombasic bind`.
 
-From the repository root, configure and build with:
+From a Visual Studio Developer PowerShell, configure Windows with the installed
+LLVM CMake package:
 
 ```powershell
-cmake -S . -B build/dev -G Ninja
-cmake --build build/dev --parallel
-ctest --test-dir build/dev --output-on-failure
-cmake --build build/dev --target architecture-check
+cmake -S . -B build/windows -G Ninja `
+  -DCMAKE_C_COMPILER="F:/clang+llvm-23.1.4-x86_64-pc-windows-msvc/bin/clang-cl.exe" `
+  -DLLVM_DIR="F:/clang+llvm-23.1.4-x86_64-pc-windows-msvc/lib/cmake/llvm" `
+  -DOM_LLVM_TARGET_TRIPLE=x86_64-pc-windows-msvc
+cmake --build build/windows --parallel
+ctest --test-dir build/windows --output-on-failure
 ```
 
-See the platform-specific configuration commands in
-[Native Linkers and Build Toolchains](compiler/linking.md). Sanitizer profiles
-are separate Linux Clang builds; set `OM_SANITIZER` to
-`address-undefined` or `thread`. Some container kernels require a non-PIE TSan
-binary and disabled address randomization for the test process.
+On Linux, use Clang 23 and the matching LLVM CMake package:
+
+```sh
+cmake -S . -B build/linux -G Ninja \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DCMAKE_C_COMPILER=clang-23 \
+  -DCMAKE_CXX_COMPILER=clang++-23 \
+  -DLLVM_DIR=/usr/lib/llvm-23/lib/cmake/llvm
+cmake --build build/linux --parallel
+ctest --test-dir build/linux --output-on-failure
+```
+
+Run `python tools/architecture_check/check.py --root .` and
+`python tools/spec_check/check.py --root .` for the fast architecture and
+language checks. See [Native Linkers and Build Toolchains](compiler/linking.md)
+for toolchain details. Sanitizer profiles are separate Linux Clang builds;
+set `OM_SANITIZER` to `address-undefined` or `thread`. TSan must run on a host
+whose address-space layout is compatible with its runtime; the CI gate provides
+that environment.
 
 ## Make a change
 

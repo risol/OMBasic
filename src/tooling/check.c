@@ -302,6 +302,7 @@ static bool is_supported_emit_kind(const char *emit_kind)
 }
 
 static int generate_native_program(
+    const Om_Target *target,
     const Om_Module_Project *source_project,
     Om_String_View source_root,
     const Om_Parser_Result *parsed,
@@ -312,6 +313,8 @@ static int generate_native_program(
     const Om_Omi_Project *native_project,
     const Om_String_View *library_directories,
     size_t library_directory_count,
+    const char *resource_dir_override,
+    const char *sysroot,
     const char *entry_name,
     const char *requested_output,
     const char *emit_kind,
@@ -377,6 +380,7 @@ static int generate_native_program(
         }
     }
     Om_Compiler_Emit_Request request = {
+        .target = target,
         .source_project = source_project,
         .source_root = source_root,
         .parsed_modules = parsed,
@@ -477,16 +481,40 @@ static int generate_native_program(
             native_libraries[index] = module->library_path;
         }
     }
+    Om_Toolchain_Resources resources = {0};
+    const Om_Status resource_status = om_toolchain_runtime_resources_resolve(
+        resource_dir_override, target->triple, &resources);
+    if (resource_status != OM_STATUS_OK) {
+        (void)fprintf(stderr,
+            "ombasic: runtime resources unavailable for target '%s'; "
+            "resource root '%s' is missing '%s'\n",
+            resources.target_triple != NULL ? resources.target_triple : "host",
+            resources.resource_root != NULL ? resources.resource_root
+                : (resource_dir_override != NULL ? resource_dir_override
+                    : "executable-relative SDK layout"),
+            resources.missing_archive_path != NULL
+                ? resources.missing_archive_path
+                : "the expected target runtime archives");
+        om_toolchain_resources_destroy(&resources);
+        om_free(native_libraries);
+        goto cleanup;
+    }
     const Om_Linker_Request link_request = {
+        .target = target,
+        .target_runtime_root = resources.target_runtime_root,
+        .link_driver = NULL,
+        .sysroot = sysroot,
         .object_path = object_path,
         .executable_path = output_path,
         .libraries = native_libraries,
         .library_count = native_library_count,
         .library_directories = library_directories,
         .library_directory_count = library_directory_count,
+        .resources = &resources,
     };
     const int linker_result = om_linker_link_native(&link_request,
                                                      &debug_symbols_path);
+    om_toolchain_resources_destroy(&resources);
     om_free(native_libraries);
     if (linker_result != 0) {
         (void)fprintf(stderr, "ombasic: native linker failed (exit %d)\n",
@@ -1067,6 +1095,9 @@ int om_cli_compile_command(int argc, char **argv, const char *command)
     const char *root_path = NULL;
     const char *entry_path = NULL;
     const char *output_path = NULL;
+    const char *resource_dir_override = NULL;
+    const char *target_triple_override = NULL;
+    const char *sysroot = NULL;
     const char *entry_name = "main";
     const char *emit_kind = NULL;
     bool json = false;
@@ -1076,6 +1107,7 @@ int om_cli_compile_command(int argc, char **argv, const char *command)
     bool all_syntax_valid = true;
     bool semantic_valid = false;
     int exit_code = 1;
+    Om_Target selected_target = {0};
 
     const size_t option_capacity = argc > 2 ? (size_t)(argc - 2) : 0;
     if (option_capacity != 0) {
@@ -1092,6 +1124,19 @@ int om_cli_compile_command(int argc, char **argv, const char *command)
     for (int index = 2; index < argc; ++index) {
         if (strcmp(argv[index], "--root") == 0 && index + 1 < argc) {
             root_path = argv[++index];
+        } else if (strcmp(argv[index], "--resource-dir") == 0
+                   && index + 1 < argc) {
+            resource_dir_override = argv[++index];
+        } else if ((strcmp(command, "build") == 0
+                    || strcmp(command, "run") == 0)
+                   && strcmp(argv[index], "--target") == 0
+                   && index + 1 < argc) {
+            target_triple_override = argv[++index];
+        } else if ((strcmp(command, "build") == 0
+                    || strcmp(command, "run") == 0)
+                   && strcmp(argv[index], "--sysroot") == 0
+                   && index + 1 < argc) {
+            sysroot = argv[++index];
         } else if (strcmp(argv[index], "--native") == 0
                    && index + 1 < argc) {
             const char *path = argv[++index];
@@ -1129,16 +1174,52 @@ int om_cli_compile_command(int argc, char **argv, const char *command)
             entry_path = argv[index];
         } else {
             (void)fprintf(stderr,
-                "Usage: ombasic %s --root <source-root> <entry.bas> [--native file.omi] [-L dir]\n",
+                "Usage: ombasic %s <entry.bas> [--root <source-root>] "
+                "[--target <llvm-triple>] [--sysroot path] "
+                "[--native file.omi] [-L dir]\n",
                 command);
             goto cleanup;
         }
     }
+    if (root_path == NULL && entry_path != NULL) {
+        root_path = ".";
+    }
     if (root_path == NULL || entry_path == NULL) {
         (void)fprintf(stderr,
-            "Usage: ombasic %s --root <source-root> <entry.bas> [--native file.omi] [-L dir]\n",
+            "Usage: ombasic %s <entry.bas> [--root <source-root>] "
+            "[--target <llvm-triple>] [--sysroot path] "
+            "[--native file.omi] [-L dir]\n",
             command);
         goto cleanup;
+    }
+    if (strcmp(command, "build") == 0 || strcmp(command, "run") == 0) {
+        Om_Target host_target = {0};
+        status = om_target_host(&host_target);
+        if (status != OM_STATUS_OK) {
+            (void)fprintf(stderr,
+                "ombasic: E0700: configured host target is unavailable (%s)\n",
+                om_status_name(status));
+            goto cleanup;
+        }
+        if (target_triple_override == NULL) {
+            selected_target = host_target;
+        } else {
+            status = om_target_describe(target_triple_override,
+                                        &selected_target);
+            if (status != OM_STATUS_OK) {
+                (void)fprintf(stderr,
+                    "ombasic: E0701: unsupported target triple '%s'\n",
+                    target_triple_override);
+                goto cleanup;
+            }
+            if (strcmp(selected_target.triple, host_target.triple) != 0) {
+                (void)fprintf(stderr,
+                    "ombasic: E0702: target runtime/sysroot unavailable for "
+                    "'%s' (compiler host target is '%s')\n",
+                    selected_target.triple, host_target.triple);
+                goto cleanup;
+            }
+        }
     }
     status = om_source_root_init(&root, literal_view(root_path));
     if (status == OM_STATUS_OK && read_source_stdin) {
@@ -1300,10 +1381,11 @@ int om_cli_compile_command(int argc, char **argv, const char *command)
     exit_code = semantic_valid ? 0 : 1;
     if (semantic_valid && (strcmp(command, "run") == 0
                            || strcmp(command, "build") == 0)) {
-        exit_code = generate_native_program(&project, root.canonical_path,
+        exit_code = generate_native_program(&selected_target,
+            &project, root.canonical_path,
             parsed, module_count, &resolution, &inference, &semantic,
             &native_project, library_directories, library_directory_count,
-            entry_name, output_path, emit_kind,
+            resource_dir_override, sysroot, entry_name, output_path, emit_kind,
             strcmp(command, "run") == 0);
     }
 
