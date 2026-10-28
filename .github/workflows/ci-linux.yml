@@ -28,7 +28,7 @@ jobs:
           echo "deb [signed-by=/etc/apt/keyrings/apt.llvm.org.asc] https://apt.llvm.org/noble/ llvm-toolchain-noble-23 main" \
             | sudo tee /etc/apt/sources.list.d/llvm23.list >/dev/null
           sudo apt-get update
-          sudo apt-get install -y clang-23 lld-23 llvm-23-dev llvm-23-tools libclang-rt-23-dev
+          sudo apt-get install -y clang-23 lld-23 llvm-23-dev llvm-23-tools libclang-rt-23-dev libpolly-23-dev
           python -m pip install --upgrade "cmake>=4.2"
       - name: Configure Release build
         run: >-
