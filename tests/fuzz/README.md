@@ -33,3 +33,7 @@ longer time budget:
 ./build/fuzz/ombasic_fuzz_llvm_backend -runs=100
 ./build/fuzz/ombasic_fuzz_native_descriptor_codec -runs=10000
 ```
+
+GitHub Actions builds every fuzzer and runs a short smoke set for each pull
+request. A daily scheduled or manually dispatched workflow also runs a longer
+per-fuzzer budget.

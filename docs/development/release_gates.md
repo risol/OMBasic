@@ -11,6 +11,8 @@ pushes to `master`:
 | `install-sdk` | Install, move, then use the SDK for header smoke, version, check, Hello World and Actor build/run |
 | `sanitizers / asan-ubsan` | Full Linux ASan and UBSan CTest suite |
 | `sanitizers / tsan` | Full Linux ThreadSanitizer CTest suite, including Actor and distribution concurrency tests |
+| `fuzz / fuzz-smoke` | Build all libFuzzer targets and run a bounded smoke set on pull requests |
+| `fuzz / fuzz-extended` | Run a longer per-fuzzer budget on the daily schedule or manual dispatch |
 
 The host-build CTest suite includes native Actor stress and two-process
 distribution integration tests. The Windows CLI test inspects generated PDB

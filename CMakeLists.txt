@@ -961,7 +961,8 @@ if(BUILD_TESTING)
                 "${CMAKE_BINARY_DIR}"
                 "${CMAKE_CURRENT_SOURCE_DIR}"
                 "$<CONFIG>"
-                "${CMAKE_C_COMPILER}")
+                "${CMAKE_C_COMPILER}"
+                "$<TARGET_FILE_DIR:ombasic_test_native_math>")
     set_tests_properties(install_sdk_relocation PROPERTIES TIMEOUT 180)
 endif()
 
