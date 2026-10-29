@@ -14,11 +14,9 @@ jobs:
   architecture:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Check architecture and language specification
-        run: |
-          python tools/architecture_check/check.py --root .
-          python tools/spec_check/check.py --root .
+        run: python tools/architecture_check/check.py --root .

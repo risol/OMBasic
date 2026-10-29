@@ -131,8 +131,34 @@ static Om_Status set_node_symbol(Om_Resolver *resolver, Om_Module_Id module,
             return OM_STATUS_OK;
         }
     }
-    const Om_Resolved_Node entry = {module, node, symbol};
+    const Om_Resolved_Node entry = {
+        .module_id = module,
+        .node_id = node,
+        .symbol_id = symbol,
+        .builtin_member_id = OM_BUILTIN_MEMBER_NONE,
+    };
     return om_vector_push(&resolver->resolved_nodes, &entry);
+}
+
+static Om_Status set_node_builtin_member(Om_Resolver *resolver,
+                                         Om_Module_Id module,
+                                         Om_Ast_Node_Id node,
+                                         Om_Symbol_Id symbol,
+                                         Om_Builtin_Member_Id member)
+{
+    Om_Status status = set_node_symbol(resolver, module, node, symbol);
+    if (status != OM_STATUS_OK) {
+        return status;
+    }
+    for (size_t index = 0; index < resolver->resolved_nodes.length; ++index) {
+        Om_Resolved_Node *entry = om_vector_at(&resolver->resolved_nodes, index);
+        if (entry->module_id.value == module.value
+            && entry->node_id.value == node.value) {
+            entry->builtin_member_id = member;
+            return OM_STATUS_OK;
+        }
+    }
+    return OM_STATUS_INVALID_ARGUMENT;
 }
 
 static Om_Symbol_Id resolved_symbol(const Om_Resolver *resolver,
@@ -323,14 +349,90 @@ static Om_Status declare_symbol(Om_Resolver *resolver,
     return status;
 }
 
+static Om_Builtin_Id builtin_id_for_name(Om_String_View name)
+{
+    static const struct {
+        Om_String_View spelling;
+        Om_Builtin_Id id;
+    } builtins[] = {
+        {{"Unit", 4}, OM_BUILTIN_UNIT},
+        {{"Result", 6}, OM_BUILTIN_RESULT},
+        {{"Node_Ref", 8}, OM_BUILTIN_NODE_REF},
+        {{"Actor_Id", 8}, OM_BUILTIN_ACTOR_ID},
+        {{"Actor_Down_Reason", 17}, OM_BUILTIN_ACTOR_DOWN_REASON},
+        {{"Ok", 2}, OM_BUILTIN_OK},
+        {{"Error", 5}, OM_BUILTIN_ERROR},
+        {{"Actor_Down", 10}, OM_BUILTIN_ACTOR_DOWN},
+        {{"print", 5}, OM_BUILTIN_PRINT},
+        {{OM_SYSTEM_ACTOR_NAME_CONSOLE,
+          sizeof(OM_SYSTEM_ACTOR_NAME_CONSOLE) - 1},
+         OM_BUILTIN_SYSTEM_ACTOR_CONSOLE},
+        {{OM_SYSTEM_ACTOR_NAME_TIMER,
+          sizeof(OM_SYSTEM_ACTOR_NAME_TIMER) - 1},
+         OM_BUILTIN_SYSTEM_ACTOR_TIMER},
+        {{OM_SYSTEM_ACTOR_NAME_FILE_SYSTEM,
+          sizeof(OM_SYSTEM_ACTOR_NAME_FILE_SYSTEM) - 1},
+         OM_BUILTIN_SYSTEM_ACTOR_FILE_SYSTEM},
+        {{OM_SYSTEM_MESSAGE_NAME_CONSOLE_WRITE,
+          sizeof(OM_SYSTEM_MESSAGE_NAME_CONSOLE_WRITE) - 1},
+         OM_BUILTIN_SYSTEM_MESSAGE_CONSOLE_WRITE},
+        {{OM_SYSTEM_MESSAGE_NAME_CONSOLE_WRITE_COMPLETED,
+          sizeof(OM_SYSTEM_MESSAGE_NAME_CONSOLE_WRITE_COMPLETED) - 1},
+         OM_BUILTIN_SYSTEM_MESSAGE_CONSOLE_WRITE_COMPLETED},
+        {{OM_SYSTEM_MESSAGE_NAME_FILE_READ,
+          sizeof(OM_SYSTEM_MESSAGE_NAME_FILE_READ) - 1},
+         OM_BUILTIN_SYSTEM_MESSAGE_FILE_READ},
+        {{OM_SYSTEM_MESSAGE_NAME_FILE_READ_COMPLETED,
+          sizeof(OM_SYSTEM_MESSAGE_NAME_FILE_READ_COMPLETED) - 1},
+         OM_BUILTIN_SYSTEM_MESSAGE_FILE_READ_COMPLETED},
+        {{OM_SYSTEM_MESSAGE_NAME_FILE_WRITE,
+          sizeof(OM_SYSTEM_MESSAGE_NAME_FILE_WRITE) - 1},
+         OM_BUILTIN_SYSTEM_MESSAGE_FILE_WRITE},
+        {{OM_SYSTEM_MESSAGE_NAME_FILE_WRITE_COMPLETED,
+          sizeof(OM_SYSTEM_MESSAGE_NAME_FILE_WRITE_COMPLETED) - 1},
+         OM_BUILTIN_SYSTEM_MESSAGE_FILE_WRITE_COMPLETED},
+        {{OM_SYSTEM_MESSAGE_NAME_TIMER_AFTER,
+          sizeof(OM_SYSTEM_MESSAGE_NAME_TIMER_AFTER) - 1},
+         OM_BUILTIN_SYSTEM_MESSAGE_TIMER_AFTER},
+    };
+    for (size_t index = 0; index < sizeof(builtins) / sizeof(builtins[0]);
+         ++index) {
+        if (om_string_view_equal(name, builtins[index].spelling)) {
+            return builtins[index].id;
+        }
+    }
+    return OM_BUILTIN_NONE;
+}
+
+bool om_builtin_id_is_system_actor(Om_Builtin_Id id)
+{
+    return id == OM_BUILTIN_SYSTEM_ACTOR_CONSOLE
+        || id == OM_BUILTIN_SYSTEM_ACTOR_TIMER
+        || id == OM_BUILTIN_SYSTEM_ACTOR_FILE_SYSTEM;
+}
+
+bool om_builtin_id_is_system_message(Om_Builtin_Id id)
+{
+    return id >= OM_BUILTIN_SYSTEM_MESSAGE_CONSOLE_WRITE
+        && id <= OM_BUILTIN_SYSTEM_MESSAGE_TIMER_AFTER;
+}
+
 static Om_Status add_builtin(Om_Resolver *resolver, Om_String_View name)
 {
     Om_Symbol_Id symbol = OM_SYMBOL_ID_INVALID;
-    return create_symbol(resolver, OM_MODULE_ID_INVALID, resolver->prelude_scope,
-                         name, OM_SYMBOL_BUILTIN,
-                         (Om_Source_Span){OM_SOURCE_ID_INVALID, 0, 0},
-                         OM_AST_NODE_ID_INVALID, true, false,
-                         OM_MODULE_ID_INVALID, &symbol);
+    Om_Status status = create_symbol(
+        resolver, OM_MODULE_ID_INVALID, resolver->prelude_scope, name,
+        OM_SYMBOL_BUILTIN,
+        (Om_Source_Span){OM_SOURCE_ID_INVALID, 0, 0},
+        OM_AST_NODE_ID_INVALID, true, false, OM_MODULE_ID_INVALID, &symbol);
+    if (status == OM_STATUS_OK) {
+        Om_Symbol *entry = om_vector_at(&resolver->symbols, symbol.value);
+        if (entry == NULL) {
+            return OM_STATUS_INVALID_ARGUMENT;
+        }
+        entry->builtin_id = builtin_id_for_name(name);
+    }
+    return status;
 }
 
 static bool source_native_abi_type_supported(Om_Native_Abi_Type type,
@@ -566,30 +668,6 @@ static Om_Status setup_prelude(Om_Resolver *resolver,
     return status;
 }
 
-static bool is_system_message_name(Om_String_View name)
-{
-    static const char *const names[] = {
-        OM_SYSTEM_MESSAGE_NAME_CONSOLE_WRITE,
-        OM_SYSTEM_MESSAGE_NAME_CONSOLE_WRITE_COMPLETED,
-        OM_SYSTEM_MESSAGE_NAME_FILE_READ,
-        OM_SYSTEM_MESSAGE_NAME_FILE_READ_COMPLETED,
-        OM_SYSTEM_MESSAGE_NAME_FILE_WRITE,
-        OM_SYSTEM_MESSAGE_NAME_FILE_WRITE_COMPLETED,
-        OM_SYSTEM_MESSAGE_NAME_TIMER_AFTER
-    };
-    for (size_t index = 0; index < sizeof(names) / sizeof(names[0]); ++index) {
-        size_t length = 0;
-        while (names[index][length] != '\0') {
-            ++length;
-        }
-        if (om_name_equal_case_insensitive(name,
-                (Om_String_View){names[index], length})) {
-            return true;
-        }
-    }
-    return false;
-}
-
 static Om_String_View module_alias_name(const Om_Module_Project *project,
                                         Om_Module_Id module)
 {
@@ -741,16 +819,17 @@ static Om_Status resolve_module_member(Om_Resolver *resolver,
         return OM_STATUS_OK;
     }
     if (receiver->kind == OM_SYMBOL_BUILTIN
-        && om_name_equal_case_insensitive(
-            receiver->name, (Om_String_View){"Actor_Down_Reason", 17})) {
+        && receiver->builtin_id == OM_BUILTIN_ACTOR_DOWN_REASON) {
         static const Om_String_View members[] = {
             {"normal", 6}, {"failed", 6}, {"node_unreachable", 16}
         };
         for (size_t index = 0; index < sizeof(members) / sizeof(members[0]);
              ++index) {
             if (om_string_view_equal(member->name, members[index])) {
-                return set_node_symbol(resolver, module, member_id,
-                                       receiver_symbol);
+                return set_node_builtin_member(
+                    resolver, module, member_id, receiver_symbol,
+                    (Om_Builtin_Member_Id)(OM_BUILTIN_MEMBER_ACTOR_DOWN_REASON_NORMAL
+                                           + index));
             }
         }
         return report_undefined(resolver, module, member_name_span(member));
@@ -1312,9 +1391,8 @@ static Om_Status resolve_receive(Om_Resolver *resolver,
     const Om_Symbol *message = symbol_at(resolver, message_id);
     const bool system_message = message != NULL
         && message->kind == OM_SYMBOL_BUILTIN
-        && (om_name_equal_case_insensitive(receive->name,
-                                           (Om_String_View){"Actor_Down", 10})
-            || is_system_message_name(receive->name));
+        && (message->builtin_id == OM_BUILTIN_ACTOR_DOWN
+            || om_builtin_id_is_system_message(message->builtin_id));
     if (message == NULL
         || (message->kind != OM_SYMBOL_MESSAGE && !system_message)) {
         Om_Status status = report_undefined(resolver, module, receive->span);
@@ -1573,6 +1651,24 @@ Om_Symbol_Id om_resolution_symbol_for_node(
         }
     }
     return OM_SYMBOL_ID_INVALID;
+}
+
+Om_Builtin_Member_Id om_resolution_builtin_member_for_node(
+    const Om_Resolution_Result *result,
+    Om_Module_Id module_id,
+    Om_Ast_Node_Id node_id)
+{
+    if (result == NULL) {
+        return OM_BUILTIN_MEMBER_NONE;
+    }
+    for (size_t index = 0; index < result->resolved_node_count; ++index) {
+        const Om_Resolved_Node *entry = &result->resolved_nodes[index];
+        if (entry->module_id.value == module_id.value
+            && entry->node_id.value == node_id.value) {
+            return entry->builtin_member_id;
+        }
+    }
+    return OM_BUILTIN_MEMBER_NONE;
 }
 
 Om_Scope_Id om_resolution_scope_for_node(

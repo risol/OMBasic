@@ -14,7 +14,7 @@ jobs:
   windows-release:
     runs-on: windows-2025
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
@@ -57,3 +57,23 @@ jobs:
           & $hello
       - name: Verify installed SDK with build tree removed
         run: python tests/tooling/install_sdk_without_build_tree_test.py cmake build/windows-release . Release
+      - name: Stage the SDK with build provenance
+        shell: pwsh
+        run: |
+          $package = Join-Path $PWD 'build/package/windows'
+          cmake --install build/windows-release --prefix $package
+          python tools/release/write_provenance.py `
+            --root . `
+            --output (Join-Path $package 'share/ombasic/release-provenance.json') `
+            --target x86_64-pc-windows-msvc `
+            --llvm-version 23.1.4 `
+            --clang "$env:LLVM_ROOT/bin/clang-cl.exe" `
+            --lld "$env:LLVM_ROOT/bin/lld-link.exe"
+          Compress-Archive -Path (Join-Path $package '*') `
+            -DestinationPath build/ombasic-windows-sdk.zip -Force
+      - name: Upload the Windows SDK artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ombasic-windows-sdk
+          path: build/ombasic-windows-sdk.zip
+          if-no-files-found: error

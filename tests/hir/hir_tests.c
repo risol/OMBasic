@@ -343,7 +343,7 @@ static bool test_typed_hir_lower_dump_and_verify(void)
                       om_status_name(specialization_status));
     }
     HIR_ASSERT(specialization_status == OM_STATUS_OK);
-    HIR_ASSERT(specialization.diagnostic_count == 2);
+    HIR_ASSERT(specialization.diagnostic_count == 1);
     HIR_ASSERT(specialization.instance_count > 0
                && specialization.instance_count < 64);
     const Om_Hir_Entity *identity_entity = NULL;
@@ -371,22 +371,18 @@ static bool test_typed_hir_lower_dump_and_verify(void)
     }
     HIR_ASSERT(identity_entity != NULL && unwrap_entity != NULL
                && cycle_left_entity != NULL);
-    bool saw_unwrap_diagnostic = false;
     bool saw_cycle_left_diagnostic = false;
     for (size_t index = 0; index < specialization.diagnostic_count; ++index) {
         const Om_Specialization_Diagnostic *diagnostic =
             &specialization.diagnostics[index];
         HIR_ASSERT(diagnostic->code == OM_SPECIALIZATION_DIAGNOSTIC_E1002);
-        if (diagnostic->symbol_id.value == unwrap_entity->symbol_id.value) {
-            saw_unwrap_diagnostic = true;
-        } else if (diagnostic->symbol_id.value
-                   == cycle_left_entity->symbol_id.value) {
+        if (diagnostic->symbol_id.value == cycle_left_entity->symbol_id.value) {
             saw_cycle_left_diagnostic = true;
         } else {
             HIR_ASSERT(false);
         }
     }
-    HIR_ASSERT(saw_unwrap_diagnostic && saw_cycle_left_diagnostic);
+    HIR_ASSERT(saw_cycle_left_diagnostic);
     bool saw_list_descriptor_type = false;
     bool saw_map_descriptor_type = false;
     bool saw_result_descriptor_type = false;
@@ -411,8 +407,13 @@ static bool test_typed_hir_lower_dump_and_verify(void)
     size_t identity_instance_count = 0;
     size_t identity_int_count = 0;
     size_t identity_string_count = 0;
+    size_t unwrap_instance_count = 0;
     for (size_t index = 0; index < specialization.instance_count; ++index) {
         const Om_Function_Instance *instance = &specialization.instances[index];
+        if (instance->symbol_id.value == unwrap_entity->symbol_id.value) {
+            HIR_ASSERT(instance->type_argument_count == 2);
+            ++unwrap_instance_count;
+        }
         if (instance->symbol_id.value != identity_entity->symbol_id.value) {
             continue;
         }
@@ -449,7 +450,8 @@ static bool test_typed_hir_lower_dump_and_verify(void)
         ++identity_instance_count;
     }
     HIR_ASSERT(identity_instance_count == 2 && identity_int_count == 1
-               && identity_string_count == 1);
+               && identity_string_count == 1
+               && unwrap_instance_count == 1);
     HIR_ASSERT(om_hir_dump(&hir, &first_dump) == OM_STATUS_OK);
     HIR_ASSERT(om_hir_dump(&hir, &second_dump) == OM_STATUS_OK);
     HIR_ASSERT(first_dump.length == second_dump.length

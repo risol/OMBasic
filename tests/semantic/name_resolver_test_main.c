@@ -6,6 +6,7 @@ bool om_test_name_resolution_alias_collision(void);
 bool om_test_name_resolution_declaration_diagnostics(void);
 bool om_test_name_resolution_bindings_and_scopes(void);
 bool om_test_name_resolution_patterns_loops_and_actor(void);
+bool om_test_name_resolution_builtin_identities(void);
 bool om_test_name_resolution_undefined_name(void);
 bool om_test_type_store_structural_unification(void);
 bool om_test_type_store_occurs_check_and_rollback(void);
@@ -28,6 +29,8 @@ int main(void)
          om_test_name_resolution_bindings_and_scopes},
         {"name_resolution_patterns_loops_and_actor",
          om_test_name_resolution_patterns_loops_and_actor},
+        {"name_resolution_builtin_identities",
+         om_test_name_resolution_builtin_identities},
         {"name_resolution_undefined_name", om_test_name_resolution_undefined_name},
         {"type_store_structural_unification",
          om_test_type_store_structural_unification},

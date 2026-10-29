@@ -120,14 +120,17 @@ static Om_Status expect_keyword(Om_Parser *parser, Om_Keyword keyword)
 static Om_Status expect_name(Om_Parser *parser, bool entity, Om_Token *out)
 {
     const Om_Token *token = peek(parser);
-    const bool correct_kind = entity ? token->kind == OM_TOKEN_ENTITY_IDENTIFIER
-                                     : token->kind == OM_TOKEN_IDENTIFIER;
-    if (correct_kind || token->kind == OM_TOKEN_INVALID_IDENTIFIER) {
+    if (token->kind == OM_TOKEN_IDENTIFIER
+        || token->kind == OM_TOKEN_ENTITY_IDENTIFIER
+        || token->kind == OM_TOKEN_INVALID_IDENTIFIER) {
+        const bool wrong_category = token->kind != OM_TOKEN_INVALID_IDENTIFIER
+            && (entity ? token->kind != OM_TOKEN_ENTITY_IDENTIFIER
+                       : token->kind != OM_TOKEN_IDENTIFIER);
         *out = *advance(parser);
-        return OM_STATUS_OK;
-    }
-    if (is_name_token(token)) {
-        *out = *advance(parser);
+        return wrong_category
+            ? add_diagnostic(parser, OM_PARSE_DIAGNOSTIC_E0102, token->span,
+                             OM_TOKEN_INVALID_IDENTIFIER, OM_KEYWORD_NONE)
+            : OM_STATUS_OK;
     }
     return add_diagnostic(parser, OM_PARSE_DIAGNOSTIC_E0202, token->span,
                           entity ? OM_TOKEN_ENTITY_IDENTIFIER : OM_TOKEN_IDENTIFIER,
@@ -1936,6 +1939,7 @@ Om_Status om_parser_parse(const Om_Lexer_Result *lexed, Om_Parser_Result *result
 const char *om_parse_diagnostic_code_name(Om_Parse_Diagnostic_Code code)
 {
     switch (code) {
+    case OM_PARSE_DIAGNOSTIC_E0102: return "E0102";
     case OM_PARSE_DIAGNOSTIC_E0202: return "E0202";
     case OM_PARSE_DIAGNOSTIC_E0203: return "E0203";
     case OM_PARSE_DIAGNOSTIC_E0204: return "E0204";

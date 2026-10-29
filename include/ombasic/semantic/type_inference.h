@@ -9,7 +9,8 @@
 typedef enum Om_Type_Inference_Diagnostic_Code {
     OM_TYPE_INFERENCE_DIAGNOSTIC_E0401 = 401,
     OM_TYPE_INFERENCE_DIAGNOSTIC_E0402 = 402,
-    OM_TYPE_INFERENCE_DIAGNOSTIC_E0403 = 403
+    OM_TYPE_INFERENCE_DIAGNOSTIC_E0403 = 403,
+    OM_TYPE_INFERENCE_DIAGNOSTIC_E0404 = 404
 } Om_Type_Inference_Diagnostic_Code;
 
 typedef struct Om_Inferred_Node {

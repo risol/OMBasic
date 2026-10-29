@@ -1,0 +1,32 @@
+name: conformance
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  conformance:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Validate the schema and fixtures
+        run: python tests/conformance/validate_manifest.py tests/conformance/manifest.json
+      - name: Require complete Standard rule coverage
+        run: >-
+          python tools/conformance_check/check.py --root .
+          --report build/reports/conformance-coverage.txt
+      - name: Upload the conformance coverage report
+        uses: actions/upload-artifact@v7
+        with:
+          name: conformance-coverage
+          path: build/reports/conformance-coverage.txt
+          if-no-files-found: error

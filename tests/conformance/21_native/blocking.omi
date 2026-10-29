@@ -1,0 +1,7 @@
+NATIVE "native_blocking"
+FUNCTION wait_for_data(): CInt
+    SYMBOL "om_native_wait_for_data"
+    EFFECT NATIVE
+    BLOCKING
+END FUNCTION
+END NATIVE

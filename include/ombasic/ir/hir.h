@@ -134,6 +134,8 @@ typedef struct Om_Hir_Node {
     Om_Type_Id type_id;
     Om_Symbol_Id symbol_id;
     Om_Symbol_Id related_symbol_id;
+    Om_Builtin_Id builtin_id;
+    Om_Builtin_Member_Id builtin_member_id;
     uint32_t effects;
     uint32_t flags;
     uint32_t child_start;

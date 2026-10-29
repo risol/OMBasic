@@ -62,3 +62,11 @@ selects an explicit per-compilation target, but the current SDK can emit and
 link only for its host triple. Cross-target builds need both a matching
 target-specific OMBasic Runtime and platform sysroot. See the
 [target model](target_model.md).
+
+## Native shared-library deployment
+
+A successful link does not guarantee that a deployed executable can locate
+its native shared libraries. Applications are responsible for placing DLLs,
+shared objects, and dylibs where the platform loader can find them, or for
+configuring the platform's supported loader paths and package installation.
+OMBasic 0.1 does not bundle these libraries automatically.

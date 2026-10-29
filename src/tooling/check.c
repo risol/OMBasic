@@ -301,6 +301,52 @@ static bool is_supported_emit_kind(const char *emit_kind)
             || strcmp(emit_kind, "obj") == 0);
 }
 
+static const Om_Source_Text *source_for_module(
+    const Om_Module_Project *project, Om_Module_Id module_id);
+
+static void print_mir_diagnostics_json(
+    const Om_Module_Project *project,
+    const Om_Mir_Verification_Result *verification)
+{
+    Om_Tooling_Diagnostic *items = verification->diagnostic_count == 0 ? NULL
+        : om_alloc_array(verification->diagnostic_count, sizeof(*items));
+    if (verification->diagnostic_count != 0 && items == NULL) {
+        (void)fprintf(stderr, "ombasic: out of memory while encoding diagnostics\n");
+        return;
+    }
+    static const char stage[] = "mir";
+    static const char message[] = "MIR verification rejected this program.";
+    for (size_t index = 0; index < verification->diagnostic_count; ++index) {
+        const Om_Mir_Diagnostic *diagnostic = &verification->diagnostics[index];
+        const Om_Module_Id module_id = {diagnostic->span.source.value};
+        items[index] = (Om_Tooling_Diagnostic){
+            .stage = {stage, sizeof(stage) - 1},
+            .code = literal_view(om_mir_diagnostic_code_name(diagnostic->code)),
+            .message = {message, sizeof(message) - 1},
+            .source = source_for_module(project, module_id),
+            .span = diagnostic->span,
+        };
+        if (items[index].source == NULL) {
+            om_free(items);
+            (void)fprintf(stderr,
+                "ombasic: cannot map MIR diagnostic to source module\n");
+            return;
+        }
+    }
+    Om_Tooling_Json_Result result = {0};
+    const Om_Status status = om_tooling_diagnostics_to_json(
+        items, verification->diagnostic_count, &result);
+    if (status == OM_STATUS_OK) {
+        (void)fwrite(result.data, 1, result.length, stdout);
+        (void)fputc('\n', stdout);
+    } else {
+        (void)fprintf(stderr, "ombasic: could not encode diagnostics (%s)\n",
+                      om_status_name(status));
+    }
+    om_tooling_json_result_destroy(&result);
+    om_free(items);
+}
+
 static int generate_native_program(
     const Om_Target *target,
     const Om_Module_Project *source_project,
@@ -318,7 +364,8 @@ static int generate_native_program(
     const char *entry_name,
     const char *requested_output,
     const char *emit_kind,
-    bool run_after_link
+    bool run_after_link,
+    bool diagnostics_json
 )
 {
     char *temporary_output = NULL;
@@ -422,11 +469,16 @@ static int generate_native_program(
         goto cleanup;
     }
     if (compilation.mir_verification.diagnostic_count != 0) {
-        for (size_t index = 0;
-             index < compilation.mir_verification.diagnostic_count; ++index) {
-            (void)fprintf(stderr, "ombasic: MIR verification failed (%s)\n",
-                om_mir_diagnostic_code_name(
-                    compilation.mir_verification.diagnostics[index].code));
+        if (diagnostics_json) {
+            print_mir_diagnostics_json(source_project,
+                                       &compilation.mir_verification);
+        } else {
+            for (size_t index = 0;
+                 index < compilation.mir_verification.diagnostic_count; ++index) {
+                (void)fprintf(stderr, "ombasic: MIR verification failed (%s)\n",
+                    om_mir_diagnostic_code_name(
+                        compilation.mir_verification.diagnostics[index].code));
+            }
         }
         goto cleanup;
     }
@@ -435,6 +487,18 @@ static int generate_native_program(
             (void)fprintf(stderr,
                 "ombasic: LLVM object emission failed (%s)\n",
                 om_status_name(status));
+        } else if (compilation.failed_stage == OM_COMPILER_STAGE_HIR_LOWER) {
+            (void)fprintf(stderr, "ombasic: HIR lowering failed (%s)\n",
+                          om_status_name(status));
+        } else if (compilation.failed_stage == OM_COMPILER_STAGE_SPECIALIZE) {
+            (void)fprintf(stderr, "ombasic: specialization failed (%s)\n",
+                          om_status_name(status));
+        } else if (compilation.failed_stage == OM_COMPILER_STAGE_MIR_LOWER) {
+            (void)fprintf(stderr, "ombasic: MIR lowering failed (%s)\n",
+                          om_status_name(status));
+        } else if (compilation.failed_stage == OM_COMPILER_STAGE_SOURCE_LOCATIONS) {
+            (void)fprintf(stderr, "ombasic: source location mapping failed (%s)\n",
+                          om_status_name(status));
         } else if (compilation.failed_stage == OM_COMPILER_STAGE_HIR_EMIT) {
             (void)fprintf(stderr, "ombasic: HIR emission failed (%s)\n",
                           om_status_name(status));
@@ -651,6 +715,8 @@ static const char *type_message(Om_Type_Inference_Diagnostic_Code code)
         return "Empty collection has no contextual type for inference.";
     case OM_TYPE_INFERENCE_DIAGNOSTIC_E0403:
         return "Native callback must bind to a unique Message with matching fields and be registered inside an Actor RECEIVE.";
+    case OM_TYPE_INFERENCE_DIAGNOSTIC_E0404:
+        return "Result type parameters cannot be inferred from this context.";
     default:
         return "Type inference error.";
     }
@@ -1386,7 +1452,7 @@ int om_cli_compile_command(int argc, char **argv, const char *command)
             parsed, module_count, &resolution, &inference, &semantic,
             &native_project, library_directories, library_directory_count,
             resource_dir_override, sysroot, entry_name, output_path, emit_kind,
-            strcmp(command, "run") == 0);
+            strcmp(command, "run") == 0, json);
     }
 
 cleanup:

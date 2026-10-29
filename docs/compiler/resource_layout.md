@@ -18,6 +18,7 @@ It does not embed build-tree archive paths.
 │   └── ombasic_foundation[.lib|.a]
 └── share/ombasic/
     ├── target-manifest.json
+    ├── release-provenance.json (in CI SDK archives)
     └── tools/
         ├── ombasic_bind.py
         └── ombasic_lsp.py

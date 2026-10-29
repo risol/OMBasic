@@ -1,7 +1,6 @@
 #include "../semantic_model/semantic_analysis_internal.h"
 
 #include "ombasic/syntax/ast.h"
-#include "ombasic/semantic/system_actors.h"
 #include "ombasic/syntax/name_rules.h"
 
 static bool is_actor_down(const Om_Semantic_Analysis_Context *context,
@@ -9,47 +8,25 @@ static bool is_actor_down(const Om_Semantic_Analysis_Context *context,
 {
     const Om_Symbol *symbol = om_semantic_symbol(context, symbol_id);
     return symbol != NULL && symbol->kind == OM_SYMBOL_BUILTIN
-        && om_string_view_equal(symbol->name,
-                                (Om_String_View){"Actor_Down", 10});
+        && symbol->builtin_id == OM_BUILTIN_ACTOR_DOWN;
 }
 
 static bool is_system_message(const Om_Semantic_Analysis_Context *context,
                               Om_Symbol_Id symbol_id)
 {
     const Om_Symbol *symbol = om_semantic_symbol(context, symbol_id);
-    if (symbol == NULL || symbol->kind != OM_SYMBOL_BUILTIN) {
-        return false;
-    }
-    static const char *const names[] = {
-        OM_SYSTEM_MESSAGE_NAME_CONSOLE_WRITE,
-        OM_SYSTEM_MESSAGE_NAME_CONSOLE_WRITE_COMPLETED,
-        OM_SYSTEM_MESSAGE_NAME_FILE_READ,
-        OM_SYSTEM_MESSAGE_NAME_FILE_READ_COMPLETED,
-        OM_SYSTEM_MESSAGE_NAME_FILE_WRITE,
-        OM_SYSTEM_MESSAGE_NAME_FILE_WRITE_COMPLETED,
-        OM_SYSTEM_MESSAGE_NAME_TIMER_AFTER
-    };
-    for (size_t index = 0; index < sizeof(names) / sizeof(names[0]); ++index) {
-        size_t length = 0;
-        while (names[index][length] != '\0') {
-            ++length;
-        }
-        if (om_name_equal_case_insensitive(
-                symbol->name, (Om_String_View){names[index], length})) {
-            return true;
-        }
-    }
-    return false;
+    return symbol != NULL && symbol->kind == OM_SYMBOL_BUILTIN
+        && om_builtin_id_is_system_message(symbol->builtin_id);
 }
 
 static Om_Symbol_Id find_builtin_symbol(
     const Om_Semantic_Analysis_Context *context,
-    Om_String_View name)
+    Om_Builtin_Id builtin_id)
 {
     for (size_t index = 0; index < context->resolution->symbol_count; ++index) {
         const Om_Symbol *symbol = &context->resolution->symbols[index];
         if (symbol->kind == OM_SYMBOL_BUILTIN
-            && om_name_equal_case_insensitive(symbol->name, name)) {
+            && symbol->builtin_id == builtin_id) {
             return symbol->id;
         }
     }
@@ -90,31 +67,25 @@ static Om_Status collect_actor_protocols(
     }
 
     static const struct {
-        const char *actor_name;
-        const char *message_name;
+        Om_Builtin_Id actor;
+        Om_Builtin_Id message;
     } system_protocols[] = {
-        {OM_SYSTEM_ACTOR_NAME_CONSOLE, OM_SYSTEM_MESSAGE_NAME_CONSOLE_WRITE},
-        {OM_SYSTEM_ACTOR_NAME_TIMER, OM_SYSTEM_MESSAGE_NAME_TIMER_AFTER},
-        {OM_SYSTEM_ACTOR_NAME_FILE_SYSTEM, OM_SYSTEM_MESSAGE_NAME_FILE_READ},
-        {OM_SYSTEM_ACTOR_NAME_FILE_SYSTEM, OM_SYSTEM_MESSAGE_NAME_FILE_WRITE}
+        {OM_BUILTIN_SYSTEM_ACTOR_CONSOLE,
+         OM_BUILTIN_SYSTEM_MESSAGE_CONSOLE_WRITE},
+        {OM_BUILTIN_SYSTEM_ACTOR_TIMER,
+         OM_BUILTIN_SYSTEM_MESSAGE_TIMER_AFTER},
+        {OM_BUILTIN_SYSTEM_ACTOR_FILE_SYSTEM,
+         OM_BUILTIN_SYSTEM_MESSAGE_FILE_READ},
+        {OM_BUILTIN_SYSTEM_ACTOR_FILE_SYSTEM,
+         OM_BUILTIN_SYSTEM_MESSAGE_FILE_WRITE}
     };
     for (size_t index = 0;
          index < sizeof(system_protocols) / sizeof(system_protocols[0]);
          ++index) {
-        size_t actor_name_length = 0;
-        size_t message_name_length = 0;
-        while (system_protocols[index].actor_name[actor_name_length] != '\0') {
-            ++actor_name_length;
-        }
-        while (system_protocols[index].message_name[message_name_length] != '\0') {
-            ++message_name_length;
-        }
         const Om_Symbol_Id actor = find_builtin_symbol(
-            context, (Om_String_View){system_protocols[index].actor_name,
-                                      actor_name_length});
+            context, system_protocols[index].actor);
         const Om_Symbol_Id message = find_builtin_symbol(
-            context, (Om_String_View){system_protocols[index].message_name,
-                                      message_name_length});
+            context, system_protocols[index].message);
         if (actor.value == UINT32_MAX || message.value == UINT32_MAX) {
             return OM_STATUS_INVALID_ARGUMENT;
         }

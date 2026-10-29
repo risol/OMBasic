@@ -1,0 +1,2 @@
+CLASS User
+END CLASS

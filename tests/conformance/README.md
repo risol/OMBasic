@@ -1,14 +1,32 @@
-# Conformance fixtures
+# Language conformance fixtures
 
-Add language-standard cases under a directory named by its standard section, for example 05_identifiers or 16_actor. Each case records:
+These fixtures verify user-observable behavior against the normative rules in
+[`OMBasic-Language-Standard.md`](../../OMBasic-Language-Standard.md). Put source
+files under directories named for their language area and add each executable
+case to `manifest.json`.
 
-- a stable case ID containing the standard section;
-- a .bas input;
-- whether compilation should succeed;
-- the expected diagnostic code and span for failures.
+Manifest schema version 2 gives every case a stable kebab-case ID, one or more
+`OM-SS.RR` Rule IDs, a case `kind`, source or project entry, optional platform
+and target constraints, tags, and an expected result. Compile failures assert
+the stable diagnostic code and primary span. Span lines and UTF-8 byte columns
+are one-based; the end column is exclusive. Optional diagnostic `text` must
+match the token selected by that span.
 
-The compiler test runner will consume these fixtures after the lexer and parser are available. Foundation tests run earlier through CTest.
+Supported kinds are:
 
-The checked-in manifest is manifest.json. Version 1 records the standard section, source path relative to this directory, acceptance result, and (for failures) a stable diagnostic code plus primary span. Span lines and UTF-8 byte columns are one-based; the end column is exclusive. These fixtures define the contract for the future compiler conformance runner and may be curated before that runner exists.
+- `compile`: compile success or failure;
+- `run`: compile successfully and compare process exit code and optional exact
+  stdout/stderr;
+- `multi_file`: compile (and optionally run) an entry in a project root;
+- `multi_process`: run a scenario script under `runner/scenarios/`.
 
-CTest validates the manifest structure and confirms that every expected primary span selects the documented source token.
+Tags include `lexer`, `parser`, `semantic`, `type`, `effect`, `actor`,
+`runtime`, `native`, `distribution`, `diagnostic`, `windows`, `linux`, and
+`slow`. Release CTest runs every non-slow case supported by the current
+platform. Slow cases require the runner's `--include-slow` option.
+
+`validate_manifest.py` validates schema, fixture paths, and diagnostic spans.
+`tools/conformance_check/check.py` extracts normative Rule IDs from the
+Standard, rejects unknown references, requires 100% Rule coverage, and writes
+the coverage report. `runner/conformance_runner.py` invokes `ombasic check`
+and `ombasic run` for compiler-facing cases.

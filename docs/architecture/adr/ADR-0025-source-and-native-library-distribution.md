@@ -1,6 +1,6 @@
 # ADR-0025: Separate OMBasic source libraries from native binary libraries
 
--   Status: Proposed
+-   Status: Accepted
 -   Date: 2026-10-29
 
 ## Context

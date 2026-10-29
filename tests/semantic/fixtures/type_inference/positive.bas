@@ -54,7 +54,7 @@ ACTION main()
     concrete_result = make_result(TRUE)
     contextual_list = has_text([])
     contextual_map = has_key({})
-    unwrapped = unwrap_result(Ok(2))
+    unwrapped = unwrap_result(make_result(TRUE))
     recursive_value = cycle_left(3)
     chosen_value = choose(TRUE)
     pair_value = Pair([1], {"key": "one"})
@@ -63,7 +63,7 @@ ACTION main()
     first = values[0]
     mapping = {"key": 3}
     mapped = mapping["key"]
-    outcome = Ok(1)
+    outcome = make_result(TRUE)
     SELECT outcome
     CASE Ok(value)
         selected = value

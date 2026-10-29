@@ -15,11 +15,10 @@ typedef struct Om_Effect_Scan {
     uint32_t *symbol_effects;
 } Om_Effect_Scan;
 
-static bool is_pure_builtin(Om_String_View name)
+static bool is_pure_builtin(Om_Builtin_Id id)
 {
-    return om_string_view_equal(name, (Om_String_View){"Ok", 2})
-        || om_string_view_equal(name, (Om_String_View){"Error", 5})
-        || om_string_view_equal(name, (Om_String_View){"Actor_Down", 10});
+    return id == OM_BUILTIN_OK || id == OM_BUILTIN_ERROR
+        || id == OM_BUILTIN_ACTOR_DOWN;
 }
 
 static uint32_t native_effect_for_builtin(const Om_Symbol *symbol)
@@ -53,7 +52,7 @@ static uint32_t builtin_effect(const Om_Symbol *symbol)
     if (symbol != NULL && symbol->native_module != NULL) {
         return native_effect_for_builtin(symbol);
     }
-    return symbol != NULL && !is_pure_builtin(symbol->name)
+    return symbol != NULL && !is_pure_builtin(symbol->builtin_id)
         ? (uint32_t)OM_EFFECT_NATIVE : (uint32_t)OM_EFFECT_NONE;
 }
 

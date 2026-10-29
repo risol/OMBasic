@@ -26,6 +26,41 @@ typedef enum Om_Symbol_Kind {
     OM_SYMBOL_FIELD
 } Om_Symbol_Kind;
 
+/* Stable semantic identities for language-provided prelude declarations.
+   Spelling is resolved to these values when the prelude is registered. */
+typedef enum Om_Builtin_Id {
+    OM_BUILTIN_NONE = 0,
+    OM_BUILTIN_UNIT,
+    OM_BUILTIN_RESULT,
+    OM_BUILTIN_NODE_REF,
+    OM_BUILTIN_ACTOR_ID,
+    OM_BUILTIN_ACTOR_DOWN_REASON,
+    OM_BUILTIN_OK,
+    OM_BUILTIN_ERROR,
+    OM_BUILTIN_ACTOR_DOWN,
+    OM_BUILTIN_PRINT,
+    OM_BUILTIN_SYSTEM_ACTOR_CONSOLE,
+    OM_BUILTIN_SYSTEM_ACTOR_TIMER,
+    OM_BUILTIN_SYSTEM_ACTOR_FILE_SYSTEM,
+    OM_BUILTIN_SYSTEM_MESSAGE_CONSOLE_WRITE,
+    OM_BUILTIN_SYSTEM_MESSAGE_CONSOLE_WRITE_COMPLETED,
+    OM_BUILTIN_SYSTEM_MESSAGE_FILE_READ,
+    OM_BUILTIN_SYSTEM_MESSAGE_FILE_READ_COMPLETED,
+    OM_BUILTIN_SYSTEM_MESSAGE_FILE_WRITE,
+    OM_BUILTIN_SYSTEM_MESSAGE_FILE_WRITE_COMPLETED,
+    OM_BUILTIN_SYSTEM_MESSAGE_TIMER_AFTER
+} Om_Builtin_Id;
+
+typedef enum Om_Builtin_Member_Id {
+    OM_BUILTIN_MEMBER_NONE = 0,
+    OM_BUILTIN_MEMBER_ACTOR_DOWN_REASON_NORMAL,
+    OM_BUILTIN_MEMBER_ACTOR_DOWN_REASON_FAILED,
+    OM_BUILTIN_MEMBER_ACTOR_DOWN_REASON_NODE_UNREACHABLE
+} Om_Builtin_Member_Id;
+
+bool om_builtin_id_is_system_actor(Om_Builtin_Id id);
+bool om_builtin_id_is_system_message(Om_Builtin_Id id);
+
 typedef enum Om_Scope_Kind {
     OM_SCOPE_PRELUDE = 0,
     OM_SCOPE_MODULE,
@@ -54,6 +89,7 @@ typedef struct Om_Symbol {
     Om_Symbol_Id id;
     Om_String_View name;
     Om_Symbol_Kind kind;
+    Om_Builtin_Id builtin_id;
     Om_Source_Span span;
     Om_Scope_Id scope_id;
     Om_Module_Id module_id;
@@ -81,6 +117,7 @@ typedef struct Om_Resolved_Node {
     Om_Module_Id module_id;
     Om_Ast_Node_Id node_id;
     Om_Symbol_Id symbol_id;
+    Om_Builtin_Member_Id builtin_member_id;
 } Om_Resolved_Node;
 
 typedef struct Om_Node_Scope {
@@ -140,6 +177,11 @@ Om_Status om_name_resolve_project(
 );
 void om_resolution_result_destroy(Om_Resolution_Result *result);
 Om_Symbol_Id om_resolution_symbol_for_node(
+    const Om_Resolution_Result *result,
+    Om_Module_Id module_id,
+    Om_Ast_Node_Id node_id
+);
+Om_Builtin_Member_Id om_resolution_builtin_member_for_node(
     const Om_Resolution_Result *result,
     Om_Module_Id module_id,
     Om_Ast_Node_Id node_id

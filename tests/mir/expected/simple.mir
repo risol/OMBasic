@@ -145,181 +145,181 @@ bb21(v225:t3(String), v226:t0(Int), v227:t2(Bool), v228:t2(Bool), v229:t3(String
   cond-br v257 bb22(), bb23()
 bb22():
   v258 = const-bool value=true : t2(Bool)
-  br bb24(v177, v178, v179, v180, v181, v182, v183, v184, v185, v186, v187, v188, v189, v190, v191, v192, v193, v194, v195, v196, v197, v203, v204, v207, v208, v209, v210, v213, v215, v217, v218, v225, v226, v227, v228, v229, v230, v231, v232, v233, v234, v235, v236, v237, v238, v239, v240, v241, v242, v243, v244, v245, v246, v247, v248, v249, v250, v251, v252, v253, v254, v255)
+  br bb24(v225, v226, v227, v228, v229, v230, v231, v232, v233, v234, v235, v236, v237, v238, v239, v240, v241, v242, v243, v244, v245, v246, v247, v248, v249, v250, v251, v252, v253, v254, v255)
 bb23():
   v259 = const-bool value=false : t2(Bool)
-  br bb24(v177, v178, v179, v180, v181, v182, v183, v184, v185, v186, v187, v188, v189, v190, v191, v192, v193, v194, v195, v196, v197, v203, v204, v207, v208, v209, v210, v213, v215, v217, v218, v225, v226, v227, v228, v229, v230, v231, v232, v233, v234, v235, v236, v237, v238, v239, v240, v241, v242, v243, v244, v245, v246, v247, v248, v249, v250, v251, v252, v253, v254, v255)
-bb24(v260:t3(String), v261:t0(Int), v262:t2(Bool), v263:t2(Bool), v264:t3(String), v265:t0(Int), v266:t0(Int), v267:t3(String), v268:t0(Int), v269:t0(Int), v270:t0(Int), v271:t0(Int), v272:t0(Int), v273:t0(Int), v274:t0(Int), v275:t129(List), v276:t0(Int), v277:t0(Int), v278:t133(Map), v279:t3(String), v280:t0(Int), v281:t54(Record), v282:t129(List), v283:t54(Record), v284:t133(Map), v285:t55(Message), v286:t4(Null), v287:t3(String), v288:t2(Bool), v289:t141(Result), v290:t141(Result), v291:t3(String), v292:t0(Int), v293:t2(Bool), v294:t2(Bool), v295:t3(String), v296:t0(Int), v297:t0(Int), v298:t3(String), v299:t0(Int), v300:t0(Int), v301:t0(Int), v302:t0(Int), v303:t0(Int), v304:t0(Int), v305:t0(Int), v306:t129(List), v307:t0(Int), v308:t0(Int), v309:t133(Map), v310:t3(String), v311:t0(Int), v312:t54(Record), v313:t129(List), v314:t54(Record), v315:t133(Map), v316:t55(Message), v317:t4(Null), v318:t3(String), v319:t2(Bool), v320:t141(Result), v321:t141(Result)):
+  br bb24(v225, v226, v227, v228, v229, v230, v231, v232, v233, v234, v235, v236, v237, v238, v239, v240, v241, v242, v243, v244, v245, v246, v247, v248, v249, v250, v251, v252, v253, v254, v255)
+bb24(v260:t3(String), v261:t0(Int), v262:t2(Bool), v263:t2(Bool), v264:t3(String), v265:t0(Int), v266:t0(Int), v267:t3(String), v268:t0(Int), v269:t0(Int), v270:t0(Int), v271:t0(Int), v272:t0(Int), v273:t0(Int), v274:t0(Int), v275:t129(List), v276:t0(Int), v277:t0(Int), v278:t133(Map), v279:t3(String), v280:t0(Int), v281:t54(Record), v282:t129(List), v283:t54(Record), v284:t133(Map), v285:t55(Message), v286:t4(Null), v287:t3(String), v288:t2(Bool), v289:t141(Result), v290:t141(Result)):
   return
 function f1 instance=1 kind=0 symbol=22 signature=t53(Function) entry=bb25 effects=0
-bb25(v322:t0(Int), v323:t0(Int)):
-  v324 = int-add-checked v322, v323 : t0(Int)
-  return v324
+bb25(v291:t0(Int), v292:t0(Int)):
+  v293 = int-add-checked v291, v292 : t0(Int)
+  return v293
 function f2 instance=2 kind=0 symbol=24 signature=t157(Function) entry=bb26 effects=0
-bb26(v325:t123(Function), v326:t0(Int)):
-  v327 = call-indirect v325, v326 : t0(Int)
-  return v327
+bb26(v294:t123(Function), v295:t0(Int)):
+  v296 = call-indirect v294, v295 : t0(Int)
+  return v296
 function f3 instance=3 kind=0 symbol=23 signature=t123(Function) entry=bb27 effects=0
-bb27(v328:t0(Int)):
-  v329 = const-int value=1 : t0(Int)
-  v330 = int-add-checked v328, v329 : t0(Int)
-  return v330
+bb27(v297:t0(Int)):
+  v298 = const-int value=1 : t0(Int)
+  v299 = int-add-checked v297, v298 : t0(Int)
+  return v299
 function f4 instance=4 kind=0 symbol=25 signature=t124(Function) entry=bb28 effects=1
-bb28(v331:t2(Bool), v332:t0(Int), v333:t0(Int)):
-  v334 = const-int value=0 : t0(Int)
-  cond-br v331 bb29(), bb30()
+bb28(v300:t2(Bool), v301:t0(Int), v302:t0(Int)):
+  v303 = const-int value=0 : t0(Int)
+  cond-br v300 bb29(), bb30()
 bb29():
-  br bb31(v331, v332, v333, v332)
+  br bb31(v300, v301, v302, v301)
 bb30():
-  br bb31(v331, v332, v333, v333)
-bb31(v335:t2(Bool), v336:t0(Int), v337:t0(Int), v338:t0(Int)):
-  return v338
+  br bb31(v300, v301, v302, v302)
+bb31(v304:t2(Bool), v305:t0(Int), v306:t0(Int), v307:t0(Int)):
+  return v307
 function f5 instance=5 kind=0 symbol=26 signature=t125(Function) entry=bb32 effects=0
-bb32(v339:t2(Bool)):
-  cond-br v339 bb33(), bb34()
+bb32(v308:t2(Bool)):
+  cond-br v308 bb33(), bb34()
 bb33():
-  v340 = const-int value=1 : t0(Int)
-  return v340
+  v309 = const-int value=1 : t0(Int)
+  return v309
 bb34():
-  v341 = const-int value=2 : t0(Int)
-  return v341
+  v310 = const-int value=2 : t0(Int)
+  return v310
 function f6 instance=6 kind=0 symbol=27 signature=t125(Function) entry=bb35 effects=0
-bb35(v342:t2(Bool)):
-  cond-br v342 bb36(), bb37()
+bb35(v311:t2(Bool)):
+  cond-br v311 bb36(), bb37()
 bb36():
-  v343 = const-int value=1 : t0(Int)
-  return v343
+  v312 = const-int value=1 : t0(Int)
+  return v312
 bb37():
-  v344 = const-int value=2 : t0(Int)
-  return v344
+  v313 = const-int value=2 : t0(Int)
+  return v313
 function f7 instance=7 kind=0 symbol=28 signature=t123(Function) entry=bb38 effects=1
-bb38(v345:t0(Int)):
-  v346 = const-int value=0 : t0(Int)
-  v347 = const-int value=0 : t0(Int)
-  br bb39(v345, v346, v347)
-bb39(v348:t0(Int), v349:t0(Int), v350:t0(Int)):
-  v351 = compare v349, v348 : t2(Bool)
-  cond-br v351 bb40(), bb41(v348, v349, v350)
+bb38(v314:t0(Int)):
+  v315 = const-int value=0 : t0(Int)
+  v316 = const-int value=0 : t0(Int)
+  br bb39(v314, v315, v316)
+bb39(v317:t0(Int), v318:t0(Int), v319:t0(Int)):
+  v320 = compare v318, v317 : t2(Bool)
+  cond-br v320 bb40(), bb41(v317, v318, v319)
 bb40():
-  v352 = int-add-checked v350, v349 : t0(Int)
-  v353 = const-int value=1 : t0(Int)
-  v354 = int-add-checked v349, v353 : t0(Int)
-  br bb39(v348, v354, v352)
-bb41(v355:t0(Int), v356:t0(Int), v357:t0(Int)):
-  return v357
+  v321 = int-add-checked v319, v318 : t0(Int)
+  v322 = const-int value=1 : t0(Int)
+  v323 = int-add-checked v318, v322 : t0(Int)
+  br bb39(v317, v323, v321)
+bb41(v324:t0(Int), v325:t0(Int), v326:t0(Int)):
+  return v326
 function f8 instance=8 kind=0 symbol=29 signature=t123(Function) entry=bb42 effects=1
-bb42(v358:t0(Int)):
-  v359 = const-int value=0 : t0(Int)
-  v360 = const-int value=1 : t0(Int)
-  v361 = const-int value=1 : t0(Int)
-  br bb43(v358, v359, v360)
-bb43(v362:t0(Int), v363:t0(Int), v364:t0(Int)):
-  v365 = const-int value=0 : t0(Int)
-  v366 = compare v361, v365 : t2(Bool)
-  cond-br v366 bb44(), bb45()
+bb42(v327:t0(Int)):
+  v328 = const-int value=0 : t0(Int)
+  v329 = const-int value=1 : t0(Int)
+  v330 = const-int value=1 : t0(Int)
+  br bb43(v327, v328, v329)
+bb43(v331:t0(Int), v332:t0(Int), v333:t0(Int)):
+  v334 = const-int value=0 : t0(Int)
+  v335 = compare v330, v334 : t2(Bool)
+  cond-br v335 bb44(), bb45()
 bb44():
-  v367 = runtime-fault : t5(Unit)
+  v336 = runtime-fault : t5(Unit)
   unreachable
 bb45():
-  v368 = compare v361, v365 : t2(Bool)
-  cond-br v368 bb46(), bb47()
+  v337 = compare v330, v334 : t2(Bool)
+  cond-br v337 bb46(), bb47()
 bb46():
-  v369 = compare v364, v358 : t2(Bool)
-  cond-br v369 bb48(), bb50(v362, v363)
+  v338 = compare v333, v327 : t2(Bool)
+  cond-br v338 bb48(), bb50(v331, v332)
 bb47():
-  v370 = compare v364, v358 : t2(Bool)
-  cond-br v370 bb48(), bb50(v362, v363)
+  v339 = compare v333, v327 : t2(Bool)
+  cond-br v339 bb48(), bb50(v331, v332)
 bb48():
-  v371 = int-add-checked v363, v364 : t0(Int)
-  br bb49(v362, v371, v364)
-bb49(v372:t0(Int), v373:t0(Int), v374:t0(Int)):
-  v375 = int-add-checked v374, v361 : t0(Int)
-  br bb43(v372, v373, v375)
-bb50(v376:t0(Int), v377:t0(Int)):
-  return v377
+  v340 = int-add-checked v332, v333 : t0(Int)
+  br bb49(v331, v340, v333)
+bb49(v341:t0(Int), v342:t0(Int), v343:t0(Int)):
+  v344 = int-add-checked v343, v330 : t0(Int)
+  br bb43(v341, v342, v344)
+bb50(v345:t0(Int), v346:t0(Int)):
+  return v346
 function f9 instance=9 kind=0 symbol=30 signature=t126(Function) entry=bb51 effects=1
 bb51():
-  v378 = const-int value=0 : t0(Int)
-  v379 = const-int value=5 : t0(Int)
-  v380 = const-int value=1 : t0(Int)
-  v381 = const-int value=2 : t0(Int)
-  v382 = int-negate-checked v381 : t0(Int)
-  br bb52(v378, v379)
-bb52(v383:t0(Int), v384:t0(Int)):
-  v385 = const-int value=0 : t0(Int)
-  v386 = compare v382, v385 : t2(Bool)
-  cond-br v386 bb53(), bb54()
+  v347 = const-int value=0 : t0(Int)
+  v348 = const-int value=5 : t0(Int)
+  v349 = const-int value=1 : t0(Int)
+  v350 = const-int value=2 : t0(Int)
+  v351 = int-negate-checked v350 : t0(Int)
+  br bb52(v347, v348)
+bb52(v352:t0(Int), v353:t0(Int)):
+  v354 = const-int value=0 : t0(Int)
+  v355 = compare v351, v354 : t2(Bool)
+  cond-br v355 bb53(), bb54()
 bb53():
-  v387 = runtime-fault : t5(Unit)
+  v356 = runtime-fault : t5(Unit)
   unreachable
 bb54():
-  v388 = compare v382, v385 : t2(Bool)
-  cond-br v388 bb55(), bb56()
+  v357 = compare v351, v354 : t2(Bool)
+  cond-br v357 bb55(), bb56()
 bb55():
-  v389 = compare v384, v380 : t2(Bool)
-  cond-br v389 bb57(), bb59(v383)
+  v358 = compare v353, v349 : t2(Bool)
+  cond-br v358 bb57(), bb59(v352)
 bb56():
-  v390 = compare v384, v380 : t2(Bool)
-  cond-br v390 bb57(), bb59(v383)
+  v359 = compare v353, v349 : t2(Bool)
+  cond-br v359 bb57(), bb59(v352)
 bb57():
-  v391 = int-add-checked v383, v384 : t0(Int)
-  br bb58(v391, v384)
-bb58(v392:t0(Int), v393:t0(Int)):
-  v394 = int-add-checked v393, v382 : t0(Int)
-  br bb52(v392, v394)
-bb59(v395:t0(Int)):
-  return v395
+  v360 = int-add-checked v352, v353 : t0(Int)
+  br bb58(v360, v353)
+bb58(v361:t0(Int), v362:t0(Int)):
+  v363 = int-add-checked v362, v351 : t0(Int)
+  br bb52(v361, v363)
+bb59(v364:t0(Int)):
+  return v364
 function f10 instance=10 kind=0 symbol=31 signature=t53(Function) entry=bb60 effects=1
-bb60(v396:t0(Int), v397:t0(Int)):
-  v398 = const-int value=0 : t0(Int)
-  v399 = const-int value=1 : t0(Int)
-  br bb61(v396, v397, v398, v399)
-bb61(v400:t0(Int), v401:t0(Int), v402:t0(Int), v403:t0(Int)):
-  v404 = const-int value=0 : t0(Int)
-  v405 = compare v397, v404 : t2(Bool)
-  cond-br v405 bb62(), bb63()
+bb60(v365:t0(Int), v366:t0(Int)):
+  v367 = const-int value=0 : t0(Int)
+  v368 = const-int value=1 : t0(Int)
+  br bb61(v365, v366, v367, v368)
+bb61(v369:t0(Int), v370:t0(Int), v371:t0(Int), v372:t0(Int)):
+  v373 = const-int value=0 : t0(Int)
+  v374 = compare v366, v373 : t2(Bool)
+  cond-br v374 bb62(), bb63()
 bb62():
-  v406 = runtime-fault : t5(Unit)
+  v375 = runtime-fault : t5(Unit)
   unreachable
 bb63():
-  v407 = compare v397, v404 : t2(Bool)
-  cond-br v407 bb64(), bb65()
+  v376 = compare v366, v373 : t2(Bool)
+  cond-br v376 bb64(), bb65()
 bb64():
-  v408 = compare v403, v396 : t2(Bool)
-  cond-br v408 bb66(), bb68(v400, v401, v402)
+  v377 = compare v372, v365 : t2(Bool)
+  cond-br v377 bb66(), bb68(v369, v370, v371)
 bb65():
-  v409 = compare v403, v396 : t2(Bool)
-  cond-br v409 bb66(), bb68(v400, v401, v402)
+  v378 = compare v372, v365 : t2(Bool)
+  cond-br v378 bb66(), bb68(v369, v370, v371)
 bb66():
-  v410 = int-add-checked v402, v403 : t0(Int)
-  br bb67(v400, v401, v410, v403)
-bb67(v411:t0(Int), v412:t0(Int), v413:t0(Int), v414:t0(Int)):
-  v415 = int-add-checked v414, v397 : t0(Int)
-  br bb61(v411, v412, v413, v415)
-bb68(v416:t0(Int), v417:t0(Int), v418:t0(Int)):
-  return v418
+  v379 = int-add-checked v371, v372 : t0(Int)
+  br bb67(v369, v370, v379, v372)
+bb67(v380:t0(Int), v381:t0(Int), v382:t0(Int), v383:t0(Int)):
+  v384 = int-add-checked v383, v366 : t0(Int)
+  br bb61(v380, v381, v382, v384)
+bb68(v385:t0(Int), v386:t0(Int), v387:t0(Int)):
+  return v387
 function f11 instance=11 kind=0 symbol=32 signature=t142(Function) entry=bb69 effects=0
-bb69(v419:t2(Bool)):
-  cond-br v419 bb70(), bb71()
+bb69(v388:t2(Bool)):
+  cond-br v388 bb70(), bb71()
 bb70():
-  v420 = const-int value=7 : t0(Int)
-  v421 = result-make-ok v420 : t141(Result)
-  return v421
+  v389 = const-int value=7 : t0(Int)
+  v390 = result-make-ok v389 : t141(Result)
+  return v390
 bb71():
-  v422 = runtime-string-create value="bad" : t3(String)
-  v423 = result-make-error v422 : t141(Result)
-  return v423
+  v391 = runtime-string-create value="bad" : t3(String)
+  v392 = result-make-error v391 : t141(Result)
+  return v392
 function f12 instance=12 kind=0 symbol=33 signature=t158(Function) entry=bb72 effects=0
-bb72(v424:t141(Result)):
-  v425 = result-tag v424 : t2(Bool)
-  cond-br v425 bb73(), bb74()
+bb72(v393:t141(Result)):
+  v394 = result-tag v393 : t2(Bool)
+  cond-br v394 bb73(), bb74()
 bb73():
-  v426 = result-ok-payload v424 : t0(Int)
-  br bb75()
+  v395 = result-ok-payload v393 : t0(Int)
+  br bb75(v395)
 bb74():
-  v427 = result-error-payload v424 : t3(String)
-  v428 = result-make-error v427 : t141(Result)
-  return v428
-bb75():
-  v429 = result-make-ok v426 : t141(Result)
-  return v429
+  v396 = result-error-payload v393 : t3(String)
+  v397 = result-make-error v396 : t141(Result)
+  return v397
+bb75(v398:t0(Int)):
+  v399 = result-make-ok v398 : t141(Result)
+  return v399

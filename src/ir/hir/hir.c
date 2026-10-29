@@ -85,58 +85,26 @@ static Om_Hir_Operator operator_for_token(Om_Token_Kind token,
     return OM_HIR_OPERATOR_NONE;
 }
 
-static bool name_is(Om_String_View name, const char *known_name,
-                    size_t known_name_length)
+static bool builtin_member_ordinal(Om_Builtin_Member_Id member_id,
+                                  uint64_t *member_index)
 {
-    return om_name_equal_case_insensitive(
-        name, (Om_String_View){known_name, known_name_length});
-}
-
-static bool actor_down_reason_member(Om_String_View name,
-                                     uint64_t *member_index)
-{
-    static const Om_String_View members[] = {
-        {"normal", 6}, {"failed", 6}, {"node_unreachable", 16}
-    };
-    for (size_t index = 0; index < sizeof(members) / sizeof(members[0]);
-         ++index) {
-        if (om_string_view_equal(name, members[index])) {
-            if (member_index != NULL) {
-                *member_index = index;
-            }
-            return true;
-        }
+    if (member_index == NULL) {
+        return false;
+    }
+    switch (member_id) {
+    case OM_BUILTIN_MEMBER_ACTOR_DOWN_REASON_NORMAL:
+        *member_index = 0;
+        return true;
+    case OM_BUILTIN_MEMBER_ACTOR_DOWN_REASON_FAILED:
+        *member_index = 1;
+        return true;
+    case OM_BUILTIN_MEMBER_ACTOR_DOWN_REASON_NODE_UNREACHABLE:
+        *member_index = 2;
+        return true;
+    case OM_BUILTIN_MEMBER_NONE:
+        return false;
     }
     return false;
-}
-
-static bool is_system_actor_name(Om_String_View name)
-{
-    return name_is(name, OM_SYSTEM_ACTOR_NAME_CONSOLE,
-                   sizeof(OM_SYSTEM_ACTOR_NAME_CONSOLE) - 1)
-        || name_is(name, OM_SYSTEM_ACTOR_NAME_TIMER,
-                   sizeof(OM_SYSTEM_ACTOR_NAME_TIMER) - 1)
-        || name_is(name, OM_SYSTEM_ACTOR_NAME_FILE_SYSTEM,
-                   sizeof(OM_SYSTEM_ACTOR_NAME_FILE_SYSTEM) - 1);
-}
-
-static bool is_system_message_name(Om_String_View name)
-{
-    return name_is(name, OM_SYSTEM_MESSAGE_NAME_CONSOLE_WRITE,
-                   sizeof(OM_SYSTEM_MESSAGE_NAME_CONSOLE_WRITE) - 1)
-        || name_is(name, OM_SYSTEM_MESSAGE_NAME_CONSOLE_WRITE_COMPLETED,
-                   sizeof(OM_SYSTEM_MESSAGE_NAME_CONSOLE_WRITE_COMPLETED) - 1)
-        || name_is(name, OM_SYSTEM_MESSAGE_NAME_FILE_READ,
-                   sizeof(OM_SYSTEM_MESSAGE_NAME_FILE_READ) - 1)
-        || name_is(name, OM_SYSTEM_MESSAGE_NAME_FILE_READ_COMPLETED,
-                   sizeof(OM_SYSTEM_MESSAGE_NAME_FILE_READ_COMPLETED) - 1)
-        || name_is(name, OM_SYSTEM_MESSAGE_NAME_FILE_WRITE,
-                   sizeof(OM_SYSTEM_MESSAGE_NAME_FILE_WRITE) - 1)
-        || name_is(name, OM_SYSTEM_MESSAGE_NAME_FILE_WRITE_COMPLETED,
-                   sizeof(OM_SYSTEM_MESSAGE_NAME_FILE_WRITE_COMPLETED) - 1)
-        || name_is(name, OM_SYSTEM_MESSAGE_NAME_TIMER_AFTER,
-                   sizeof(OM_SYSTEM_MESSAGE_NAME_TIMER_AFTER) - 1)
-        || name_is(name, "Actor_Down", sizeof("Actor_Down") - 1);
 }
 
 static Om_Hir_Kind kind_for_call(const Om_Hir_Lower_Context *context,
@@ -161,13 +129,13 @@ static Om_Hir_Kind kind_for_call(const Om_Hir_Lower_Context *context,
     case OM_SYMBOL_FUNCTION:
         return OM_HIR_CALL_DIRECT;
     case OM_SYMBOL_BUILTIN:
-        if (name_is(symbol->name, "Ok", sizeof("Ok") - 1)) {
+        if (symbol->builtin_id == OM_BUILTIN_OK) {
             return OM_HIR_RESULT_OK;
         }
-        if (name_is(symbol->name, "Error", sizeof("Error") - 1)) {
+        if (symbol->builtin_id == OM_BUILTIN_ERROR) {
             return OM_HIR_RESULT_ERROR;
         }
-        return is_system_message_name(symbol->name)
+        return om_builtin_id_is_system_message(symbol->builtin_id)
             ? OM_HIR_MESSAGE_CONSTRUCT : OM_HIR_CALL_DIRECT;
     default:
         return OM_HIR_CALL_INDIRECT;
@@ -294,7 +262,7 @@ static Om_Hir_Kind kind_for_ast(const Om_Hir_Lower_Context *context,
             return OM_HIR_SYMBOL_REF;
         }
         if (symbol != NULL && symbol->kind == OM_SYMBOL_BUILTIN
-            && is_system_actor_name(symbol->name)) {
+            && om_builtin_id_is_system_actor(symbol->builtin_id)) {
             return OM_HIR_SYSTEM_ACTOR_REF;
         }
         return OM_HIR_LOCAL;
@@ -317,9 +285,14 @@ static Om_Hir_Kind kind_for_ast(const Om_Hir_Lower_Context *context,
             (Om_Ast_Node_Id){(uint32_t)(node - ast->nodes)});
         const Om_Symbol *symbol = om_resolution_symbol_by_id(
             context->resolution, symbol_id);
+        const Om_Builtin_Member_Id member_id =
+            om_resolution_builtin_member_for_node(context->resolution,
+                                                   module_id,
+                                                   (Om_Ast_Node_Id){
+                                                       (uint32_t)(node - ast->nodes)});
         if (symbol != NULL && symbol->kind == OM_SYMBOL_BUILTIN
-            && name_is(symbol->name, "Actor_Down_Reason", 17)
-            && actor_down_reason_member(node->name, NULL)) {
+            && symbol->builtin_id == OM_BUILTIN_ACTOR_DOWN_REASON
+            && member_id != OM_BUILTIN_MEMBER_NONE) {
             return OM_HIR_NOMINAL_VALUE;
         }
         return (symbol != NULL && symbol->kind == OM_SYMBOL_FIELD)
@@ -410,6 +383,9 @@ static Om_Status lower_node(Om_Hir_Lower_Context *context,
         .type_id = type_id,
         .symbol_id = symbol_id,
         .related_symbol_id = OM_SYMBOL_ID_INVALID,
+        .builtin_id = symbol != NULL ? symbol->builtin_id : OM_BUILTIN_NONE,
+        .builtin_member_id = om_resolution_builtin_member_for_node(
+            context->resolution, module_id, source_id),
         .effects = om_semantic_effect_for_node(context->semantic, module_id,
                                                source_id),
         .flags = flags_for_ast(source),
@@ -420,7 +396,8 @@ static Om_Status lower_node(Om_Hir_Lower_Context *context,
         .float_value = source->float_value,
     };
     if (kind == OM_HIR_NOMINAL_VALUE
-        && !actor_down_reason_member(source->name, &node.integer_magnitude)) {
+        && !builtin_member_ordinal(node.builtin_member_id,
+                                   &node.integer_magnitude)) {
         return OM_STATUS_INVALID_ARGUMENT;
     }
     if (kind == OM_HIR_UNARY && source->keyword == OM_KEYWORD_NOT) {
@@ -1049,8 +1026,10 @@ Om_Status om_hir_verify_project(const Om_Hir_Project *project,
             uint64_t member_index = UINT64_MAX;
             if (type_symbol == NULL
                 || type_symbol->kind != OM_SYMBOL_BUILTIN
-                || !name_is(type_symbol->name, "Actor_Down_Reason", 17)
-                || !actor_down_reason_member(node->name, &member_index)
+                || type_symbol->builtin_id != OM_BUILTIN_ACTOR_DOWN_REASON
+                || node->builtin_id != OM_BUILTIN_ACTOR_DOWN_REASON
+                || !builtin_member_ordinal(node->builtin_member_id,
+                                           &member_index)
                 || member_index != node->integer_magnitude
                 || resolved_type_view(project, node->type_id, &resolved_type,
                                       &type_view) != OM_STATUS_OK

@@ -102,30 +102,6 @@ static const Om_Hir_Node *hir_child(const Om_Hir_Project *hir,
     return om_hir_child_at(hir, node, index);
 }
 
-static bool name_equals_ascii_ci(Om_String_View name, const char *text)
-{
-    if (text == NULL) return false;
-    size_t length = 0;
-    while (text[length] != '\0') ++length;
-    if (name.length != length || (length != 0 && name.data == NULL)) {
-        return false;
-    }
-    for (size_t index = 0; index < length; ++index) {
-        unsigned char left = (unsigned char)name.data[index];
-        unsigned char right = (unsigned char)text[index];
-        if (left >= (unsigned char)'a' && left <= (unsigned char)'z') {
-            left = (unsigned char)(left - (unsigned char)'a'
-                                   + (unsigned char)'A');
-        }
-        if (right >= (unsigned char)'a' && right <= (unsigned char)'z') {
-            right = (unsigned char)(right - (unsigned char)'a'
-                                    + (unsigned char)'A');
-        }
-        if (left != right) return false;
-    }
-    return true;
-}
-
 static bool symbol_is_actor_state(const Om_Mir_Lowering_Context *context,
                                   Om_Symbol_Id symbol_id)
 {
@@ -730,8 +706,14 @@ static Om_Status lower_try(Om_Mir_Lowering_Context *context,
         status = om_mir_add_block(context->mir, context->function_id,
                                   &merge_block);
     }
+    Om_Mir_Value_Id merge_value = OM_MIR_VALUE_ID_INVALID;
     if (status == OM_STATUS_OK) {
-        status = set_branch(context, success_block, merge_block, NULL, 0);
+        status = om_mir_add_block_parameter(context->mir, merge_block,
+                                             value_type, &merge_value);
+    }
+    if (status == OM_STATUS_OK) {
+        status = set_branch(context, success_block, merge_block,
+                            &success_value, 1);
     }
     if (status == OM_STATUS_OK) {
         status = set_conditional_branch(context, source_block, is_ok,
@@ -740,7 +722,7 @@ static Om_Status lower_try(Om_Mir_Lowering_Context *context,
     if (status == OM_STATUS_OK) {
         context->block_id = merge_block;
         context->terminated = false;
-        *out_value = success_value;
+        *out_value = merge_value;
     }
     return status;
 }
@@ -1762,11 +1744,12 @@ static Om_Status lower_expression(Om_Mir_Lowering_Context *context,
     }
     case OM_HIR_SYSTEM_ACTOR_REF: {
         uint64_t actor_id = UINT64_MAX;
-        if (name_equals_ascii_ci(node->name, "Console")) {
+        if (node->builtin_id == OM_BUILTIN_SYSTEM_ACTOR_CONSOLE) {
             actor_id = OM_SYSTEM_ACTOR_REF_CONSOLE;
-        } else if (name_equals_ascii_ci(node->name, "Timer")) {
+        } else if (node->builtin_id == OM_BUILTIN_SYSTEM_ACTOR_TIMER) {
             actor_id = OM_SYSTEM_ACTOR_REF_TIMER;
-        } else if (name_equals_ascii_ci(node->name, "File_System")) {
+        } else if (node->builtin_id
+                   == OM_BUILTIN_SYSTEM_ACTOR_FILE_SYSTEM) {
             actor_id = OM_SYSTEM_ACTOR_REF_FILE_SYSTEM;
         }
         if (actor_id == UINT64_MAX) {
@@ -2057,18 +2040,20 @@ static Om_Status lower_if(Om_Mir_Lowering_Context *context,
         Om_Mir_Value_Id condition_value = OM_MIR_VALUE_ID_INVALID;
         status = lower_expression(context, condition->id, &condition_value);
         if (status != OM_STATUS_OK || context->unsupported) break;
+        const Om_Mir_Block_Id condition_block = context->block_id;
         Om_Mir_Block_Id body_block = OM_MIR_BLOCK_ID_INVALID;
         status = om_mir_add_block(context->mir, context->function_id,
                                   &body_block);
         if (status != OM_STATUS_OK) break;
         Om_Mir_Test_Block test = {
-            .block_id = current_test_block,
+            .block_id = condition_block,
             .true_block_id = body_block,
             .false_block_id = OM_MIR_BLOCK_ID_INVALID,
             .condition_value_id = condition_value,
         };
         status = om_vector_push(&tests, &test);
         if (status != OM_STATUS_OK) break;
+        current_test_block = condition_block;
         context->block_id = body_block;
         context->terminated = false;
         status = lower_block(context, body->id);
@@ -2237,14 +2222,8 @@ static Om_Status lower_if(Om_Mir_Lowering_Context *context,
                 context->block_id = merge_block;
                 context->terminated = false;
                 if (predecessors.length > 1) {
-                    for (size_t index = 0; status == OM_STATUS_OK
-                         && index < base_count; ++index) {
-                        const Om_Mir_Env_Entry entry = {
-                            base_environment[index].symbol_id,
-                            merge_parameters[index],
-                        };
-                        status = om_vector_push(&context->environment, &entry);
-                    }
+                    status = environment_from_block_parameters(context,
+                        base_environment, merge_parameters, base_count);
                 } else {
                     const Om_Mir_Merge_Predecessor *predecessor =
                         om_vector_at_const(&predecessors, 0);
@@ -2557,14 +2536,8 @@ static Om_Status lower_select(Om_Mir_Lowering_Context *context,
                 context->block_id = merge_block;
                 context->terminated = false;
                 if (predecessors.length > 1) {
-                    for (size_t index = 0; status == OM_STATUS_OK
-                         && index < base_count; ++index) {
-                        const Om_Mir_Env_Entry entry = {
-                            base_environment[index].symbol_id,
-                            merge_parameters[index],
-                        };
-                        status = om_vector_push(&context->environment, &entry);
-                    }
+                    status = environment_from_block_parameters(context,
+                        base_environment, merge_parameters, base_count);
                 } else {
                     const Om_Mir_Merge_Predecessor *predecessor =
                         om_vector_at_const(&predecessors, 0);
@@ -3946,30 +3919,27 @@ static Om_Status lower_function_body(Om_Mir_Lowering_Context *context,
     return status;
 }
 
-static Om_System_Message_Id system_message_id_for_name(Om_String_View name)
+static Om_System_Message_Id system_message_id_for_builtin(Om_Builtin_Id id)
 {
-    if (name_equals_ascii_ci(name, OM_SYSTEM_MESSAGE_NAME_CONSOLE_WRITE)) {
+    if (id == OM_BUILTIN_SYSTEM_MESSAGE_CONSOLE_WRITE) {
         return OM_SYSTEM_MESSAGE_ID_CONSOLE_WRITE;
     }
-    if (name_equals_ascii_ci(name,
-            OM_SYSTEM_MESSAGE_NAME_CONSOLE_WRITE_COMPLETED)) {
+    if (id == OM_BUILTIN_SYSTEM_MESSAGE_CONSOLE_WRITE_COMPLETED) {
         return OM_SYSTEM_MESSAGE_ID_CONSOLE_WRITE_COMPLETED;
     }
-    if (name_equals_ascii_ci(name, OM_SYSTEM_MESSAGE_NAME_FILE_READ)) {
+    if (id == OM_BUILTIN_SYSTEM_MESSAGE_FILE_READ) {
         return OM_SYSTEM_MESSAGE_ID_FILE_READ;
     }
-    if (name_equals_ascii_ci(name,
-            OM_SYSTEM_MESSAGE_NAME_FILE_READ_COMPLETED)) {
+    if (id == OM_BUILTIN_SYSTEM_MESSAGE_FILE_READ_COMPLETED) {
         return OM_SYSTEM_MESSAGE_ID_FILE_READ_COMPLETED;
     }
-    if (name_equals_ascii_ci(name, OM_SYSTEM_MESSAGE_NAME_FILE_WRITE)) {
+    if (id == OM_BUILTIN_SYSTEM_MESSAGE_FILE_WRITE) {
         return OM_SYSTEM_MESSAGE_ID_FILE_WRITE;
     }
-    if (name_equals_ascii_ci(name,
-            OM_SYSTEM_MESSAGE_NAME_FILE_WRITE_COMPLETED)) {
+    if (id == OM_BUILTIN_SYSTEM_MESSAGE_FILE_WRITE_COMPLETED) {
         return OM_SYSTEM_MESSAGE_ID_FILE_WRITE_COMPLETED;
     }
-    if (name_equals_ascii_ci(name, OM_SYSTEM_MESSAGE_NAME_TIMER_AFTER)) {
+    if (id == OM_BUILTIN_SYSTEM_MESSAGE_TIMER_AFTER) {
         return OM_SYSTEM_MESSAGE_ID_TIMER_AFTER;
     }
     return OM_SYSTEM_MESSAGE_ID_NONE;
@@ -4020,7 +3990,7 @@ static Om_Status collect_system_message_descriptors(
             hir->resolution, node->symbol_id);
         if (node->kind == OM_HIR_MESSAGE_CONSTRUCT
             && symbol != NULL && symbol->kind == OM_SYMBOL_BUILTIN
-            && system_message_id_for_name(symbol->name)
+            && system_message_id_for_builtin(symbol->builtin_id)
                 == OM_SYSTEM_MESSAGE_ID_TIMER_AFTER) {
             timer_after_used = true;
             break;
@@ -4056,7 +4026,7 @@ static Om_Status collect_system_message_descriptors(
         const Om_Symbol *symbol = &hir->resolution->symbols[symbol_index];
         if (symbol->kind != OM_SYMBOL_BUILTIN) continue;
         const Om_System_Message_Id message_id =
-            system_message_id_for_name(symbol->name);
+            system_message_id_for_builtin(symbol->builtin_id);
         const size_t field_count = system_message_field_count(message_id);
         if (field_count == 0) continue;
 
@@ -4251,7 +4221,7 @@ static Om_Status collect_nominal_descriptors(
              symbol_index < hir->resolution->symbol_count; ++symbol_index) {
             const Om_Symbol *symbol = &hir->resolution->symbols[symbol_index];
             if (symbol->kind == OM_SYMBOL_BUILTIN
-                && name_equals_ascii_ci(symbol->name, "Actor_Down")) {
+                && symbol->builtin_id == OM_BUILTIN_ACTOR_DOWN) {
                 actor_down_symbol = symbol;
                 break;
             }
@@ -4269,8 +4239,8 @@ static Om_Status collect_nominal_descriptors(
                 const Om_Symbol *candidate =
                     &hir->resolution->symbols[symbol_index];
                 if (candidate->kind == OM_SYMBOL_BUILTIN
-                    && name_equals_ascii_ci(candidate->name,
-                                             "Actor_Down_Reason")) {
+                    && candidate->builtin_id
+                        == OM_BUILTIN_ACTOR_DOWN_REASON) {
                     reason_type_symbol = candidate->id;
                     break;
                 }

@@ -18,6 +18,13 @@ typedef struct Om_Empty_Collection {
     Om_Type_Id type_id;
 } Om_Empty_Collection;
 
+typedef struct Om_Result_Expression {
+    Om_Module_Id module_id;
+    Om_Ast_Node_Id node_id;
+    Om_Type_Id type_id;
+    Om_Symbol_Id callable_symbol_id;
+} Om_Result_Expression;
+
 typedef struct Om_Infer_Context {
     const Om_Module_Project *project;
     const Om_Parser_Result *parsed_modules;
@@ -31,6 +38,7 @@ typedef struct Om_Infer_Context {
     Om_Vector inferred_nodes;
     Om_Vector diagnostics;
     Om_Vector empty_collections;
+    Om_Vector result_expressions;
     uint32_t level;
     Om_Type_Id return_type;
     Om_Symbol_Id current_actor;
@@ -546,17 +554,6 @@ static Om_Status get_primitive_type(Om_Infer_Context *context,
     return om_type_store_primitive(&context->type_store, kind, type);
 }
 
-static bool name_is(Om_String_View name, const char *expected, size_t length)
-{
-    return om_string_view_equal(name, (Om_String_View){expected, length});
-}
-
-static bool name_is_ci(Om_String_View name, const char *expected, size_t length)
-{
-    return om_name_equal_case_insensitive(name,
-                                          (Om_String_View){expected, length});
-}
-
 static Om_Status get_actor_down_reason_type(Om_Infer_Context *context,
                                             Om_Type_Id *type)
 {
@@ -566,7 +563,7 @@ static Om_Status get_actor_down_reason_type(Om_Infer_Context *context,
     for (size_t index = 0; index < context->resolution->symbol_count; ++index) {
         const Om_Symbol *symbol = &context->resolution->symbols[index];
         if (symbol->kind == OM_SYMBOL_BUILTIN
-            && name_is_ci(symbol->name, "Actor_Down_Reason", 17)) {
+            && symbol->builtin_id == OM_BUILTIN_ACTOR_DOWN_REASON) {
             return om_type_store_nominal(&context->type_store,
                 OM_TYPE_DOWN_REASON, symbol->id, type);
         }
@@ -758,32 +755,14 @@ static Om_Status initialize_native_builtin(Om_Infer_Context *context,
     return status;
 }
 
-static bool system_actor_name(Om_String_View name)
+static bool system_actor_builtin(Om_Builtin_Id id)
 {
-    return name_is_ci(name, OM_SYSTEM_ACTOR_NAME_CONSOLE,
-                      sizeof(OM_SYSTEM_ACTOR_NAME_CONSOLE) - 1)
-        || name_is_ci(name, OM_SYSTEM_ACTOR_NAME_TIMER,
-                      sizeof(OM_SYSTEM_ACTOR_NAME_TIMER) - 1)
-        || name_is_ci(name, OM_SYSTEM_ACTOR_NAME_FILE_SYSTEM,
-                      sizeof(OM_SYSTEM_ACTOR_NAME_FILE_SYSTEM) - 1);
+    return om_builtin_id_is_system_actor(id);
 }
 
-static bool system_message_name(Om_String_View name)
+static bool system_message_builtin(Om_Builtin_Id id)
 {
-    return name_is_ci(name, OM_SYSTEM_MESSAGE_NAME_CONSOLE_WRITE,
-                      sizeof(OM_SYSTEM_MESSAGE_NAME_CONSOLE_WRITE) - 1)
-        || name_is_ci(name, OM_SYSTEM_MESSAGE_NAME_CONSOLE_WRITE_COMPLETED,
-                      sizeof(OM_SYSTEM_MESSAGE_NAME_CONSOLE_WRITE_COMPLETED) - 1)
-        || name_is_ci(name, OM_SYSTEM_MESSAGE_NAME_FILE_READ,
-                      sizeof(OM_SYSTEM_MESSAGE_NAME_FILE_READ) - 1)
-        || name_is_ci(name, OM_SYSTEM_MESSAGE_NAME_FILE_READ_COMPLETED,
-                      sizeof(OM_SYSTEM_MESSAGE_NAME_FILE_READ_COMPLETED) - 1)
-        || name_is_ci(name, OM_SYSTEM_MESSAGE_NAME_FILE_WRITE,
-                      sizeof(OM_SYSTEM_MESSAGE_NAME_FILE_WRITE) - 1)
-        || name_is_ci(name, OM_SYSTEM_MESSAGE_NAME_FILE_WRITE_COMPLETED,
-                      sizeof(OM_SYSTEM_MESSAGE_NAME_FILE_WRITE_COMPLETED) - 1)
-        || name_is_ci(name, OM_SYSTEM_MESSAGE_NAME_TIMER_AFTER,
-                      sizeof(OM_SYSTEM_MESSAGE_NAME_TIMER_AFTER) - 1);
+    return om_builtin_id_is_system_message(id);
 }
 
 static Om_Status initialize_system_actor_builtin(
@@ -837,21 +816,16 @@ static Om_Status initialize_system_message_builtin(
         status = get_primitive_type(context, OM_TYPE_INT, &int_type);
     }
 
-    const bool console_write = name_is_ci(
-        symbol->name, OM_SYSTEM_MESSAGE_NAME_CONSOLE_WRITE,
-        sizeof(OM_SYSTEM_MESSAGE_NAME_CONSOLE_WRITE) - 1);
-    const bool file_read = name_is_ci(
-        symbol->name, OM_SYSTEM_MESSAGE_NAME_FILE_READ,
-        sizeof(OM_SYSTEM_MESSAGE_NAME_FILE_READ) - 1);
-    const bool file_write = name_is_ci(
-        symbol->name, OM_SYSTEM_MESSAGE_NAME_FILE_WRITE,
-        sizeof(OM_SYSTEM_MESSAGE_NAME_FILE_WRITE) - 1);
-    const bool timer_after = name_is_ci(
-        symbol->name, OM_SYSTEM_MESSAGE_NAME_TIMER_AFTER,
-        sizeof(OM_SYSTEM_MESSAGE_NAME_TIMER_AFTER) - 1);
-    const bool file_read_completed = name_is_ci(
-        symbol->name, OM_SYSTEM_MESSAGE_NAME_FILE_READ_COMPLETED,
-        sizeof(OM_SYSTEM_MESSAGE_NAME_FILE_READ_COMPLETED) - 1);
+    const bool console_write = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_CONSOLE_WRITE;
+    const bool file_read = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_FILE_READ;
+    const bool file_write = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_FILE_WRITE;
+    const bool timer_after = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_TIMER_AFTER;
+    const bool file_read_completed = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_FILE_READ_COMPLETED;
     Om_Type_Id reply_protocol = OM_TYPE_ID_INVALID;
     Om_Type_Id reply_ref = OM_TYPE_ID_INVALID;
     if (status == OM_STATUS_OK
@@ -926,13 +900,13 @@ static Om_Status initialize_builtin(Om_Infer_Context *context,
     if (symbol->native_module != NULL) {
         return initialize_native_builtin(context, symbol);
     }
-    if (system_actor_name(symbol->name)) {
+    if (system_actor_builtin(symbol->builtin_id)) {
         return initialize_system_actor_builtin(context, symbol);
     }
-    if (system_message_name(symbol->name)) {
+    if (system_message_builtin(symbol->builtin_id)) {
         return initialize_system_message_builtin(context, symbol);
     }
-    if (name_is_ci(symbol->name, "Actor_Down_Reason", 17)) {
+    if (symbol->builtin_id == OM_BUILTIN_ACTOR_DOWN_REASON) {
         Om_Type_Id type_id = OM_TYPE_ID_INVALID;
         Om_Status status = om_type_store_nominal(&context->type_store,
             OM_TYPE_DOWN_REASON, symbol->id, &type_id);
@@ -942,13 +916,13 @@ static Om_Status initialize_builtin(Om_Infer_Context *context,
         return status;
     }
     Om_Type_Kind primitive_kind = OM_TYPE_VARIABLE;
-    if (name_is_ci(symbol->name, "Unit", 4)) {
+    if (symbol->builtin_id == OM_BUILTIN_UNIT) {
         primitive_kind = OM_TYPE_UNIT;
-    } else if (name_is_ci(symbol->name, "Node_Ref", 8)) {
+    } else if (symbol->builtin_id == OM_BUILTIN_NODE_REF) {
         primitive_kind = OM_TYPE_NODE_REF;
-    } else if (name_is_ci(symbol->name, "Actor_Id", 8)) {
+    } else if (symbol->builtin_id == OM_BUILTIN_ACTOR_ID) {
         primitive_kind = OM_TYPE_ACTOR_ID;
-    } else if (name_is(symbol->name, "print", 5)) {
+    } else if (symbol->builtin_id == OM_BUILTIN_PRINT) {
         Om_Type_Id string_type = OM_TYPE_ID_INVALID;
         Om_Type_Id unit_type = OM_TYPE_ID_INVALID;
         Om_Type_Id function_type = OM_TYPE_ID_INVALID;
@@ -965,7 +939,7 @@ static Om_Status initialize_builtin(Om_Infer_Context *context,
             status = set_builtin_scheme(context, symbol->id, function_type);
         }
         return status;
-    } else if (name_is_ci(symbol->name, "Actor_Down", 10)) {
+    } else if (symbol->builtin_id == OM_BUILTIN_ACTOR_DOWN) {
         Om_Type_Id actor_id = OM_TYPE_ID_INVALID;
         Om_Type_Id reason = OM_TYPE_ID_INVALID;
         Om_Type_Id result = OM_TYPE_ID_INVALID;
@@ -1000,8 +974,9 @@ static Om_Status initialize_builtin(Om_Infer_Context *context,
         }
         return status;
     }
-    if (name_is(symbol->name, "Ok", 2) || name_is(symbol->name, "Error", 5)) {
-        const bool is_ok = name_is(symbol->name, "Ok", 2);
+    if (symbol->builtin_id == OM_BUILTIN_OK
+        || symbol->builtin_id == OM_BUILTIN_ERROR) {
+        const bool is_ok = symbol->builtin_id == OM_BUILTIN_OK;
         Om_Type_Id input = OM_TYPE_ID_INVALID;
         Om_Type_Id other = OM_TYPE_ID_INVALID;
         Om_Type_Id result = OM_TYPE_ID_INVALID;
@@ -1027,7 +1002,7 @@ static Om_Status initialize_builtin(Om_Infer_Context *context,
         }
         return status;
     }
-    if (name_is_ci(symbol->name, "Result", 6)) {
+    if (symbol->builtin_id == OM_BUILTIN_RESULT) {
         return OM_STATUS_OK;
     }
     Om_Type_Id unknown_builtin = OM_TYPE_ID_INVALID;
@@ -1200,7 +1175,7 @@ static Om_Status infer_symbol_value(Om_Infer_Context *context,
     }
     if (scheme->type_id.value == UINT32_MAX) {
         if (symbol->kind == OM_SYMBOL_BUILTIN
-            && name_is(symbol->name, "Result", 6)) {
+            && symbol->builtin_id == OM_BUILTIN_RESULT) {
             Om_Status status = add_type_diagnostic(
                 context, OM_TYPE_INFERENCE_DIAGNOSTIC_E0401,
                 module, infer_node(context, module, node_id)->span,
@@ -1469,8 +1444,8 @@ static Om_Status infer_native_callback_bindings(
             const Om_Symbol *candidate =
                 &context->resolution->symbols[symbol_index];
             if (candidate->kind != OM_SYMBOL_MESSAGE
-                || !om_name_equal_case_insensitive(candidate->name,
-                                                   binding->message_name)) {
+                || !om_string_view_equal(candidate->name,
+                                         binding->message_name)) {
                 continue;
             }
             if (message_symbol != NULL) {
@@ -1694,6 +1669,30 @@ static Om_Status infer_call(Om_Infer_Context *context,
     }
     if (status == OM_STATUS_OK) {
         status = set_node_type(context, module, node_id, *type_id);
+    }
+    Om_Type_Id resolved_result_type = OM_TYPE_ID_INVALID;
+    Om_Type_View result_view = {0};
+    if (status == OM_STATUS_OK) {
+        status = om_type_store_resolve(&context->type_store, *type_id,
+                                       &resolved_result_type);
+    }
+    if (status == OM_STATUS_OK) {
+        status = om_type_store_get(&context->type_store, resolved_result_type,
+                                   &result_view);
+    }
+    if (status == OM_STATUS_OK && result_view.kind == OM_TYPE_RESULT) {
+        const Om_Symbol_Id *callable_symbol = context->callable_stack.length != 0
+            ? om_vector_at_const(&context->callable_stack,
+                                 context->callable_stack.length - 1)
+            : NULL;
+        if (callable_symbol == NULL) {
+            status = OM_STATUS_INVALID_ARGUMENT;
+        } else {
+            const Om_Result_Expression expression = {
+                module, node_id, *type_id, *callable_symbol,
+            };
+            status = om_vector_push(&context->result_expressions, &expression);
+        }
     }
     return status;
 }
@@ -2390,12 +2389,18 @@ static Om_Status infer_select(Om_Infer_Context *context,
                 const Om_Ast_Node *constructor = infer_node(
                     context, module, constructor_id);
                 const Om_Ast_Node *binding = infer_node(context, module, binding_id);
+                const Om_Symbol *constructor_symbol = infer_symbol(
+                    context, resolved_symbol_for_node(context, module,
+                                                      constructor_id));
                 if (constructor != NULL && constructor->kind == OM_AST_NAME
                     && binding != NULL && binding->kind == OM_AST_NAME
-                    && (name_is(constructor->name, "Ok", 2)
-                        || name_is(constructor->name, "Error", 5))) {
+                    && constructor_symbol != NULL
+                    && constructor_symbol->kind == OM_SYMBOL_BUILTIN
+                    && (constructor_symbol->builtin_id == OM_BUILTIN_OK
+                        || constructor_symbol->builtin_id == OM_BUILTIN_ERROR)) {
                     result_pattern = true;
-                    is_ok_pattern = name_is(constructor->name, "Ok", 2);
+                    is_ok_pattern = constructor_symbol->builtin_id
+                        == OM_BUILTIN_OK;
                 }
             }
             if (result_pattern) {
@@ -2771,9 +2776,9 @@ static Om_Status infer_receive(Om_Infer_Context *context,
         return OM_STATUS_INVALID_ARGUMENT;
     }
     const bool actor_down = message->kind == OM_SYMBOL_BUILTIN
-        && name_is_ci(message->name, "Actor_Down", 10);
+        && message->builtin_id == OM_BUILTIN_ACTOR_DOWN;
     const bool system_message = message->kind == OM_SYMBOL_BUILTIN
-        && system_message_name(message->name);
+        && system_message_builtin(message->builtin_id);
     size_t field_count = 0;
     const Om_Ast_Node *message_declaration = NULL;
     Om_Type_Id system_constructor_type = OM_TYPE_ID_INVALID;
@@ -2948,6 +2953,107 @@ static bool type_contains_unresolved_variable(const Om_Infer_Context *context,
     return true;
 }
 
+static bool scheme_quantifies_type_variable(const Om_Infer_Context *context,
+                                            const Om_Type_Scheme *scheme,
+                                            Om_Type_Id variable)
+{
+    if (scheme == NULL) {
+        return false;
+    }
+    Om_Type_Id resolved_variable = OM_TYPE_ID_INVALID;
+    if (om_type_store_resolve(&context->type_store, variable,
+                              &resolved_variable) != OM_STATUS_OK) {
+        return false;
+    }
+    for (size_t index = 0; index < scheme->quantified_variable_count; ++index) {
+        Om_Type_Id quantified = OM_TYPE_ID_INVALID;
+        if (om_type_store_resolve(&context->type_store,
+                scheme->quantified_variables[index], &quantified) == OM_STATUS_OK
+            && quantified.value == resolved_variable.value) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool type_contains_unresolved_unquantified_variable(
+    const Om_Infer_Context *context,
+    Om_Type_Id type_id,
+    const Om_Type_Scheme *scheme,
+    size_t depth,
+    bool *contains)
+{
+    if (depth >= 256 || contains == NULL) {
+        return false;
+    }
+    Om_Type_Id resolved = OM_TYPE_ID_INVALID;
+    if (om_type_store_resolve(&context->type_store, type_id, &resolved)
+        != OM_STATUS_OK) {
+        return false;
+    }
+    Om_Type_View view = {0};
+    if (om_type_store_get(&context->type_store, resolved, &view) != OM_STATUS_OK) {
+        return false;
+    }
+    if (view.kind == OM_TYPE_VARIABLE) {
+        *contains = view.type_variable_unbound
+            && !scheme_quantifies_type_variable(context, scheme, resolved);
+        return true;
+    }
+    for (size_t index = 0; index < view.child_count; ++index) {
+        Om_Type_Id child = OM_TYPE_ID_INVALID;
+        bool child_contains = false;
+        if (om_type_store_child_at(&context->type_store, resolved, index, &child)
+                != OM_STATUS_OK
+            || !type_contains_unresolved_unquantified_variable(context, child,
+                scheme, depth + 1, &child_contains)) {
+            return false;
+        }
+        if (child_contains) {
+            *contains = true;
+            return true;
+        }
+    }
+    *contains = false;
+    return true;
+}
+
+static Om_Status diagnose_unresolved_result_expressions(
+    Om_Infer_Context *context)
+{
+    for (size_t index = 0; index < context->result_expressions.length; ++index) {
+        const Om_Result_Expression *expression = om_vector_at_const(
+            &context->result_expressions, index);
+        if (expression == NULL
+            || expression->callable_symbol_id.value
+                >= context->resolution->symbol_count) {
+            return OM_STATUS_INVALID_ARGUMENT;
+        }
+        const Om_Type_Scheme *scheme = &context->symbol_schemes[
+            expression->callable_symbol_id.value];
+        bool unresolved = false;
+        if (!type_contains_unresolved_unquantified_variable(context,
+                expression->type_id, scheme, 0, &unresolved)) {
+            return OM_STATUS_INVALID_ARGUMENT;
+        }
+        if (unresolved) {
+            const Om_Ast_Node *node = infer_node(context,
+                expression->module_id, expression->node_id);
+            if (node == NULL) {
+                return OM_STATUS_INVALID_ARGUMENT;
+            }
+            const Om_Status status = add_type_diagnostic(context,
+                OM_TYPE_INFERENCE_DIAGNOSTIC_E0404,
+                expression->module_id, node->span,
+                OM_TYPE_ID_INVALID, expression->type_id);
+            if (status != OM_STATUS_OK) {
+                return status;
+            }
+        }
+    }
+    return OM_STATUS_OK;
+}
+
 static Om_Status diagnose_unresolved_empty_collections(Om_Infer_Context *context)
 {
     for (size_t index = 0; index < context->empty_collections.length; ++index) {
@@ -3025,6 +3131,7 @@ static void destroy_infer_context(Om_Infer_Context *context)
     om_vector_destroy(&context->inferred_nodes);
     om_vector_destroy(&context->diagnostics);
     om_vector_destroy(&context->empty_collections);
+    om_vector_destroy(&context->result_expressions);
     om_vector_destroy(&context->callable_stack);
     om_type_store_destroy(&context->type_store);
 }
@@ -3086,6 +3193,10 @@ Om_Status om_type_infer_project(const Om_Module_Project *project,
     if (status == OM_STATUS_OK) {
         status = om_vector_init(&context.empty_collections,
                                 sizeof(Om_Empty_Collection));
+    }
+    if (status == OM_STATUS_OK) {
+        status = om_vector_init(&context.result_expressions,
+                                sizeof(Om_Result_Expression));
     }
     if (status == OM_STATUS_OK) {
         status = om_vector_init(&context.callable_stack, sizeof(Om_Symbol_Id));
@@ -3171,6 +3282,9 @@ Om_Status om_type_infer_project(const Om_Module_Project *project,
         }
     }
     if (status == OM_STATUS_OK) {
+        status = diagnose_unresolved_result_expressions(&context);
+    }
+    if (status == OM_STATUS_OK) {
         status = diagnose_unresolved_empty_collections(&context);
     }
     if (status == OM_STATUS_OK) {
@@ -3200,6 +3314,7 @@ Om_Status om_type_infer_project(const Om_Module_Project *project,
     om_free(context.recursive_callables);
     context.recursive_callables = NULL;
     om_vector_destroy(&context.empty_collections);
+    om_vector_destroy(&context.result_expressions);
     om_vector_destroy(&context.callable_stack);
     return OM_STATUS_OK;
 }
@@ -3257,6 +3372,7 @@ const char *om_type_inference_diagnostic_code_name(
     case OM_TYPE_INFERENCE_DIAGNOSTIC_E0401: return "E0401";
     case OM_TYPE_INFERENCE_DIAGNOSTIC_E0402: return "E0402";
     case OM_TYPE_INFERENCE_DIAGNOSTIC_E0403: return "E0403";
+    case OM_TYPE_INFERENCE_DIAGNOSTIC_E0404: return "E0404";
     default: return "E0000";
     }
 }

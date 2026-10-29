@@ -8,6 +8,7 @@
 
 typedef enum Om_Parse_Diagnostic_Code {
     /* E0201 is reserved by the development plan for invalid import paths. */
+    OM_PARSE_DIAGNOSTIC_E0102 = 102,
     OM_PARSE_DIAGNOSTIC_E0202 = 2,
     OM_PARSE_DIAGNOSTIC_E0203 = 3,
     OM_PARSE_DIAGNOSTIC_E0204 = 4,

@@ -1,9 +1,7 @@
 #include "../semantic_model/semantic_analysis_internal.h"
 
 #include "ombasic/semantic/type_store.h"
-#include "ombasic/semantic/system_actors.h"
 #include "ombasic/syntax/ast.h"
-#include "ombasic/syntax/name_rules.h"
 
 static bool find_serializability(
     const Om_Semantic_Analysis_Context *context,
@@ -54,37 +52,15 @@ static bool actor_down_symbol(const Om_Semantic_Analysis_Context *context,
 {
     const Om_Symbol *symbol = om_semantic_symbol(context, symbol_id);
     return symbol != NULL && symbol->kind == OM_SYMBOL_BUILTIN
-        && om_string_view_equal(symbol->name,
-                                (Om_String_View){"Actor_Down", 10});
+        && symbol->builtin_id == OM_BUILTIN_ACTOR_DOWN;
 }
 
 static bool system_message_symbol(const Om_Semantic_Analysis_Context *context,
                                   Om_Symbol_Id symbol_id)
 {
     const Om_Symbol *symbol = om_semantic_symbol(context, symbol_id);
-    if (symbol == NULL || symbol->kind != OM_SYMBOL_BUILTIN) {
-        return false;
-    }
-    static const char *const names[] = {
-        OM_SYSTEM_MESSAGE_NAME_CONSOLE_WRITE,
-        OM_SYSTEM_MESSAGE_NAME_CONSOLE_WRITE_COMPLETED,
-        OM_SYSTEM_MESSAGE_NAME_FILE_READ,
-        OM_SYSTEM_MESSAGE_NAME_FILE_READ_COMPLETED,
-        OM_SYSTEM_MESSAGE_NAME_FILE_WRITE,
-        OM_SYSTEM_MESSAGE_NAME_FILE_WRITE_COMPLETED,
-        OM_SYSTEM_MESSAGE_NAME_TIMER_AFTER
-    };
-    for (size_t index = 0; index < sizeof(names) / sizeof(names[0]); ++index) {
-        size_t length = 0;
-        while (names[index][length] != '\0') {
-            ++length;
-        }
-        if (om_name_equal_case_insensitive(
-                symbol->name, (Om_String_View){names[index], length})) {
-            return true;
-        }
-    }
-    return false;
+    return symbol != NULL && symbol->kind == OM_SYMBOL_BUILTIN
+        && om_builtin_id_is_system_message(symbol->builtin_id);
 }
 
 static Om_Status is_serializable_type(Om_Semantic_Analysis_Context *context,

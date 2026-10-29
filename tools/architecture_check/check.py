@@ -48,6 +48,10 @@ LEGACY_DOWN_REASON_KEYWORDS = re.compile(
 BUILD_TREE_RESOURCE_MACROS = re.compile(
     r"\bOM_(?:RUNTIME(?:_SERVICES|_DISTRIBUTION)?|DISTRIBUTION|FOUNDATION)_ARCHIVE\b"
 )
+BUILTIN_STRING_CLASSIFIERS = re.compile(
+    r"\b(?:name_equals_ascii_ci|name_is_ci|"
+    r"om_name_equal_case_insensitive)\s*\("
+)
 
 CORE_TARGET_EDGES = {
     "ombasic_source": {"ombasic::foundation"},
@@ -167,8 +171,28 @@ def check_cmake_graph(root: Path) -> list[str]:
     return errors
 
 
+def check_builtin_identity(root: Path) -> list[str]:
+    """Keep canonical builtin spelling comparisons in Name Resolution."""
+    errors: list[str] = []
+    bases = ("src/semantic", "src/ir/hir", "src/ir/mir", "src/backend")
+    for base in bases:
+        for path in sorted((root / base).rglob("*")):
+            if not path.is_file() or path.suffix.lower() not in SOURCE_SUFFIXES:
+                continue
+            relative = path.relative_to(root).as_posix()
+            code = strip_comments_and_literals(path.read_text(encoding="utf-8"))
+            if (relative != "src/semantic/name_resolver/name_resolver.c"
+                    and BUILTIN_STRING_CLASSIFIERS.search(code)):
+                errors.append(
+                    f"{relative}: semantic identity must use Om_Builtin_Id, "
+                    "not a string-name classifier"
+                )
+    return errors
+
+
 def check(root: Path) -> list[str]:
     errors = check_cmake_graph(root)
+    errors.extend(check_builtin_identity(root))
     source_files = [
         path for base in ("src", "include", "tests")
         for path in (root / base).rglob("*")

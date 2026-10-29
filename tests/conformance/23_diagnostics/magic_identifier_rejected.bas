@@ -1,0 +1,6 @@
+FUNCTION __init__()
+    RETURN 1
+END FUNCTION
+
+ACTION main()
+END ACTION

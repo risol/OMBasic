@@ -850,3 +850,56 @@ cleanup:
     OM_TEST_ASSERT(passed);
     return true;
 }
+
+bool om_test_name_resolution_builtin_identities(void)
+{
+    Om_Semantic_Test_Project test_project = {0};
+    bool passed = false;
+    SEMANTIC_ASSERT(load_and_resolve("builtin_identity/main.bas",
+                                     &test_project));
+    SEMANTIC_ASSERT(test_project.resolution.diagnostic_count == 0);
+    const Om_Module_Id module = find_module(&test_project,
+                                            "builtin_identity/main.bas");
+    const Om_Ast *ast = &test_project.parsed_modules[module.value].ast;
+    bool found_actor_down_reason = false;
+    bool found_ok = false;
+    bool found_error = false;
+    bool found_actor_down = false;
+    for (size_t index = 0; index < test_project.resolution.symbol_count; ++index) {
+        const Om_Symbol *symbol = &test_project.resolution.symbols[index];
+        if (symbol->kind != OM_SYMBOL_BUILTIN) {
+            continue;
+        }
+        found_actor_down_reason = found_actor_down_reason
+            || symbol->builtin_id == OM_BUILTIN_ACTOR_DOWN_REASON;
+        found_ok = found_ok || symbol->builtin_id == OM_BUILTIN_OK;
+        found_error = found_error || symbol->builtin_id == OM_BUILTIN_ERROR;
+        found_actor_down = found_actor_down
+            || symbol->builtin_id == OM_BUILTIN_ACTOR_DOWN;
+    }
+    SEMANTIC_ASSERT(found_actor_down_reason && found_ok && found_error
+                    && found_actor_down);
+    const struct {
+        const char *name;
+        Om_Builtin_Member_Id id;
+    } members[] = {
+        {"normal", OM_BUILTIN_MEMBER_ACTOR_DOWN_REASON_NORMAL},
+        {"failed", OM_BUILTIN_MEMBER_ACTOR_DOWN_REASON_FAILED},
+        {"node_unreachable",
+         OM_BUILTIN_MEMBER_ACTOR_DOWN_REASON_NODE_UNREACHABLE},
+    };
+    for (size_t index = 0; index < sizeof(members) / sizeof(members[0]); ++index) {
+        const Om_Ast_Node_Id member = find_node(ast, OM_AST_MEMBER,
+                                                members[index].name);
+        SEMANTIC_ASSERT(member.value != UINT32_MAX
+                        && om_resolution_builtin_member_for_node(
+                               &test_project.resolution, module, member)
+                            == members[index].id);
+    }
+    passed = true;
+
+cleanup:
+    destroy_test_project(&test_project);
+    OM_TEST_ASSERT(passed);
+    return true;
+}

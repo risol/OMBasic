@@ -1,0 +1,5 @@
+IMPORT "main.bas"
+
+FUNCTION value()
+    RETURN 1
+END FUNCTION

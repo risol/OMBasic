@@ -935,6 +935,23 @@ if(BUILD_TESTING)
         COMMAND "${Python3_EXECUTABLE}"
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/conformance/validate_manifest.py"
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/conformance/manifest.json")
+    add_test(NAME ombasic-conformance
+        COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/conformance_check/check.py"
+                --root "${CMAKE_CURRENT_SOURCE_DIR}"
+                --report "${CMAKE_BINARY_DIR}/reports/conformance-coverage.txt")
+    add_test(NAME ombasic-conformance-static
+        COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/conformance/runner/conformance_runner.py"
+                --compiler "$<TARGET_FILE:ombasic>"
+                --manifest "${CMAKE_CURRENT_SOURCE_DIR}/tests/conformance/manifest.json"
+                --suite static)
+    add_test(NAME ombasic-conformance-runtime
+        COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/conformance/runner/conformance_runner.py"
+                --compiler "$<TARGET_FILE:ombasic>"
+                --manifest "${CMAKE_CURRENT_SOURCE_DIR}/tests/conformance/manifest.json"
+                --suite runtime)
 
     add_executable(ombasic_tooling_tests tests/tooling/formatter_tests.c)
     target_link_libraries(ombasic_tooling_tests PRIVATE

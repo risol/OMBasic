@@ -18,6 +18,12 @@ are process-local and cannot define a network schema.
   Actor identity and the sorted set of accepted Message fingerprints. Keep the
   interface fingerprint separate from the program fingerprint.
 - Treat fingerprints as compatibility checks, not authentication.
+- OMBasic 0.1 distributed Actor transport does not provide peer
+  authentication, transport encryption, or an Internet-facing security
+  boundary unless explicitly supplied by the deployment environment.
+- OMBasic 0.1 distribution is intended for trusted or otherwise secured
+  network environments. A fingerprint is not an authentication credential,
+  signature, MAC, or authorization decision.
 - Give each Runtime epoch a fresh 128-bit node identity from the OS random
   source. Actor IDs are 64-bit values scoped to that node.
 - Encode values with explicit tags and fixed-width big-endian representations.

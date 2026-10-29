@@ -35,6 +35,16 @@ The Hello World and Actor examples are in [`examples/hello`](examples/hello)
 and [`examples/actor`](examples/actor). `ombasic run main.bas` compiles a
 temporary native executable and runs it.
 
+## Distributed Actors
+
+OMBasic 0.1 distributed Actor transport does not provide peer authentication,
+transport encryption, or an Internet-facing security boundary unless the
+deployment environment supplies them. Distribution is intended for trusted
+or otherwise secured networks. Compatibility fingerprints identify matching
+program and Message contracts; they do not authenticate peers or authorize
+operations. See [ADR-0014](docs/architecture/adr/ADR-0014-distribution-descriptors-fingerprints-and-transport.md)
+for the transport contract.
+
 ## Development
 
 Compiler build instructions, contribution rules, and release gates are in the

@@ -1,0 +1,3 @@
+FUNCTION secret()
+    RETURN 7
+END FUNCTION

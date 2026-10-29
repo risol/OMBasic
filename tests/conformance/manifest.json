@@ -1,16 +1,34 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "cases": [
     {
-      "id": "5.7-keyword-uppercase",
-      "standard_section": "5.7",
+      "id": "keyword-uppercase",
+      "rules": [
+        "OM-05.02",
+        "OM-05.07"
+      ],
+      "kind": "compile",
       "source": "05_identifiers/keyword_uppercase.bas",
-      "expect": { "compiles": true }
+      "tags": [
+        "lexer",
+        "diagnostic"
+      ],
+      "expect": {
+        "compiles": true
+      }
     },
     {
-      "id": "5.7-keyword-wrong-case",
-      "standard_section": "5.7",
+      "id": "keyword-wrong-case",
+      "rules": [
+        "OM-05.02",
+        "OM-05.07"
+      ],
+      "kind": "compile",
       "source": "05_identifiers/keyword_wrong_case.bas",
+      "tags": [
+        "lexer",
+        "diagnostic"
+      ],
       "expect": {
         "compiles": false,
         "diagnostic": {
@@ -25,15 +43,33 @@
       }
     },
     {
-      "id": "5.1-ordinary-lower-snake",
-      "standard_section": "5.1",
+      "id": "ordinary-lower-snake",
+      "rules": [
+        "OM-05.01",
+        "OM-05.03"
+      ],
+      "kind": "compile",
       "source": "05_identifiers/ordinary_lower_snake.bas",
-      "expect": { "compiles": true }
+      "tags": [
+        "lexer",
+        "semantic"
+      ],
+      "expect": {
+        "compiles": true
+      }
     },
     {
-      "id": "5.1-ordinary-mixed-case",
-      "standard_section": "5.1",
+      "id": "ordinary-mixed-case",
+      "rules": [
+        "OM-05.01",
+        "OM-05.03"
+      ],
+      "kind": "compile",
       "source": "05_identifiers/ordinary_mixed_case.bas",
+      "tags": [
+        "lexer",
+        "diagnostic"
+      ],
       "expect": {
         "compiles": false,
         "diagnostic": {
@@ -48,15 +84,33 @@
       }
     },
     {
-      "id": "5.1-entity-pascal-snake",
-      "standard_section": "5.1",
+      "id": "entity-pascal-snake",
+      "rules": [
+        "OM-05.01",
+        "OM-05.03"
+      ],
+      "kind": "compile",
       "source": "05_identifiers/entity_pascal_snake.bas",
-      "expect": { "compiles": true }
+      "tags": [
+        "lexer",
+        "semantic"
+      ],
+      "expect": {
+        "compiles": true
+      }
     },
     {
-      "id": "5.1-entity-invalid-case",
-      "standard_section": "5.1",
+      "id": "entity-invalid-case",
+      "rules": [
+        "OM-05.01",
+        "OM-05.03"
+      ],
+      "kind": "compile",
       "source": "05_identifiers/entity_invalid_case.bas",
+      "tags": [
+        "lexer",
+        "diagnostic"
+      ],
       "expect": {
         "compiles": false,
         "diagnostic": {
@@ -71,9 +125,17 @@
       }
     },
     {
-      "id": "37.1-numeric-suffix",
-      "standard_section": "37.1",
+      "id": "numeric-suffix-rejected",
+      "rules": [
+        "OM-06.01",
+        "OM-37.01"
+      ],
+      "kind": "compile",
       "source": "lexer/numeric_suffix.bas",
+      "tags": [
+        "lexer",
+        "diagnostic"
+      ],
       "expect": {
         "compiles": false,
         "diagnostic": {
@@ -88,9 +150,17 @@
       }
     },
     {
-      "id": "37.1-integer-overflow",
-      "standard_section": "37.1",
+      "id": "integer-overflow-rejected",
+      "rules": [
+        "OM-06.01",
+        "OM-37.01"
+      ],
+      "kind": "compile",
       "source": "lexer/integer_overflow.bas",
+      "tags": [
+        "lexer",
+        "diagnostic"
+      ],
       "expect": {
         "compiles": false,
         "diagnostic": {
@@ -105,9 +175,17 @@
       }
     },
     {
-      "id": "37.1-float-overflow",
-      "standard_section": "37.1",
+      "id": "float-overflow-rejected",
+      "rules": [
+        "OM-06.02",
+        "OM-37.01"
+      ],
+      "kind": "compile",
       "source": "lexer/float_overflow.bas",
+      "tags": [
+        "lexer",
+        "diagnostic"
+      ],
       "expect": {
         "compiles": false,
         "diagnostic": {
@@ -122,9 +200,17 @@
       }
     },
     {
-      "id": "37.1-malformed-exponent",
-      "standard_section": "37.1",
+      "id": "malformed-exponent-rejected",
+      "rules": [
+        "OM-06.02",
+        "OM-37.01"
+      ],
+      "kind": "compile",
       "source": "lexer/malformed_exponent.bas",
+      "tags": [
+        "lexer",
+        "diagnostic"
+      ],
       "expect": {
         "compiles": false,
         "diagnostic": {
@@ -139,9 +225,17 @@
       }
     },
     {
-      "id": "37.1-invalid-string-escape",
-      "standard_section": "37.1",
+      "id": "invalid-string-escape",
+      "rules": [
+        "OM-06.04",
+        "OM-37.01"
+      ],
+      "kind": "compile",
       "source": "lexer/invalid_escape.bas",
+      "tags": [
+        "lexer",
+        "diagnostic"
+      ],
       "expect": {
         "compiles": false,
         "diagnostic": {
@@ -156,33 +250,78 @@
       }
     },
     {
-      "id": "37.1-valid-string-escape",
-      "standard_section": "37.1",
+      "id": "valid-string-escape",
+      "rules": [
+        "OM-06.04",
+        "OM-37.01"
+      ],
+      "kind": "compile",
       "source": "lexer/valid_escape.bas",
-      "expect": { "compiles": true }
+      "tags": [
+        "lexer"
+      ],
+      "expect": {
+        "compiles": true
+      }
     },
     {
-      "id": "37.1-valid-interpolation",
-      "standard_section": "37.1",
+      "id": "valid-interpolation",
+      "rules": [
+        "OM-06.05",
+        "OM-37.01"
+      ],
+      "kind": "compile",
       "source": "lexer/valid_interpolation.bas",
-      "expect": { "compiles": true }
+      "tags": [
+        "lexer",
+        "parser"
+      ],
+      "expect": {
+        "compiles": true
+      }
     },
     {
-      "id": "37.1-finite-float-underflow",
-      "standard_section": "37.1",
+      "id": "finite-float-underflow",
+      "rules": [
+        "OM-06.02",
+        "OM-37.01"
+      ],
+      "kind": "compile",
       "source": "lexer/float_underflow.bas",
-      "expect": { "compiles": true }
+      "tags": [
+        "lexer"
+      ],
+      "expect": {
+        "compiles": true
+      }
     },
     {
-      "id": "37.2-basic-parser-golden",
-      "standard_section": "37.2",
+      "id": "basic-parser-golden",
+      "rules": [
+        "OM-37.02"
+      ],
+      "kind": "compile",
       "source": "parser/basic.bas",
-      "expect": { "compiles": true }
+      "tags": [
+        "parser"
+      ],
+      "expect": {
+        "compiles": true
+      }
     },
     {
-      "id": "37.2-chained-comparison",
-      "standard_section": "37.2",
+      "id": "chained-comparison-rejected",
+      "rules": [
+        "OM-09.02",
+        "OM-09.04",
+        "OM-37.02"
+      ],
+      "kind": "compile",
       "source": "parser/chained_comparison.bas",
+      "tags": [
+        "parser",
+        "diagnostic"
+      ],
       "expect": {
         "compiles": false,
         "diagnostic": {
@@ -194,6 +333,930 @@
             "end_byte_column": 19
           }
         }
+      }
+    },
+    {
+      "id": "builtin-identities",
+      "rules": [
+        "OM-05.03",
+        "OM-08.02",
+        "OM-14.02",
+        "OM-15.02",
+        "OM-37.03"
+      ],
+      "kind": "compile",
+      "source": "08_types/builtin_identities.bas",
+      "tags": [
+        "semantic",
+        "type",
+        "actor"
+      ],
+      "expect": {
+        "compiles": true
+      }
+    },
+    {
+      "id": "function-action-effects-and-return",
+      "rules": [
+        "OM-01.00",
+        "OM-02.00",
+        "OM-03.01",
+        "OM-03.03",
+        "OM-03.05",
+        "OM-13.01",
+        "OM-13.02",
+        "OM-13.03",
+        "OM-13.04",
+        "OM-25.00",
+        "OM-26.00",
+        "OM-34.00",
+        "OM-37.03"
+      ],
+      "kind": "run",
+      "source": "13_functions/pure_function_and_effectful_action.bas",
+      "tags": [
+        "semantic",
+        "effect",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "42\n"
+        }
+      }
+    },
+    {
+      "id": "utf8-comments-and-source-layout",
+      "rules": [
+        "OM-04.01",
+        "OM-04.02",
+        "OM-04.03",
+        "OM-04.04",
+        "OM-04.05",
+        "OM-05.05"
+      ],
+      "kind": "run",
+      "source": "04_source/comments_and_utf8.bas",
+      "tags": [
+        "lexer",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "It's ready\n"
+        }
+      }
+    },
+    {
+      "id": "explicit-mutation",
+      "rules": [
+        "OM-03.04",
+        "OM-07.02"
+      ],
+      "kind": "run",
+      "source": "07_bindings/explicit_mutation.bas",
+      "tags": [
+        "semantic",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "7:15\n"
+        }
+      }
+    },
+    {
+      "id": "immutable-reassignment-rejected",
+      "rules": [
+        "OM-07.01"
+      ],
+      "kind": "compile",
+      "source": "07_bindings/immutable_reassignment.bas",
+      "tags": [
+        "semantic",
+        "diagnostic"
+      ],
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E0307",
+          "primary_span": {
+            "line": 3,
+            "start_byte_column": 5,
+            "end_byte_column": 14
+          }
+        }
+      }
+    },
+    {
+      "id": "type-inference-collections",
+      "rules": [
+        "OM-06.03",
+        "OM-06.04",
+        "OM-08.01",
+        "OM-08.02",
+        "OM-08.07",
+        "OM-09.01",
+        "OM-12.01",
+        "OM-12.02"
+      ],
+      "kind": "run",
+      "source": "08_types/inference_and_collections.bas",
+      "tags": [
+        "type",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "42:ok\n"
+        }
+      }
+    },
+    {
+      "id": "null-value-comparison",
+      "rules": [
+        "OM-06.06"
+      ],
+      "kind": "run",
+      "source": "08_types/null_in_comparison.bas",
+      "tags": [
+        "type",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "both null\n"
+        }
+      }
+    },
+    {
+      "id": "truthiness-rejected",
+      "rules": [
+        "OM-08.05",
+        "OM-10.01"
+      ],
+      "kind": "compile",
+      "source": "08_types/truthiness_rejected.bas",
+      "tags": [
+        "type",
+        "diagnostic"
+      ],
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E0401",
+          "primary_span": {
+            "line": 2,
+            "start_byte_column": 8,
+            "end_byte_column": 9
+          }
+        }
+      }
+    },
+    {
+      "id": "binding-type-is-stable",
+      "rules": [
+        "OM-08.04",
+        "OM-08.06"
+      ],
+      "kind": "compile",
+      "source": "08_types/unstable_binding_type_rejected.bas",
+      "tags": [
+        "type",
+        "diagnostic"
+      ],
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E0401",
+          "primary_span": {
+            "line": 3,
+            "start_byte_column": 5,
+            "end_byte_column": 19
+          }
+        }
+      }
+    },
+    {
+      "id": "operators-and-precedence",
+      "rules": [
+        "OM-03.02",
+        "OM-09.01",
+        "OM-09.02",
+        "OM-09.03",
+        "OM-09.04"
+      ],
+      "kind": "run",
+      "source": "09_operators/operator_semantics.bas",
+      "tags": [
+        "parser",
+        "type",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "17\n"
+        }
+      }
+    },
+    {
+      "id": "boolean-operators-short-circuit",
+      "rules": [
+        "OM-09.03",
+        "OM-09.04"
+      ],
+      "kind": "run",
+      "source": "09_operators/short_circuit_boolean.bas",
+      "tags": [
+        "type",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "and-skipped\nor-skipped\n"
+        }
+      }
+    },
+    {
+      "id": "assignment-is-a-statement",
+      "rules": [
+        "OM-07.03"
+      ],
+      "kind": "run",
+      "source": "23_diagnostics/assignment_is_statement.bas",
+      "tags": [
+        "semantic",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "equality\n"
+        }
+      }
+    },
+    {
+      "id": "control-flow-forms",
+      "rules": [
+        "OM-10.01",
+        "OM-10.02",
+        "OM-10.03",
+        "OM-10.04",
+        "OM-10.05",
+        "OM-10.06"
+      ],
+      "kind": "run",
+      "source": "10_control_flow/control_flow.bas",
+      "tags": [
+        "parser",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "control-flow-ok\n"
+        }
+      }
+    },
+    {
+      "id": "immutable-record-update",
+      "rules": [
+        "OM-11.01",
+        "OM-11.02",
+        "OM-11.03",
+        "OM-11.04",
+        "OM-12.03"
+      ],
+      "kind": "run",
+      "source": "11_records/immutable_with.bas",
+      "tags": [
+        "type",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "36:37\n"
+        }
+      }
+    },
+    {
+      "id": "class-feature-is-not-defined",
+      "rules": [
+        "OM-11.05",
+        "OM-21.10",
+        "OM-23.00",
+        "OM-35.00"
+      ],
+      "kind": "compile",
+      "source": "23_diagnostics/class_syntax_rejected.bas",
+      "tags": [
+        "parser",
+        "diagnostic"
+      ],
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E0102",
+          "primary_span": {
+            "line": 1,
+            "start_byte_column": 1,
+            "end_byte_column": 6
+          }
+        }
+      }
+    },
+    {
+      "id": "list-and-map-values",
+      "rules": [
+        "OM-12.01",
+        "OM-12.02"
+      ],
+      "kind": "run",
+      "source": "12_collections/list_map.bas",
+      "tags": [
+        "type",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "3:4\n"
+        }
+      }
+    },
+    {
+      "id": "effect-is-rejected-in-function",
+      "rules": [
+        "OM-13.01",
+        "OM-14.01"
+      ],
+      "kind": "compile",
+      "source": "13_functions/effect_in_function_rejected.bas",
+      "tags": [
+        "effect",
+        "diagnostic"
+      ],
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E0501",
+          "primary_span": {
+            "line": 1,
+            "start_byte_column": 1,
+            "end_line": 6,
+            "end_byte_column": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "function-overloading-rejected",
+      "rules": [
+        "OM-13.05"
+      ],
+      "kind": "compile",
+      "source": "13_functions/same_name_overload_rejected.bas",
+      "tags": [
+        "semantic",
+        "diagnostic"
+      ],
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E0303",
+          "primary_span": {
+            "line": 5,
+            "start_byte_column": 1,
+            "end_line": 9,
+            "end_byte_column": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "result-constructor-needs-context",
+      "rules": [
+        "OM-14.02"
+      ],
+      "kind": "compile",
+      "source": "14_result/result_value_only.bas",
+      "tags": [
+        "type",
+        "diagnostic"
+      ],
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E0404",
+          "primary_span": {
+            "line": 2,
+            "start_byte_column": 15,
+            "end_byte_column": 21
+          }
+        }
+      }
+    },
+    {
+      "id": "result-call-needs-context",
+      "rules": [
+        "OM-14.02"
+      ],
+      "kind": "compile",
+      "source": "14_result/unresolved_result_call.bas",
+      "tags": [
+        "type",
+        "diagnostic"
+      ],
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E0404",
+          "primary_span": {
+            "line": 6,
+            "start_byte_column": 15,
+            "end_byte_column": 29
+          }
+        }
+      }
+    },
+    {
+      "id": "result-select-constructors",
+      "rules": [
+        "OM-14.02",
+        "OM-14.04"
+      ],
+      "kind": "run",
+      "source": "14_result/select_result.bas",
+      "tags": [
+        "type",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "ok=42\n"
+        }
+      }
+    },
+    {
+      "id": "result-try-early-propagation",
+      "rules": [
+        "OM-14.02",
+        "OM-14.03",
+        "OM-14.04"
+      ],
+      "kind": "run",
+      "source": "14_result/try_propagation.bas",
+      "tags": [
+        "type",
+        "semantic",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "ok=42\nerror=invalid\n"
+        }
+      }
+    },
+    {
+      "id": "message-protocol-declaration",
+      "rules": [
+        "OM-03.06",
+        "OM-15.01",
+        "OM-15.02",
+        "OM-16.01",
+        "OM-16.02"
+      ],
+      "kind": "compile",
+      "source": "15_messages/protocol.bas",
+      "tags": [
+        "actor",
+        "type"
+      ],
+      "expect": {
+        "compiles": true
+      }
+    },
+    {
+      "id": "actor-message-protocol-is-checked",
+      "rules": [
+        "OM-16.07"
+      ],
+      "kind": "compile",
+      "source": "15_messages/wrong_message_rejected.bas",
+      "tags": [
+        "actor",
+        "diagnostic"
+      ],
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E0601",
+          "primary_span": {
+            "line": 11,
+            "start_byte_column": 5,
+            "end_byte_column": 29
+          }
+        }
+      }
+    },
+    {
+      "id": "watch-stop-and-terminal-notification",
+      "rules": [
+        "OM-16.03",
+        "OM-16.04",
+        "OM-16.05",
+        "OM-16.06",
+        "OM-16.08",
+        "OM-17.02",
+        "OM-17.04",
+        "OM-18.01",
+        "OM-18.03",
+        "OM-18.04",
+        "OM-19.01",
+        "OM-19.02",
+        "OM-19.03",
+        "OM-20.07"
+      ],
+      "kind": "run",
+      "source": "17_actors/watch_stop.bas",
+      "tags": [
+        "actor",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "target-down\n"
+        }
+      }
+    },
+    {
+      "id": "await-syntax-is-rejected",
+      "rules": [
+        "OM-03.03",
+        "OM-17.01",
+        "OM-17.04"
+      ],
+      "kind": "compile",
+      "source": "17_actors/await_rejected.bas",
+      "tags": [
+        "parser",
+        "diagnostic"
+      ],
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E0102",
+          "primary_span": {
+            "line": 2,
+            "start_byte_column": 14,
+            "end_byte_column": 19
+          },
+          "text": "AWAIT"
+        }
+      }
+    },
+    {
+      "id": "system-io-uses-an-actor",
+      "rules": [
+        "OM-17.03"
+      ],
+      "kind": "compile",
+      "source": "17_actors/system_console.bas",
+      "tags": [
+        "actor",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true
+      }
+    },
+    {
+      "id": "magic-identifier-rejected",
+      "rules": [
+        "OM-05.06"
+      ],
+      "kind": "compile",
+      "source": "23_diagnostics/magic_identifier_rejected.bas",
+      "tags": [
+        "semantic",
+        "diagnostic"
+      ],
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E0102",
+          "primary_span": {
+            "line": 1,
+            "start_byte_column": 10,
+            "end_byte_column": 18
+          },
+          "text": "__init__"
+        }
+      }
+    },
+    {
+      "id": "nonserializable-message-payload-rejected",
+      "rules": [
+        "OM-15.03",
+        "OM-18.02",
+        "OM-20.03"
+      ],
+      "kind": "compile",
+      "source": "18_serialization/nonserializable.bas",
+      "tags": [
+        "type",
+        "actor",
+        "diagnostic"
+      ],
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E0701",
+          "primary_span": {
+            "line": 16,
+            "start_byte_column": 22,
+            "end_byte_column": 53
+          }
+        }
+      }
+    },
+    {
+      "id": "distribution-runtime-process-contract",
+      "rules": [
+        "OM-20.01",
+        "OM-20.02",
+        "OM-20.03",
+        "OM-20.04",
+        "OM-20.05",
+        "OM-20.06"
+      ],
+      "kind": "multi_process",
+      "scenario": "runner/scenarios/distribution_runtime.py",
+      "timeout_seconds": 120,
+      "tags": [
+        "runtime",
+        "distribution",
+        "slow"
+      ],
+      "expect": {
+        "exit_code": 0
+      }
+    },
+    {
+      "id": "local-message-delivery",
+      "rules": [
+        "OM-16.05",
+        "OM-16.06",
+        "OM-18.03",
+        "OM-19.02",
+        "OM-19.03"
+      ],
+      "kind": "run",
+      "source": "20_distribution/local_delivery.bas",
+      "tags": [
+        "actor",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "count=1\n"
+        }
+      }
+    },
+    {
+      "id": "source-module-import-and-export",
+      "rules": [
+        "OM-21.01",
+        "OM-21.02",
+        "OM-21.03",
+        "OM-21.05",
+        "OM-21.06",
+        "OM-21.07",
+        "OM-21.08",
+        "OM-21.09",
+        "OM-21.10",
+        "OM-21.12",
+        "OM-08.08"
+      ],
+      "kind": "multi_file",
+      "project_root": "06_modules/basic",
+      "entry": "main.bas",
+      "tags": [
+        "semantic",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "42\n"
+        }
+      },
+      "include_interfaces": true,
+      "expected_exports": [
+        "add"
+      ]
+    },
+    {
+      "id": "private-module-member-rejected",
+      "rules": [
+        "OM-21.08"
+      ],
+      "kind": "multi_file",
+      "project_root": "06_modules/private",
+      "entry": "main.bas",
+      "tags": [
+        "semantic",
+        "diagnostic"
+      ],
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E0302",
+          "primary_span": {
+            "line": 4,
+            "start_byte_column": 23,
+            "end_byte_column": 29
+          }
+        }
+      }
+    },
+    {
+      "id": "cyclic-import-rejected",
+      "rules": [
+        "OM-21.11"
+      ],
+      "kind": "multi_file",
+      "project_root": "06_modules/cycle",
+      "entry": "main.bas",
+      "tags": [
+        "semantic",
+        "diagnostic"
+      ],
+      "expect": {
+        "compiles": false,
+        "project_error": "cycle detected"
+      }
+    },
+    {
+      "id": "native-metadata-c-abi-call",
+      "rules": [
+        "OM-05.04",
+        "OM-37.04"
+      ],
+      "kind": "compile",
+      "source": "21_native/native_call.bas",
+      "native_metadata": "math.omi",
+      "tags": [
+        "native",
+        "type"
+      ],
+      "expect": {
+        "compiles": true
+      }
+    },
+    {
+      "id": "blocking-native-call-in-receive-rejected",
+      "rules": [
+        "OM-16.04",
+        "OM-17.04",
+        "OM-37.04"
+      ],
+      "kind": "compile",
+      "source": "21_native/blocking_receive_rejected.bas",
+      "native_metadata": "blocking.omi",
+      "pipeline": "build",
+      "tags": [
+        "native",
+        "actor",
+        "diagnostic"
+      ],
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E1104",
+          "primary_span": {
+            "line": 5,
+            "start_byte_column": 17,
+            "end_byte_column": 32
+          }
+        }
+      }
+    },
+    {
+      "id": "legacy-public-declaration-rejected",
+      "rules": [
+        "OM-23.00",
+        "OM-35.00"
+      ],
+      "kind": "compile",
+      "source": "23_diagnostics/old_public_syntax_rejected.bas",
+      "tags": [
+        "parser",
+        "diagnostic"
+      ],
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E0102",
+          "primary_span": {
+            "line": 1,
+            "start_byte_column": 1,
+            "end_byte_column": 7
+          },
+          "text": "PUBLIC"
+        }
+      }
+    },
+    {
+      "id": "shadowing-is-rejected",
+      "rules": [
+        "OM-07.04"
+      ],
+      "kind": "compile",
+      "source": "07_bindings/shadowing_rejected.bas",
+      "tags": [
+        "semantic",
+        "diagnostic"
+      ],
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E0305",
+          "primary_span": {
+            "line": 2,
+            "start_byte_column": 9,
+            "end_byte_column": 18
+          }
+        }
+      }
+    },
+    {
+      "id": "any-is-not-a-builtin-type",
+      "rules": [
+        "OM-08.03"
+      ],
+      "kind": "compile",
+      "source": "08_types/any_type_is_not_builtin.bas",
+      "tags": [
+        "type",
+        "diagnostic"
+      ],
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E0301",
+          "primary_span": {
+            "line": 2,
+            "start_byte_column": 13,
+            "end_byte_column": 16
+          },
+          "text": "Any"
+        }
+      }
+    },
+    {
+      "id": "source-root-import-path-escape-rejected",
+      "rules": [
+        "OM-21.04"
+      ],
+      "kind": "multi_file",
+      "project_root": "06_modules/escape",
+      "entry": "main.bas",
+      "tags": [
+        "semantic",
+        "diagnostic"
+      ],
+      "expect": {
+        "compiles": false,
+        "project_error": "invalid argument"
       }
     }
   ]

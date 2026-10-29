@@ -14,7 +14,7 @@ jobs:
   linux-release:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
@@ -51,3 +51,20 @@ jobs:
           build/linux-release/ombasic check examples/hello/main.bas
           build/linux-release/ombasic build examples/hello/main.bas -o "$RUNNER_TEMP/hello"
           "$RUNNER_TEMP/hello"
+      - name: Stage the SDK with build provenance
+        run: |
+          cmake --install build/linux-release --prefix build/package/linux
+          python tools/release/write_provenance.py \
+            --root . \
+            --output build/package/linux/share/ombasic/release-provenance.json \
+            --target x86_64-unknown-linux-gnu \
+            --llvm-version "$(llvm-config-23 --version)" \
+            --clang clang-23 \
+            --lld ld.lld-23
+          tar -czf build/ombasic-linux-sdk.tar.gz -C build/package/linux .
+      - name: Upload the Linux SDK artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ombasic-linux-sdk
+          path: build/ombasic-linux-sdk.tar.gz
+          if-no-files-found: error

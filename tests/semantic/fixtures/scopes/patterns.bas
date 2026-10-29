@@ -1,5 +1,13 @@
 MESSAGE Ping(value)
 
+FUNCTION make_result(flag)
+    IF flag THEN
+        RETURN Ok(1)
+    ELSE
+        RETURN Error("failed")
+    END IF
+END FUNCTION
+
 ACTOR Worker
     VAR count = 0
     RECEIVE Ping(value)
@@ -8,7 +16,7 @@ ACTOR Worker
 END ACTOR
 
 ACTION main()
-    outcome = Ok(1)
+    outcome = make_result(TRUE)
     SELECT outcome
     CASE Ok(value)
         selected_value = value

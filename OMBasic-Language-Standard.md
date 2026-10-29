@@ -3,12 +3,14 @@
 **语言名称：** OMBasic  
 **全称：** Oh My BASIC  
 **规范版本：** 0.1  
-**状态：** 第一版草案（First Draft Standard）  
+**状态：** 0.1 Language Freeze Candidate
 **日期：** 2026-10-27
 
 ---
 
 ## 1. 范围与目标
+**OM-01.00 — 范围与目标**
+
 
 OMBasic 是一门面向 AI 辅助编程时代设计的、强调**人类可读、人类可审查、局部可分析**的静态语言。
 
@@ -28,6 +30,8 @@ OMBasic 采用 BASIC 风格的可读关键字、Pascal/Modula 风格的显式块
 ---
 
 ## 2. 规范术语
+**OM-02.00 — 规范术语**
+
 
 本文中的以下词具有规范含义：
 
@@ -39,11 +43,18 @@ OMBasic 采用 BASIC 风格的可读关键字、Pascal/Modula 风格的显式块
 
 示例和实现建议在未明确标为“必须”时不构成强制 ABI 或实现约束。
 
+规范性条款使用稳定 Rule ID，格式为 `OM-SS.RR`：`SS` 对应标准顶层章节，
+`RR` 是该章节内稳定编号。信息性示例和实现建议不定义 Rule ID。Rule ID
+在 OMBasic 0.1 release candidate 后不得重编号；语义变化必须更新标准和
+引用该规则的 conformance cases。
+
 ---
 
 ## 3. 核心设计原则
 
 ### 3.1 局部可分析性
+**OM-03.01 — 局部可分析性**
+
 
 一条语句的基本语义应该主要由以下信息确定：
 
@@ -54,6 +65,8 @@ OMBasic 采用 BASIC 风格的可读关键字、Pascal/Modula 风格的显式块
 语言不得依赖任意远处的运行时代码来重新定义核心语法语义。
 
 ### 3.2 语义不可重定义
+**OM-03.02 — 语义不可重定义**
+
 
 以下核心语义由编译器定义，用户代码不得重载或改写：
 
@@ -82,6 +95,8 @@ IMPORT
 OMBasic 0.1 不支持用户自定义运算符重载。
 
 ### 3.3 控制流必须可见
+**OM-03.03 — 控制流必须可见**
+
 
 OMBasic 不提供隐藏的挂起/恢复模型。
 
@@ -99,6 +114,8 @@ Coroutine
 需要等待外部结果时，当前 Actor 的 `RECEIVE` 处理结束，结果以后以新的 Message 返回。
 
 ### 3.4 变化必须显式
+**OM-03.04 — 变化必须显式**
+
 
 绑定默认不可变。
 
@@ -107,6 +124,8 @@ Coroutine
 长期可变状态应该由 Actor 拥有。
 
 ### 3.5 类型是编译器事实
+**OM-03.05 — 类型是编译器事实**
+
 
 普通 OMBasic 源码不要求、也不鼓励书写类型标注。
 
@@ -115,6 +134,8 @@ Coroutine
 Native ABI 描述属于例外：ABI 类型必须明确，见第 24 章。
 
 ### 3.6 无共享可变状态
+**OM-03.06 — 无共享可变状态**
+
 
 不同 Actor 不得直接共享普通可变对象。
 
@@ -125,10 +146,14 @@ Actor 之间只能通过 Message 通信。
 ## 4. 源文件
 
 ### 4.1 编码
+**OM-04.01 — 编码**
+
 
 源文件必须使用 UTF-8。
 
 ### 4.2 文件扩展名
+**OM-04.02 — 文件扩展名**
+
 
 OMBasic 源文件的标准扩展名为：
 
@@ -139,18 +164,24 @@ OMBasic 源文件的标准扩展名为：
 所有符合 OMBasic 0.1 的工具链必须识别 `.bas` 作为 OMBasic 源文件扩展名。OMBasic 0.1 不定义第二种标准源码扩展名。
 
 ### 4.3 语句结束
+**OM-04.03 — 语句结束**
+
 
 换行通常结束一条语句。
 
 OMBasic 不要求分号作为语句结束符。
 
 ### 4.4 缩进
+**OM-04.04 — 缩进**
+
 
 缩进不影响语法。
 
 工具链应该提供统一 formatter。
 
 ### 4.5 注释
+**OM-04.05 — 注释**
+
 
 OMBasic 0.1 提供两种注释：**普通注释**与**文档注释**。注释不得改变程序运行语义。
 
@@ -261,6 +292,8 @@ count = count + 1
 ## 5. 标识符、大小写与命名规范
 
 ### 5.1 基本标识符字符集
+**OM-05.01 — 基本标识符字符集**
+
 
 OMBasic 0.1 的用户标识符只允许使用 ASCII 字母、数字和下划线。
 
@@ -286,6 +319,8 @@ user__name      非法
 ```
 
 ### 5.2 大小写敏感
+**OM-05.02 — 大小写敏感**
+
 
 OMBasic 是大小写敏感语言。
 
@@ -312,6 +347,8 @@ function
 用户定义名称同样区分大小写；但为了降低视觉混淆，同一作用域不得声明仅大小写不同的两个用户名称。
 
 ### 5.3 一个概念一种规范拼写
+**OM-05.03 — 一个概念一种规范拼写**
+
 
 OMBasic 的命名规范是语言标准的一部分。
 
@@ -381,12 +418,16 @@ URL_Request
 ```
 
 ### 5.4 Native 名称边界
+**OM-05.04 — Native 名称边界**
+
 
 普通 OMBasic 名称必须遵循上述规则。Native interface 中直接对应外部 C ABI 的符号可以保留外部库的原始 C 符号名，以保证 ABI 对照明确；OMBasic 自己定义的 Native wrapper 名仍应遵循 `lower_snake_case` 或 `Pascal_Snake_Case`。
 
 `CInt`、`CDouble`、`CPointer` 等 ABI 内建类型名属于标准定义名称，不受用户实体命名规则约束。
 
 ### 5.5 文件与目录命名
+**OM-05.05 — 文件与目录命名**
+
 
 OMBasic 源文件名必须使用 `lower_snake_case.bas`，目录名必须使用 `lower_snake_case`。
 
@@ -412,6 +453,8 @@ result = payment_service.start()
 不存在从文件名到另一套 PascalCase、camelCase 或 namespace 名称的隐藏转换。
 
 ### 5.6 禁止魔法名称
+**OM-05.06 — 禁止魔法名称**
+
 
 用户定义名称本身不得触发隐藏语言行为。
 
@@ -426,6 +469,8 @@ __getattr__
 名称只是名称。语言行为必须由明确语法、声明或标准规定决定。
 
 ### 5.7 保留关键字
+**OM-05.07 — 保留关键字**
+
 
 OMBasic 0.1 保留以下全大写关键字：
 
@@ -476,6 +521,8 @@ WITH
 ## 6. 基本字面量
 
 ### 6.1 整数
+**OM-06.01 — 整数**
+
 
 ```basic
 0
@@ -487,6 +534,8 @@ WITH
 默认整数语义为有符号 64 位整数。
 
 ### 6.2 浮点数
+**OM-06.02 — 浮点数**
+
 
 ```basic
 0.0
@@ -497,6 +546,8 @@ WITH
 默认浮点语义为 IEEE 754 binary64。
 
 ### 6.3 Bool
+**OM-06.03 — Bool**
+
 
 ```basic
 TRUE
@@ -504,6 +555,8 @@ FALSE
 ```
 
 ### 6.4 String
+**OM-06.04 — String**
+
 
 ```basic
 name = "Alice"
@@ -512,6 +565,8 @@ name = "Alice"
 OMBasic String 必须具有确定的 Unicode 语义。0.1 推荐内部、模块边界和网络传输中的文本编码统一使用 UTF-8。
 
 ### 6.5 字符串插值
+**OM-06.05 — 字符串插值**
+
 
 ```basic
 greeting = $"Hello {name}"
@@ -522,6 +577,8 @@ greeting = $"Hello {name}"
 用户不得通过运行时 hook 重定义任意对象的默认字符串转换。
 
 ### 6.6 Null
+**OM-06.06 — Null**
+
 
 ```basic
 value = NULL
@@ -536,6 +593,8 @@ OMBasic 只定义一个空值概念 `NULL`。
 ## 7. 绑定与可变性
 
 ### 7.1 默认不可变绑定
+**OM-07.01 — 默认不可变绑定**
+
 
 ```basic
 x = 10
@@ -550,6 +609,8 @@ x = 20     ' 编译错误
 ```
 
 ### 7.2 显式可变绑定
+**OM-07.02 — 显式可变绑定**
+
 
 需要变化时必须使用 `VAR`：
 
@@ -561,6 +622,8 @@ count = count + 1
 `VAR` 是代码审查中的显式状态变化标记。
 
 ### 7.3 赋值不是表达式
+**OM-07.03 — 赋值不是表达式**
+
 
 赋值语句不产生值。
 
@@ -583,6 +646,8 @@ END IF
 ```
 
 ### 7.4 Shadowing
+**OM-07.04 — Shadowing**
+
 
 OMBasic 0.1 默认不允许在同一词法路径上静默 shadow 已存在的本地名字。
 
@@ -593,6 +658,8 @@ OMBasic 0.1 默认不允许在同一词法路径上静默 shadow 已存在的本
 ## 8. 静态类型系统
 
 ### 8.1 普通源码无显式类型标注
+**OM-08.01 — 普通源码无显式类型标注**
+
 
 典型源码：
 
@@ -611,6 +678,8 @@ age  : Int
 类型提示不是源码的一部分。
 
 ### 8.2 基础推导类型
+**OM-08.02 — 基础推导类型**
+
 
 OMBasic 0.1 至少包含以下语义类型：
 
@@ -630,12 +699,16 @@ Function<...>
 ```
 
 ### 8.3 不提供普通 `Any`
+**OM-08.03 — 不提供普通 `Any`**
+
 
 OMBasic 0.1 不提供可在业务源码中任意使用的 `Any` 类型。
 
 编译器内部可以存在 `Unknown` 类型变量，但它表示“尚未完成推导”，不是运行时万能值。
 
 ### 8.4 不做隐式类型转换
+**OM-08.04 — 不做隐式类型转换**
+
 
 以下代码必须报错：
 
@@ -650,6 +723,8 @@ x = int("10") + 20
 ```
 
 ### 8.5 不提供 truthiness
+**OM-08.05 — 不提供 truthiness**
+
 
 `IF`、`WHILE` 条件必须是 Bool。
 
@@ -666,6 +741,8 @@ IF count > 0 THEN
 ```
 
 ### 8.6 绑定类型稳定
+**OM-08.06 — 绑定类型稳定**
+
 
 显式 `VAR` 允许重新赋值，但不得改变其已推导类型：
 
@@ -676,6 +753,8 @@ x = "hello"  ' 编译错误
 ```
 
 ### 8.7 泛型推导
+**OM-08.07 — 泛型推导**
+
 
 编译器可以推导泛型函数，而无需用户在源码中声明类型参数：
 
@@ -692,6 +771,8 @@ identity<T>(T) -> T
 ```
 
 ### 8.8 导出接口必须稳定
+**OM-08.08 — 导出接口必须稳定**
+
 
 任何 `EXPORT` 符号在模块公共接口处必须拥有完整、稳定、可写入接口 metadata 的静态类型。
 
@@ -702,6 +783,8 @@ identity<T>(T) -> T
 ## 9. 运算符
 
 ### 9.1 算术运算
+**OM-09.01 — 算术运算**
+
 
 ```text
 +  -  *  /  %
@@ -710,12 +793,16 @@ identity<T>(T) -> T
 用户不得重载这些运算符。
 
 ### 9.2 比较
+**OM-09.02 — 比较**
+
 
 ```text
 =  <>  <  >  <=  >=
 ```
 
 ### 9.3 布尔运算
+**OM-09.03 — 布尔运算**
+
 
 ```text
 NOT
@@ -728,6 +815,8 @@ OR
 `AND` 与 `OR` 按从左到右的短路规则求值：左侧结果已经决定整个表达式时，跳过右侧表达式。
 
 ### 9.4 优先级
+**OM-09.04 — 优先级**
+
 
 从高到低：
 
@@ -748,6 +837,8 @@ OR
 ## 10. 控制流
 
 ### 10.1 If
+**OM-10.01 — If**
+
 
 ```basic
 IF score >= 60 THEN
@@ -770,6 +861,8 @@ END IF
 ```
 
 ### 10.2 While
+**OM-10.02 — While**
+
 
 ```basic
 WHILE count < 10
@@ -780,6 +873,8 @@ END WHILE
 条件必须是 Bool。
 
 ### 10.3 数值 For
+**OM-10.03 — 数值 For**
+
 
 ```basic
 FOR i = 1 TO 10
@@ -796,6 +891,8 @@ END FOR
 ```
 
 ### 10.4 集合 For
+**OM-10.04 — 集合 For**
+
 
 ```basic
 FOR item IN items
@@ -804,10 +901,14 @@ END FOR
 ```
 
 ### 10.5 Break / Continue
+**OM-10.05 — Break / Continue**
+
 
 `BREAK` 和 `CONTINUE` 只影响当前最内层循环。
 
 ### 10.6 Select
+**OM-10.06 — Select**
+
 
 ```basic
 SELECT command
@@ -827,6 +928,8 @@ END SELECT
 ## 11. Record
 
 ### 11.1 声明
+**OM-11.01 — 声明**
+
 
 ```basic
 RECORD User(name, age)
@@ -835,12 +938,16 @@ RECORD User(name, age)
 Record 表示纯数据值。
 
 ### 11.2 构造
+**OM-11.02 — 构造**
+
 
 ```basic
 user = User("Alice", 20)
 ```
 
 ### 11.3 字段访问
+**OM-11.03 — 字段访问**
+
 
 ```basic
 print(user.name)
@@ -851,6 +958,8 @@ print(user.name)
 不存在 property、descriptor、`__getattr__` 或字段访问 hook。
 
 ### 11.4 Record 不可变
+**OM-11.04 — Record 不可变**
+
 
 以下代码非法：
 
@@ -865,6 +974,8 @@ older = user WITH age = 21
 ```
 
 ### 11.5 无类
+**OM-11.05 — 无类**
+
 
 OMBasic 0.1 没有：
 
@@ -884,6 +995,8 @@ Constructor hierarchy
 ## 12. List 与 Map
 
 ### 12.1 List
+**OM-12.01 — List**
+
 
 ```basic
 numbers = [1, 2, 3]
@@ -894,6 +1007,8 @@ numbers = [1, 2, 3]
 OMBasic 0.1 不自动把不兼容元素提升为 `Any`。
 
 ### 12.2 Map
+**OM-12.02 — Map**
+
 
 ```basic
 user = {
@@ -905,6 +1020,8 @@ user = {
 Map 的 key/value 类型必须静态确定。
 
 ### 12.3 默认不可变
+**OM-12.03 — 默认不可变**
+
 
 普通 List/Map 值默认不可变。
 
@@ -915,6 +1032,8 @@ Map 的 key/value 类型必须静态确定。
 ## 13. Function 与 Action
 
 ### 13.1 Function
+**OM-13.01 — Function**
+
 
 `FUNCTION` 表示纯计算。
 
@@ -936,6 +1055,8 @@ Function 不得：
 纯函数在相同输入下必须具有相同语言级结果。
 
 ### 13.2 Action
+**OM-13.02 — Action**
+
 
 `ACTION` 表示显式副作用过程：
 
@@ -949,6 +1070,8 @@ END ACTION
 Action 可以执行语言允许的显式副作用，但**不得隐式挂起并恢复**。
 
 ### 13.3 Return
+**OM-13.03 — Return**
+
 
 ```basic
 RETURN value
@@ -961,6 +1084,8 @@ RETURN
 ```
 
 ### 13.4 调用
+**OM-13.04 — 调用**
+
 
 ```basic
 result = add(10, 20)
@@ -969,6 +1094,8 @@ result = add(10, 20)
 函数调用语法不能被用户重定义。
 
 ### 13.5 不支持函数重载
+**OM-13.05 — 不支持函数重载**
+
 
 OMBasic 0.1 不以参数类型或参数数量进行同名函数重载。
 
@@ -979,12 +1106,17 @@ OMBasic 0.1 不以参数类型或参数数量进行同名函数重载。
 ## 14. 错误模型
 
 ### 14.1 不使用异常作为普通控制流
+**OM-14.01 — 不使用异常作为普通控制流**
+
 
 OMBasic 0.1 不定义用户级 `throw/catch` 异常机制。
 
 普通可恢复错误使用 `Result<T, E>`。
 
 ### 14.2 Result
+**OM-14.02 — Result**
+
+`Result<T, E>` 是内建 tagged union。`Ok(value)` 与 `Error(error)` 的类型参数必须能从调用上下文推导；无法推导时编译器必须诊断。
 
 概念上：
 
@@ -994,6 +1126,8 @@ Error(error)
 ```
 
 ### 14.3 Try
+**OM-14.03 — Try**
+
 
 `TRY` 表示显式错误传播：
 
@@ -1009,6 +1143,8 @@ user = TRY find_user(id)
 因为 `TRY` 出现在调用点，提前返回行为对阅读者可见。
 
 ### 14.4 显式处理
+**OM-14.04 — 显式处理**
+
 
 实现可以提供 `SELECT` 或标准库辅助函数对 Result 做显式分支，但不得通过不可见异常跳转绕过源码控制流。
 
@@ -1017,6 +1153,8 @@ user = TRY find_user(id)
 ## 15. Message
 
 ### 15.1 声明
+**OM-15.01 — 声明**
+
 
 ```basic
 MESSAGE Deposit(amount)
@@ -1027,6 +1165,8 @@ MESSAGE Reset()
 Message 是不可变数据值。
 
 ### 15.2 Nominal identity
+**OM-15.02 — Nominal identity**
+
 
 Message 使用名义身份。
 
@@ -1040,6 +1180,8 @@ MESSAGE Withdraw(amount)
 它们仍是不同 Message 类型。
 
 ### 15.3 可序列化性
+**OM-15.03 — 可序列化性**
+
 
 可跨节点发送的 Message 必须具有完整静态类型，且所有字段都必须是可序列化值。
 
@@ -1050,6 +1192,8 @@ MESSAGE Withdraw(amount)
 ## 16. Actor
 
 ### 16.1 Actor 定义
+**OM-16.01 — Actor 定义**
+
 
 Actor 是由 OMBasic runtime 调度的轻量级逻辑进程，不等同于 OS process，也不等同于 OS thread。
 
@@ -1064,6 +1208,8 @@ local heap
 ```
 
 ### 16.2 声明
+**OM-16.02 — 声明**
+
 
 ```basic
 ACTOR Counter
@@ -1076,12 +1222,16 @@ END ACTOR
 ```
 
 ### 16.3 Actor state
+**OM-16.03 — Actor state**
+
 
 Actor 的长期可变状态必须由该 Actor 独占。
 
 其他 Actor 不得直接取得指向该状态的普通可变引用。
 
 ### 16.4 Receive run-to-completion
+**OM-16.04 — Receive run-to-completion**
+
 
 每个 `RECEIVE` handler 必须 **run-to-completion**。
 
@@ -1101,6 +1251,8 @@ END RECEIVE
 这是 OMBasic 的核心局部分析保证。
 
 ### 16.5 Spawn
+**OM-16.05 — Spawn**
+
 
 ```basic
 worker = SPAWN Worker
@@ -1119,6 +1271,8 @@ worker : ActorRef<Worker>
 ```
 
 ### 16.6 Send
+**OM-16.06 — Send**
+
 
 ```basic
 SEND worker, Work(item)
@@ -1129,12 +1283,16 @@ SEND worker, Work(item)
 `SEND` 不等待接收方处理完成，也不隐式返回远程函数结果。
 
 ### 16.7 协议检查
+**OM-16.07 — 协议检查**
+
 
 编译器必须检查 Actor 是否接受对应 Message。
 
 例如 `ActorRef<Counter>` 不接受 `Login(...)` 时应编译失败。
 
 ### 16.8 ActorRef
+**OM-16.08 — ActorRef**
+
 
 Actor 引用是可传递身份，不是普通对象指针。
 
@@ -1151,6 +1309,8 @@ ActorRef = NodeId + ActorId + Protocol
 ## 17. 等待、I/O 与系统 Actor
 
 ### 17.1 OMBasic 没有 Await
+**OM-17.01 — OMBasic 没有 Await**
+
 
 OMBasic 0.1 禁止：
 
@@ -1161,6 +1321,8 @@ result = AWAIT operation()
 也不存在等价的隐式语法。
 
 ### 17.2 等待结果的标准模式
+**OM-17.02 — 等待结果的标准模式**
+
 
 需要外部结果时发送 Message，并结束当前 handler：
 
@@ -1179,6 +1341,8 @@ END RECEIVE
 ```
 
 ### 17.3 系统 I/O 也使用 Actor
+**OM-17.03 — 系统 I/O 也使用 Actor**
+
 
 文件、网络、Timer、数据库等异步或阻塞资源应该通过系统 Actor 暴露：
 
@@ -1206,6 +1370,8 @@ blocking worker pool 执行，Timer 等待由单独的定时队列管理；所�
 都通过 Actor mailbox 传递。
 
 ### 17.4 不允许隐藏 continuation
+**OM-17.04 — 不允许隐藏 continuation**
+
 
 编译器和 runtime 不得把普通顺序源码静默转换为可重入 Actor continuation，而又不在语言语义中暴露该事实。
 
@@ -1214,16 +1380,22 @@ blocking worker pool 执行，Timer 等待由单独的定时队列管理；所�
 ## 18. Actor 隔离与消息传输
 
 ### 18.1 禁止共享普通可变内存
+**OM-18.01 — 禁止共享普通可变内存**
+
 
 两个 Actor 不能直接共享一个普通 mutable Record/List/Map/Object。
 
 ### 18.2 Message 传输
+**OM-18.02 — Message 传输**
+
 
 OMBasic 0.1 的语义模型是按值传输。
 
 同节点 runtime 可以优化 immutable payload，但优化不得改变可观察语义。
 
 ### 18.3 Actor-local heap
+**OM-18.03 — Actor-local heap**
+
 
 推荐每个 Actor 拥有自己的 runtime heap。
 
@@ -1238,6 +1410,8 @@ Actor persistent heap
 其中临时数据若未逃逸，可在 handler 结束时整体释放。
 
 ### 18.4 GC
+**OM-18.04 — GC**
+
 
 OMBasic 语言规范不强制具体 GC 算法。
 
@@ -1248,6 +1422,8 @@ OMBasic 语言规范不强制具体 GC 算法。
 ## 19. 调度模型
 
 ### 19.1 Actor 不是线程
+**OM-19.01 — Actor 不是线程**
+
 
 实现不得要求“一 Actor 一 OS thread”。
 
@@ -1262,12 +1438,16 @@ Runtime Scheduler
 ```
 
 ### 19.2 单 Actor 串行执行
+**OM-19.02 — 单 Actor 串行执行**
+
 
 同一 Actor 在任意时刻最多由一个 worker 执行。
 
 不同 Actor 可以并行执行。
 
 ### 19.3 公平性
+**OM-19.03 — 公平性**
+
 
 实现应该防止单个 Actor 无限占用 worker thread。
 
@@ -1278,16 +1458,22 @@ Runtime Scheduler
 ## 20. 分布式语义
 
 ### 20.1 Node
+**OM-20.01 — Node**
+
 
 一个 OMBasic Node 通常对应一个 runtime OS process。
 
 Node 内可承载大量 Actor。
 
 ### 20.2 Cluster
+**OM-20.02 — Cluster**
+
 
 多个 Node 可组成 Cluster。
 
 ### 20.3 本地与远程 ActorRef
+**OM-20.03 — 本地与远程 ActorRef**
+
 
 普通业务代码使用同一种 `ActorRef` 和 `SEND` 语法。
 
@@ -1301,6 +1487,8 @@ remote -> serialize -> transport -> remote mailbox
 位置透明不等于失败透明。
 
 ### 20.4 Delivery
+**OM-20.04 — Delivery**
+
 
 OMBasic 0.1 默认分布式 Message delivery 语义为：
 
@@ -1311,18 +1499,24 @@ at-most-once
 标准不承诺 exactly-once。
 
 ### 20.5 Ordering
+**OM-20.05 — Ordering**
+
 
 同一 sender 到同一 receiver 的 Message 应保证发送顺序。
 
 不同 sender 之间不保证全局顺序。
 
 ### 20.6 网络失败可见
+**OM-20.06 — 网络失败可见**
+
 
 Node、Actor 或网络可能失败。
 
 远程失败不得被伪装成永远成功的本地调用。
 
 ### 20.7 Watch
+**OM-20.07 — Watch**
+
 
 OMBasic 可以提供：
 
@@ -1337,6 +1531,8 @@ WATCH worker
 ## 21. Module 与路径导入
 
 ### 21.1 文件即 Module
+**OM-21.01 — 文件即 Module**
+
 
 OMBasic 中，一个 `.bas` 源文件天然就是一个 Module。
 
@@ -1367,6 +1563,8 @@ storage/cache.bas
 源码位置和逻辑 Module 身份不得分离。
 
 ### 21.2 唯一源码根目录
+**OM-21.02 — 唯一源码根目录**
+
 
 每个编译目标必须具有一个明确的源码根目录（source root）。
 
@@ -1393,6 +1591,8 @@ IMPORT "storage/database.bas"
 OMBasic 0.1 不定义多级 import 搜索路径。
 
 ### 21.3 Import 直接使用文件路径
+**OM-21.03 — Import 直接使用文件路径**
+
 
 `IMPORT` 后必须写一个带引号的规范 `.bas` 路径。`IMPORT` 只能出现在 Module 顶层，并且必须位于该文件其他声明或语句之前：
 
@@ -1414,6 +1614,8 @@ IMPORT storage.database
 这样阅读者可以直接从源码中的 Import 定位到文件树中的目标文件，不需要学习第二套 Module 名称映射规则。
 
 ### 21.4 Import 路径规则
+**OM-21.04 — Import 路径规则**
+
 
 Import 路径必须满足：
 
@@ -1440,6 +1642,8 @@ IMPORT "storage/database"
 ```
 
 ### 21.5 Import 不是文本包含
+**OM-21.05 — Import 不是文本包含**
+
 
 虽然 `IMPORT` 使用类似传统 include 的文件路径，但其语义不是文本复制。
 
@@ -1452,6 +1656,8 @@ IMPORT "math.bas"
 同一个 `.bas` Module 在一次构建中只有一个身份。多个 Module Import 同一文件时，不得产生多份文本展开或多份独立的模块级定义。
 
 ### 21.6 导入后的限定名
+**OM-21.06 — 导入后的限定名**
+
 
 导入 Module 的默认限定名为文件名去掉 `.bas` 后的部分。
 
@@ -1481,6 +1687,8 @@ IMPORT "archive/database.bas"
 则编译器必须报告名称冲突。0.1 要求作者通过更明确的文件命名或目录结构解决冲突，而不是为同一 Module 创建额外别名。
 
 ### 21.7 Import 无运行时副作用
+**OM-21.07 — Import 无运行时副作用**
+
 
 `IMPORT` 只建立静态依赖和符号可见性。
 
@@ -1493,6 +1701,8 @@ Import 不得因为加载 Module 而：
 - 执行任意初始化代码。
 
 ### 21.8 Export
+**OM-21.08 — Export**
+
 
 默认符号是 Module-private。
 
@@ -1507,12 +1717,16 @@ END FUNCTION
 Actor、Message、Record 也可以 Export。
 
 ### 21.9 Module 不拥有可变运行时状态
+**OM-21.09 — Module 不拥有可变运行时状态**
+
 
 Module 可以定义常量和纯声明，但不得持有长期 mutable global state。
 
 长期可变状态应由 Actor 拥有。
 
 ### 21.10 构建、版本与分发不是源码级组织概念
+**OM-21.10 — 构建、版本与分发不是源码级组织概念**
+
 
 OMBasic 0.1 的源码级代码组织只有 Module。
 
@@ -1521,6 +1735,8 @@ OMBasic 0.1 的源码级代码组织只有 Module。
 工具链可以维护构建图和版本 metadata，但这些机制不得改变 `.bas` 文件路径与 Module 身份之间的一一对应关系。
 
 ### 21.11 Module 依赖图
+**OM-21.11 — Module 依赖图**
+
 
 OMBasic 0.1 的 Module Import graph 必须无循环。
 
@@ -1533,6 +1749,8 @@ a.bas -> b.bas -> c.bas -> a.bas
 编译器必须在编译期报告循环 Import。
 
 ### 21.12 Module 接口 metadata
+**OM-21.12 — Module 接口 metadata**
+
 
 编译器应该为每个 Module 的公开 API 生成机器可读接口 metadata，其中至少可以包含：
 
@@ -1573,6 +1791,8 @@ OMBasic 的目标不是让 effect 信息充满源码，而是让 effect 信息�
 ---
 
 ## 23. 明确缺失的语言特性
+**OM-23.00 — 明确缺失的语言特性**
+
 
 OMBasic 0.1 有意不提供：
 
@@ -1957,6 +2177,8 @@ OMBasic 0.1 规定：
 ---
 
 ## 25. 标准库原则
+**OM-25.00 — 标准库原则**
+
 
 标准库应该优先提供小而直接的 API。
 
@@ -1973,6 +2195,8 @@ OMBasic 0.1 规定：
 ---
 
 ## 26. 程序入口
+**OM-26.00 — 程序入口**
+
 
 可执行程序应定义唯一入口：
 
@@ -1987,6 +2211,8 @@ END ACTION
 ---
 
 ## 27. 示例：普通程序
+本节为非规范性说明。示例、草图或实现建议不创建额外语言规则；规范性行为以带 Rule ID 的条款为准。
+
 
 ```basic
 FUNCTION add(a, b)
@@ -2011,6 +2237,8 @@ result : Int
 ---
 
 ## 28. 示例：不可变 Record
+本节为非规范性说明。示例、草图或实现建议不创建额外语言规则；规范性行为以带 Rule ID 的条款为准。
+
 
 ```basic
 RECORD User(name, age)
@@ -2025,6 +2253,8 @@ END FUNCTION
 ---
 
 ## 29. 示例：显式状态
+本节为非规范性说明。示例、草图或实现建议不创建额外语言规则；规范性行为以带 Rule ID 的条款为准。
+
 
 ```basic
 ACTION count_items(items)
@@ -2043,6 +2273,8 @@ END ACTION
 ---
 
 ## 30. 示例：Actor 异步工作流
+本节为非规范性说明。示例、草图或实现建议不创建额外语言规则；规范性行为以带 Rule ID 的条款为准。
+
 
 ```basic
 MESSAGE Start(id)
@@ -2070,6 +2302,8 @@ END ACTOR
 ---
 
 ## 31. 示例：Native C 封装
+本节为非规范性说明。示例、草图或实现建议不创建额外语言规则；规范性行为以带 Rule ID 的条款为准。
+
 
 C header：
 
@@ -2096,6 +2330,8 @@ IDE 应提示该调用属于 Native 边界。
 ---
 
 ## 32. 最小语法草图
+本节为非规范性说明。示例、草图或实现建议不创建额外语言规则；规范性行为以带 Rule ID 的条款为准。
+
 
 以下为非完整 EBNF，仅描述 0.1 主要结构。普通注释与文档注释在词法阶段按第 4.5 节处理，不进入下列语法产生式：
 
@@ -2171,6 +2407,8 @@ Native `.omi` 使用独立 ABI grammar，不属于普通 `.bas` grammar。
 ---
 
 ## 33. 推荐实现架构
+本节为非规范性说明。示例、草图或实现建议不创建额外语言规则；规范性行为以带 Rule ID 的条款为准。
+
 
 OMBasic 0.1 的参考实现建议使用 C。
 
@@ -2233,6 +2471,8 @@ AST              -> Arena
 ---
 
 ## 34. OMBasic 0.1 一致性要求
+**OM-34.00 — OMBasic 0.1 一致性要求**
+
 
 声称符合 OMBasic 0.1 的实现至少必须满足：
 
@@ -2266,6 +2506,8 @@ AST              -> Arena
 ---
 
 ## 35. 延后到后续版本的问题
+**OM-35.00 — 延后到后续版本的问题**
+
 
 OMBasic 0.1 不试图一次解决以下问题：
 
@@ -2290,6 +2532,8 @@ OMBasic 0.1 不试图一次解决以下问题：
 ---
 
 ## 36. 设计格言
+本节为非规范性说明。示例、草图或实现建议不创建额外语言规则；规范性行为以带 Rule ID 的条款为准。
+
 
 OMBasic 的核心不是“写得最少”，而是：
 
@@ -2310,6 +2554,9 @@ OMBasic 的核心不是“写得最少”，而是：
 本章为 0.1 参考实现补足前文未定细节。若前文使用“推荐”“可以”或示例未给出完整语义，以本章作为参考实现的一致性定义。
 
 ## 37.1 词法与模块
+
+**OM-37.01 — 词法与模块实现绑定**
+
 
 普通名称的模式为 lower { lower | digit } { "_" lower { lower | digit } }；实体名称的模式为 upper { lower | digit } { "_" upper { lower | digit } }。lower、upper、digit 分别表示 ASCII 小写字母、大写字母、数字。不符合两种模式的用户标识符产生 E0102 诊断，不得自动改写。
 
@@ -2348,6 +2595,9 @@ whitespace          = SPACE | TAB ;
 float_literal 中的 exponent 与小数点至少出现一个。Unicode escape 中 hex 数量为 1 至 6。string_char 是合法 UTF-8 scalar value，但不包括双引号、反斜线、LF、CR；插值字符串的花括号按上面特殊规则处理。逻辑换行是 LF 或 CRLF，单独 CR 非法。SPACE 仅指 U+0020，TAB 仅指 U+0009；它们在 token 间忽略。其他空白码点不属于空白。普通注释按第 4.5 节处理；注释内容不产生 token，但其结尾逻辑换行仍产生 NEWLINE。文档注释与其后的声明关联，不产生语法 token。双字符运算符优先识别为 <>、<=、>=；其他运算符和标点为 + - * / % = < > . ( ) [ ] { } , :。数字后立即跟随 ASCII 字母或下划线是非法数字 token，而不是相邻的两个 token。
 
 ## 37.2 核心语法
+
+**OM-37.02 — 核心语法实现绑定**
+
 
 下列产生式补足第 32 节的语法草图。NEWLINE 是上文定义的 newline token；line_end 表示一个或多个连续换行。分号不属于语法。简单语句以 line_end 结束；复合语句由对应的 END 子句结束并以 line_end 分隔后续同层语句。解析 block 时，遇到当前层级的 ELSE、CASE 或 END 即结束该 block。括号、方括号、花括号以及插值表达式内部的逻辑换行作为空白，不产生 NEWLINE。文件末尾 EOF 可以满足最后一个 line_end，且 EOF 只能出现一次并必须结束 program。
 
@@ -2440,6 +2690,9 @@ SELECT 只计算一次 scrutinee，CASE 按顺序匹配，无 fallthrough；CASE
 
 ## 37.3 类型、Actor 与入口绑定
 
+**OM-37.03 — 类型、Actor 与入口实现绑定**
+
+
 Null 是独立单例类型；0.1 没有 nullable 类型，Null 不能赋给其他类型。Result<T,E> 是内建 tagged union，Ok(value) 与 Error(error) 从上下文推导。Function、Action 返回类型由 RETURN 推导；无值返回为 Unit。TRY 接收 Result<T,E>，在 Ok 时产出 T，在 Error 时通过相同 E 的外围 Result 返回通道传播。Receive handler 返回 Unit；TRY 在 Receive 中传播错误会使当前 Actor 标记为 FAILED 并停止处理消息，观察者只收到失败原因，不收到原始错误值。
 
 #### 标准内建 nominal 值
@@ -2465,6 +2718,9 @@ Actor 构造没有参数。Actor state 初始化表达式必须纯，且仅能�
 CLI 指定的根源码是入口 Module。它必须恰好定义一个无参数、返回 Unit 的 ACTION main()；导入 Module 不得定义 main。IMPORT 和模块加载没有运行时副作用。
 
 ## 37.4 Native metadata 绑定
+
+**OM-37.04 — Native metadata 实现绑定**
+
 
 .omi 恰好有一个 NATIVE block，使用独立于 .bas 的元数据 token 模式。元数据关键字必须精确匹配产生式中的大写拼写；abi_type 中的 CVoid、CInt8 等拼写是 .omi 专用终结符，不要求符合 OMBasic 实体名称模式。每个 Native function 必须恰有一个 SYMBOL、一个 EFFECT 和一个 BLOCKING 或 NONBLOCKING 注解。EFFECT 为 PURE，或 NATIVE、FILE_IO、NETWORK_IO、CLOCK 的非空组合。指针参数必须注明 BORROWED、OWNED 或 STATIC 中恰好一个；指针返回必须恰有一个 RETURNS BORROWED FROM 参数、RETURNS STATIC 或 RETURNS OWNED WITH 释放函数声明。Owned 返回必须有释放函数。Native 未明确证明 PURE 时视为有副作用。Foreign-thread callback 只能通过 Runtime trampoline 入队，不得直接执行 Actor handler。
 
