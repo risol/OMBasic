@@ -1588,10 +1588,19 @@ def main() -> int:
             'EXPORT IMPORT "./integer.bas"\n', encoding="utf-8")
         (facade_root / "math" / "integer.bas").write_text(
             'EXPORT FUNCTION answer()\n    RETURN 42\nEND FUNCTION\n'
-            'EXPORT ACTION announce()\n    print("action")\nEND ACTION\n',
+            'EXPORT ACTION announce()\n    print("action")\nEND ACTION\n'
+            'EXPORT RECORD Point(value)\n'
+            'EXPORT MESSAGE Ping(value)\n'
+            'EXPORT ACTOR Worker\n    RECEIVE Ping(value)\n        STOP\n'
+            '    END RECEIVE\nEND ACTOR\n',
             encoding="utf-8")
         facade_source = ('IMPORT "math/math.bas"\nACTION main()\n'
-                         '    value = math.answer()\nEND ACTION\n')
+                         '    value = math.answer()\n'
+                         '    point = math.Point(42)\n'
+                         '    ping = math.Ping(point.value)\n'
+                         '    worker = SPAWN math.Worker\n'
+                         '    SEND worker, ping\n'
+                         'END ACTION\n')
         facade_analysis = subprocess.run([
             str(compiler), "check", "--root", str(facade_root), "main.bas",
             "--source-stdin", "--diagnostics=json", "--include-interfaces",
@@ -1610,11 +1619,20 @@ def main() -> int:
                 "Facade metadata lost the original definition location")
         require(public_action["kind"] == "action" and public_action["effects"] != 0,
                 "Facade metadata lost the original Action kind or effects")
+        for entity_name in ("Point", "Ping", "Worker"):
+            entity = next(item for item in public_facade["symbols"]
+                          if item["name"] == entity_name)
+            require(entity["definition"]["path"] == "math/integer.bas",
+                    f"Facade metadata lost {entity_name} definition location")
         private_source = facade_root / "math" / "integer.bas"
         original_interface_hash = public_facade["interfaceHash"]
         private_source.write_text(
             'EXPORT FUNCTION answer()\n    RETURN 43\nEND FUNCTION\n'
-            'EXPORT ACTION announce()\n    print("action")\nEND ACTION\n',
+            'EXPORT ACTION announce()\n    print("action")\nEND ACTION\n'
+            'EXPORT RECORD Point(value)\n'
+            'EXPORT MESSAGE Ping(value)\n'
+            'EXPORT ACTOR Worker\n    RECEIVE Ping(value)\n        STOP\n'
+            '    END RECEIVE\nEND ACTOR\n',
             encoding="utf-8")
         changed_analysis = subprocess.run([
             str(compiler), "check", "--root", str(facade_root), "main.bas",
@@ -1627,7 +1645,11 @@ def main() -> int:
                 "private implementation change altered the Facade interface fingerprint")
         private_source.write_text(
             'EXPORT FUNCTION answer()\n    RETURN "forty-two"\nEND FUNCTION\n'
-            'EXPORT ACTION announce()\n    print("action")\nEND ACTION\n',
+            'EXPORT ACTION announce()\n    print("action")\nEND ACTION\n'
+            'EXPORT RECORD Point(value)\n'
+            'EXPORT MESSAGE Ping(value)\n'
+            'EXPORT ACTOR Worker\n    RECEIVE Ping(value)\n        STOP\n'
+            '    END RECEIVE\nEND ACTOR\n',
             encoding="utf-8")
         public_change = subprocess.run([
             str(compiler), "check", "--root", str(facade_root), "main.bas",
@@ -1642,7 +1664,11 @@ def main() -> int:
                 "public type change did not alter the Facade interface fingerprint")
         private_source.write_text(
             'EXPORT FUNCTION answer()\n    RETURN 42\nEND FUNCTION\n'
-            'EXPORT ACTION announce()\n    print("action")\nEND ACTION\n',
+            'EXPORT ACTION announce()\n    print("action")\nEND ACTION\n'
+            'EXPORT RECORD Point(value)\n'
+            'EXPORT MESSAGE Ping(value)\n'
+            'EXPORT ACTOR Worker\n    RECEIVE Ping(value)\n        STOP\n'
+            '    END RECEIVE\nEND ACTOR\n',
             encoding="utf-8")
         facade_document = (facade_root / "main.bas").as_uri()
         facade_requests = [
@@ -1659,6 +1685,33 @@ def main() -> int:
             {"jsonrpc": "2.0", "id": 14, "method": "textDocument/definition", "params": {
                 "textDocument": {"uri": facade_document},
                 "position": {"line": 2, "character": 23}}},
+            {"jsonrpc": "2.0", "id": 15, "method": "textDocument/completion", "params": {
+                "textDocument": {"uri": facade_document},
+                "position": {"line": 3, "character": 18}}},
+            {"jsonrpc": "2.0", "id": 16, "method": "textDocument/hover", "params": {
+                "textDocument": {"uri": facade_document},
+                "position": {"line": 3, "character": 22}}},
+            {"jsonrpc": "2.0", "id": 17, "method": "textDocument/definition", "params": {
+                "textDocument": {"uri": facade_document},
+                "position": {"line": 3, "character": 22}}},
+            {"jsonrpc": "2.0", "id": 18, "method": "textDocument/completion", "params": {
+                "textDocument": {"uri": facade_document},
+                "position": {"line": 4, "character": 20}}},
+            {"jsonrpc": "2.0", "id": 19, "method": "textDocument/hover", "params": {
+                "textDocument": {"uri": facade_document},
+                "position": {"line": 4, "character": 20}}},
+            {"jsonrpc": "2.0", "id": 20, "method": "textDocument/definition", "params": {
+                "textDocument": {"uri": facade_document},
+                "position": {"line": 4, "character": 20}}},
+            {"jsonrpc": "2.0", "id": 21, "method": "textDocument/completion", "params": {
+                "textDocument": {"uri": facade_document},
+                "position": {"line": 5, "character": 30}}},
+            {"jsonrpc": "2.0", "id": 22, "method": "textDocument/hover", "params": {
+                "textDocument": {"uri": facade_document},
+                "position": {"line": 5, "character": 30}}},
+            {"jsonrpc": "2.0", "id": 23, "method": "textDocument/definition", "params": {
+                "textDocument": {"uri": facade_document},
+                "position": {"line": 5, "character": 30}}},
             {"jsonrpc": "2.0", "id": 13, "method": "shutdown", "params": None},
             {"jsonrpc": "2.0", "method": "exit", "params": None},
         ]
@@ -1683,6 +1736,29 @@ def main() -> int:
                 and definition["result"]["uri"].endswith("/math/integer.bas")
                 and definition["result"]["range"]["start"]["line"] == 0,
                 "LSP go-to-definition did not reach the original declaration")
+        expected_entity_lines = {"Point": 6, "Ping": 7, "Worker": 8}
+        for request_id, entity_name in ((15, "Point"), (18, "Ping"), (21, "Worker")):
+            response = next((item for item in facade_responses
+                             if item.get("id") == request_id), None)
+            require(response is not None and any(
+                item.get("label") == entity_name
+                for item in response["result"]["items"]),
+                f"LSP completion omitted entity {entity_name}")
+        for hover_id, definition_id, entity_name in (
+                (16, 17, "Point"), (19, 20, "Ping"), (22, 23, "Worker")):
+            entity_hover = next((item for item in facade_responses
+                                 if item.get("id") == hover_id), None)
+            require(entity_hover is not None and entity_hover["result"] is not None
+                    and entity_name in entity_hover["result"]["contents"]["value"],
+                    f"LSP hover omitted entity {entity_name}")
+            entity_definition = next((item for item in facade_responses
+                                      if item.get("id") == definition_id), None)
+            require(entity_definition is not None
+                    and entity_definition["result"] is not None
+                    and entity_definition["result"]["uri"].endswith("/math/integer.bas")
+                    and entity_definition["result"]["range"]["start"]["line"]
+                        == expected_entity_lines[entity_name],
+                    f"LSP definition did not reach entity {entity_name}")
     print("PASS tooling CLI, native run/build, formatter, diagnostics JSON, bind, LSP hover/inlay/completion")
     return 0
 

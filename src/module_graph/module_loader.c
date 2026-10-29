@@ -306,39 +306,18 @@ static Om_Status append_import(
         set_error_span(source, quoted_start, raw_end + 1, error_span);
         return status;
     }
-    Om_String_View decoded_path = {path, path_length};
-    const bool importer_relative = path_length >= 2 && path[0] == '.'
-                                   && path[1] == '/';
-    if (importer_relative) {
-        decoded_path.data += 2;
-        decoded_path.length -= 2;
-    }
-    status = om_import_path_validate(decoded_path);
+    Om_Resolved_Import_Path resolved_path = {0};
+    status = om_import_path_resolve(source->canonical_path,
+                                   (Om_String_View){path, path_length},
+                                   &resolved_path);
     if (status != OM_STATUS_OK) {
         om_free(path);
         set_error_span(source, quoted_start, raw_end + 1, error_span);
         return status;
     }
-    if (importer_relative) {
-        size_t directory_length = source->canonical_path.length;
-        while (directory_length > 0
-               && source->canonical_path.data[directory_length - 1] != '/') {
-            --directory_length;
-        }
-        const size_t resolved_length = directory_length + decoded_path.length;
-        char *resolved = om_alloc(resolved_length + 1);
-        if (resolved == NULL) {
-            om_free(path);
-            return OM_STATUS_OUT_OF_MEMORY;
-        }
-        if (directory_length != 0)
-            memcpy(resolved, source->canonical_path.data, directory_length);
-        memcpy(resolved + directory_length, decoded_path.data, decoded_path.length);
-        resolved[resolved_length] = '\0';
-        om_free(path);
-        path = resolved;
-        path_length = resolved_length;
-    }
+    om_free(path);
+    path = resolved_path.data;
+    path_length = resolved_path.length;
     *cursor = raw_end + 1;
     while (*cursor < length && is_horizontal_space(source->bytes.data[*cursor])) {
         ++*cursor;

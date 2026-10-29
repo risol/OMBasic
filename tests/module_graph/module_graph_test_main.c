@@ -5,6 +5,7 @@ bool om_test_module_graph_cycle(void);
 bool om_test_module_project_load(void);
 bool om_test_module_project_cycle(void);
 bool om_test_module_project_errors(void);
+bool om_test_module_project_relative_identity(void);
 
 int main(void)
 {
@@ -14,6 +15,7 @@ int main(void)
         {"module_project_load", om_test_module_project_load},
         {"module_project_cycle", om_test_module_project_cycle},
         {"module_project_errors", om_test_module_project_errors},
+        {"module_project_relative_identity", om_test_module_project_relative_identity},
     };
     const size_t test_count = sizeof(tests) / sizeof(tests[0]);
     size_t failures = 0;

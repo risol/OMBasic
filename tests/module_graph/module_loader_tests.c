@@ -161,6 +161,54 @@ cleanup:
     return true;
 }
 
+bool om_test_module_project_relative_identity(void)
+{
+    Om_Source_Root root = {0};
+    Om_Module_Project project = {0};
+    bool passed = false;
+    if (!initialize_fixture_root(&root)) {
+        goto cleanup;
+    }
+    const Om_Status relative_status = om_module_project_load(&root,
+            (Om_String_View){"relative/main.bas", sizeof("relative/main.bas") - 1},
+            1024, &project);
+    if (relative_status != OM_STATUS_OK) {
+        (void)fprintf(stderr, "relative load failed: %s modules=%zu\n",
+                      om_status_name(relative_status),
+                      om_module_project_module_count(&project));
+        goto cleanup;
+    }
+    Om_Module_Import_Info relative_import = {0};
+    Om_Module_Import_Info root_import = {0};
+    Om_Module_Import_Info nested_import = {0};
+    if (om_module_project_module_count(&project) != 3
+        || om_module_project_import_count(&project, (Om_Module_Id){0}) != 2
+        || om_module_project_import_at(&project, (Om_Module_Id){0}, 0,
+                                       &relative_import) != OM_STATUS_OK
+        || om_module_project_import_at(&project, (Om_Module_Id){0}, 1,
+                                       &root_import) != OM_STATUS_OK
+        || relative_import.target_module.value != root_import.target_module.value
+        || !om_string_view_equal(relative_import.path,
+                (Om_String_View){"relative/foo.bas", sizeof("relative/foo.bas") - 1})
+        || !om_string_view_equal(root_import.path,
+                (Om_String_View){"relative/foo.bas", sizeof("relative/foo.bas") - 1})
+        || om_module_project_import_at(&project, relative_import.target_module, 0,
+                                       &nested_import) != OM_STATUS_OK
+        || !om_string_view_equal(nested_import.path,
+                (Om_String_View){"relative/nested/parser.bas",
+                                 sizeof("relative/nested/parser.bas") - 1})
+        || project.order.length != 3 || project.order.cycle_length != 0) {
+        goto cleanup;
+    }
+    passed = true;
+
+cleanup:
+    om_module_project_destroy(&project);
+    om_source_root_destroy(&root);
+    OM_TEST_ASSERT(passed);
+    return true;
+}
+
 static bool expect_project_error(
     Om_Source_Root *root,
     const char *entry_path,

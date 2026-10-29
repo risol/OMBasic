@@ -14,7 +14,7 @@ RULE_ID = re.compile(r"^OM-[0-9]{2}\.[0-9]{2}(?:\.[a-z])?$")
 DIAGNOSTIC_CODE = re.compile(r"^E[0-9]{4}$")
 CASE_KINDS = {"compile", "run", "multi_file", "multi_process"}
 TAGS = {
-    "lexer", "parser", "semantic", "type", "effect", "actor", "runtime",
+    "lexer", "parser", "semantic", "type", "effect", "actor", "runtime", "module",
     "native", "distribution", "diagnostic", "windows", "linux", "slow",
 }
 PLATFORMS = {"windows", "linux"}

@@ -13,6 +13,13 @@ from urllib.parse import unquote, urlparse
 from urllib.request import url2pathname
 
 
+_ORDINARY_NAME = r"[a-z][a-z0-9]*(?:_[a-z][a-z0-9]*)*"
+_ENTITY_NAME = r"[A-Z][a-z0-9]*(?:_[A-Z][a-z0-9]*)*"
+_MODULE_MEMBER_RE = re.compile(rf"({_ORDINARY_NAME})\.({_ORDINARY_NAME}|{_ENTITY_NAME})$")
+_MODULE_MEMBER_COMPLETION_RE = re.compile(
+    rf"({_ORDINARY_NAME})\.([A-Za-z][A-Za-z0-9_]*|)$")
+
+
 def uri_path(uri: str) -> pathlib.Path:
     parsed = urlparse(uri)
     if parsed.scheme != "file":
@@ -254,9 +261,7 @@ class Server:
                            if entry[0] <= point <= entry[1]]
                 if not matches:
                     prefix = text[:point]
-                    member_match = re.search(
-                        r"([a-z][a-z0-9_]*(?:_[a-z][a-z0-9_]*)*)\.([a-z][a-z0-9_]*)$",
-                        prefix)
+                    member_match = _MODULE_MEMBER_RE.search(prefix)
                     symbol = None
                     if member_match:
                         alias, member_name = member_match.groups()
@@ -294,8 +299,7 @@ class Server:
                 analysis = compiler_analysis(self.compiler, self.root, path, text)
                 offset = byte_offset(text, params.get("position", {}))
                 prefix = text[:offset]
-                match = re.search(r"([a-z][a-z0-9_]*(?:_[a-z][a-z0-9_]*)*)\.[a-z0-9_]*$",
-                                  prefix)
+                match = _MODULE_MEMBER_COMPLETION_RE.search(prefix)
                 items = []
                 if match:
                     alias = match.group(1)
@@ -321,9 +325,7 @@ class Server:
                 analysis = compiler_analysis(self.compiler, self.root, path, text)
                 point = byte_offset(text, params.get("position", {}))
                 prefix = text[:point]
-                member_match = re.search(
-                    r"([a-z][a-z0-9_]*(?:_[a-z][a-z0-9_]*)*)\.([a-z][a-z0-9_]*)$",
-                    prefix)
+                member_match = _MODULE_MEMBER_RE.search(prefix)
                 location = None
                 if member_match:
                     alias, member_name = member_match.groups()

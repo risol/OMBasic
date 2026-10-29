@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "ombasic/foundation/memory.h"
 #include "ombasic/source/source_text.h"
 #include "ombasic/source/import_path.h"
 
@@ -119,6 +120,48 @@ bool om_test_import_path(void)
         OM_TEST_ASSERT(om_import_path_validate((Om_String_View){path, strlen(path)})
                        == OM_STATUS_INVALID_ARGUMENT);
     }
+    struct Resolve_Case {
+        const char *importer;
+        const char *literal;
+        const char *expected;
+    };
+    static const struct Resolve_Case resolve_cases[] = {
+        {"main.bas", "./foo.bas", "foo.bas"},
+        {"vendor/json/json.bas", "./internal/parser.bas",
+         "vendor/json/internal/parser.bas"},
+        {"vendor/json/json.bas", "vendor/json/internal/parser.bas",
+         "vendor/json/internal/parser.bas"},
+    };
+    for (size_t index = 0;
+         index < sizeof(resolve_cases) / sizeof(resolve_cases[0]); ++index) {
+        const struct Resolve_Case *test_case = &resolve_cases[index];
+        Om_Resolved_Import_Path resolved = {0};
+        OM_TEST_ASSERT(om_import_path_resolve(
+            (Om_String_View){test_case->importer, strlen(test_case->importer)},
+            (Om_String_View){test_case->literal, strlen(test_case->literal)},
+            &resolved) == OM_STATUS_OK);
+        OM_TEST_ASSERT(resolved.length == strlen(test_case->expected));
+        OM_TEST_ASSERT(memcmp(resolved.data, test_case->expected,
+                              resolved.length) == 0);
+        om_resolved_import_path_destroy(&resolved);
+        OM_TEST_ASSERT(resolved.data == NULL && resolved.length == 0);
+    }
+    static const char *const invalid_literals[] = {
+        "./../outside.bas", "././foo.bas", "./", "./internal/../foo.bas",
+    };
+    for (size_t index = 0;
+         index < sizeof(invalid_literals) / sizeof(invalid_literals[0]); ++index) {
+        Om_Resolved_Import_Path resolved = {0};
+        const char *const literal = invalid_literals[index];
+        OM_TEST_ASSERT(om_import_path_resolve(
+            (Om_String_View){"vendor/json/json.bas",
+                             sizeof("vendor/json/json.bas") - 1},
+            (Om_String_View){literal, strlen(literal)}, &resolved)
+            == OM_STATUS_INVALID_ARGUMENT);
+        OM_TEST_ASSERT(resolved.data == NULL && resolved.length == 0);
+    }
+    OM_TEST_ASSERT(om_import_path_validate((Om_String_View){"./foo.bas", 9})
+                   == OM_STATUS_INVALID_ARGUMENT);
     OM_TEST_ASSERT(om_import_path_validate((Om_String_View){NULL, 0})
                    == OM_STATUS_INVALID_ARGUMENT);
     for (size_t iteration = 0; iteration < 4096; ++iteration) {

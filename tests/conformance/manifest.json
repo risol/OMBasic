@@ -1212,6 +1212,89 @@
       ]
     },
     {
+      "id": "current-module-relative-root-import-deduplicates",
+      "rules": [
+        "OM-21.04"
+      ],
+      "kind": "multi_file",
+      "project_root": "06_modules/relative-root",
+      "entry": "main.bas",
+      "tags": [
+        "module",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "42\n"
+        }
+      },
+      "include_interfaces": true,
+      "expected_exports": [
+        "answer"
+      ]
+    },
+    {
+      "id": "nested-current-module-relative-import",
+      "rules": [
+        "OM-21.04",
+        "OM-21.15"
+      ],
+      "kind": "multi_file",
+      "project_root": "06_modules/relative-nested",
+      "entry": "main.bas",
+      "tags": [
+        "module",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "42\n"
+        }
+      },
+      "include_interfaces": true,
+      "expected_exports": [
+        "answer"
+      ]
+    },
+    {
+      "id": "current-module-relative-parent-segment-rejected",
+      "rules": [
+        "OM-21.04"
+      ],
+      "kind": "multi_file",
+      "project_root": "06_modules/relative-parent",
+      "entry": "main.bas",
+      "tags": [
+        "module",
+        "diagnostic"
+      ],
+      "expect": {
+        "compiles": false,
+        "project_error": "invalid argument"
+      }
+    },
+    {
+      "id": "current-module-relative-repeated-dot-rejected",
+      "rules": [
+        "OM-21.04"
+      ],
+      "kind": "multi_file",
+      "project_root": "06_modules/relative-dotdot",
+      "entry": "main.bas",
+      "tags": [
+        "module",
+        "diagnostic"
+      ],
+      "expect": {
+        "compiles": false,
+        "project_error": "invalid argument"
+      }
+    },
+    {
       "id": "cyclic-import-rejected",
       "rules": [
         "OM-21.11"

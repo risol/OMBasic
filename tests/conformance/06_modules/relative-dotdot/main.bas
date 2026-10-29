@@ -1,0 +1,1 @@
+IMPORT "././foo.bas"

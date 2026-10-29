@@ -1574,9 +1574,11 @@ storage/cache.bas
 src/
 ```
 
-所有 `IMPORT` 路径都从该源码根目录开始解释，而不是相对于当前 `.bas` 文件解释。
+源码根目录是唯一的 Module 身份空间和文件安全边界。Import literal 可以使用
+Source-Root-relative 或显式的 Current-Module-relative 形式；两者解析出的文件
+都必须位于该源码根目录内，并规范化为相对于该根目录的 canonical path。
 
-因此无论当前文件位于何处：
+普通路径不以 `./` 开头时相对于 Source Root 解析，无论当前文件位于何处：
 
 ```basic
 IMPORT "storage/database.bas"
@@ -1590,16 +1592,26 @@ IMPORT "storage/database.bas"
 
 OMBasic 0.1 不定义多级 import 搜索路径。
 
+显式的 `./` 路径相对于当前 `.bas` 文件所在目录解析。例如，位于
+`vendor/json/json.bas` 的 `IMPORT "./parser.bas"` 表示
+`vendor/json/parser.bas`。两种形式最终都进入同一 canonical Module identity；
+编译器不定义第二个 Source Root，也不搜索目录。
+
 ### 21.3 Import 直接使用文件路径
 **OM-21.03 — Import 直接使用文件路径**
 
 
-`IMPORT` 后必须写一个带引号的规范 `.bas` 路径。`IMPORT` 只能出现在 Module 顶层，并且必须位于该文件其他声明或语句之前：
+`IMPORT` 后必须写一个带引号的 `.bas` 文件路径。合法路径形式有两种：普通形式
+相对于 Source Root 解析，例如 `IMPORT "vendor/json/json.bas"`；唯一前导 `./`
+形式相对于当前 Module 所在目录解析，例如 `IMPORT "./parser.bas"`。两种路径都
+必须位于同一 Source Root 内，并规范化为 Source-Root-relative canonical path。
+`IMPORT` 只能出现在 Module 顶层，并且必须位于该文件其他声明或语句之前：
 
 ```basic
 IMPORT "payment.bas"
 IMPORT "storage/database.bas"
 IMPORT "network/http.bas"
+IMPORT "./parser.bas"
 ```
 
 OMBasic 0.1 不使用：
@@ -1617,13 +1629,15 @@ IMPORT storage.database
 **OM-21.04 — Import 路径规则**
 
 
-Import 路径必须满足：
+Import literal 必须满足：
 
-1. 相对于唯一源码根目录；
+1. 使用 Source-Root-relative 形式，或仅以一个 `./` 开头的
+   Current-Module-relative 形式；
 2. 必须以 `.bas` 结尾；
 3. 必须使用 `/` 作为源码中的路径分隔符；
 4. 不得以 `/` 开头；
-5. 不得包含 `.` 或 `..` 路径段；
+5. 除唯一允许的前导 `./` 外，不得包含 `.` 路径段；任何位置的 `..`
+   路径段都禁止；
 6. 不得包含空路径段；
 7. 编译器不得通过搜索目录、环境变量或隐式 fallback 猜测目标文件；
 8. 每个目录名和文件名（不含 `.bas` 后缀）都必须符合普通名称 lower_snake_case 规则；
@@ -1635,7 +1649,7 @@ Import 路径必须满足：
 
 ```basic
 IMPORT "../payment.bas"
-IMPORT "./payment.bas"
+IMPORT "././payment.bas"
 IMPORT "storage/../payment.bas"
 IMPORT "/storage/database.bas"
 IMPORT "storage/database"
@@ -1773,7 +1787,7 @@ a.bas -> b.bas -> c.bas -> a.bas
 ### 21.14 当前 Module 相对 Import
 **OM-21.14 — 当前 Module 相对 Import**
 
-`./` 开头的 Import 路径相对于包含该 Import 的 `.bas` 文件所在目录解析。解析结果仍须位于固定 Source Root 内，并遵守本节规定的路径大小写、扩展名和符号链接安全规则。其他 Import 路径仍相对于 Source Root 解析。路径解析不得搜索目录或隐式回退。
+`./` 开头的 Import 路径相对于包含该 Import 的 `.bas` 文件所在目录解析。解析结果仍须位于固定 Source Root 内，并遵守本节规定的路径大小写、扩展名和符号链接安全规则。其他 Import 路径仍相对于 Source Root 解析。两种形式都必须在进入 Module Graph 前转换为 Source-Root-relative canonical path；指向同一文件的路径必须使用同一个 Module identity。路径解析不得搜索目录或隐式回退。
 
 ### 21.15 显式 Re-export
 **OM-21.15 — 显式 Re-export**
@@ -2515,7 +2529,9 @@ AST              -> Arena
 12. 不存在 Async/Await/Future/Promise/Coroutine 语言语义。
 13. 外部等待通过 Send/Receive 分段表达。
 14. `.bas` 文件即 Module，文件路径即 Module 的唯一身份。
-15. Import 必须使用相对于唯一源码根目录的规范 `.bas` 路径；不得搜索、猜测、使用 `..` 或省略扩展名。
+15. Import literal 使用 Source-Root-relative 形式，或仅带一个前导 `./` 的
+    Current-Module-relative 形式。两者都必须规范化到唯一 Source Root 下的
+    canonical `.bas` 路径；不得搜索、使用其他 `.`/`..` 路径段或省略扩展名。
 16. Import 是静态依赖而非文本包含，且无运行时副作用。
 17. Module Import graph 必须无循环。
 18. Module 不拥有长期可变全局状态。

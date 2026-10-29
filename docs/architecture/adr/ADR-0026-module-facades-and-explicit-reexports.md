@@ -7,8 +7,9 @@
 
 Source libraries are ordinary source trees (ADR-0025). Their consumers need
 one stable public entry point without introducing packages, directory imports,
-or implicit discovery. OMBasic modules are individual `.bas` files and Import
-paths are rooted at the project Source Root.
+or implicit discovery. OMBasic modules are individual `.bas` files. The Source
+Root is the sole identity and security boundary, while an Import literal may
+resolve either from that root or from the importing Module directory.
 
 ## Decision
 

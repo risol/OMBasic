@@ -1,6 +1,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "ombasic/foundation/memory.h"
 #include "ombasic/source/import_path.h"
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
@@ -11,5 +12,20 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
         (const char *)data,
         size,
     });
+    Om_Resolved_Import_Path resolved = {0};
+    (void)om_import_path_resolve(
+        (Om_String_View){"vendor/json/json.bas",
+                         sizeof("vendor/json/json.bas") - 1},
+        (Om_String_View){(const char *)data, size}, &resolved);
+    om_resolved_import_path_destroy(&resolved);
+    if (size >= 2) {
+        const size_t split = size / 2;
+        Om_Resolved_Import_Path split_resolved = {0};
+        (void)om_import_path_resolve(
+            (Om_String_View){(const char *)data, split},
+            (Om_String_View){(const char *)data + split, size - split},
+            &split_resolved);
+        om_resolved_import_path_destroy(&split_resolved);
+    }
     return 0;
 }

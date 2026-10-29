@@ -2,10 +2,9 @@
 
 -   **项目：** OMBasic
 -   **计划日期：** 2026-10-29
--   **源码基线：** `risol/OMBasic` 的 `master`，提交
-    `d2fdb646cd6705bfcb61181c0bf25300e9abd8e5`
--   **基线提交信息：** `feat: implement OMBasic 0.1 language freeze`
--   **状态：** Proposed --- 待 ADR 与语言规则确认
+-   **审计基线：** `d2fdb646cd6705bfcb61181c0bf25300e9abd8e5`
+-   **核心功能提交：** `897db21b496ff87d3c3052a27847a771befad2f5`
+-   **状态：** 已实现（Facade、Re-export、相对 Import、SDK 标准库交付）；ADR-0026 Accepted。Release Candidate gate 尚需维护者按发布文档完成最终审查；可选的 `ombasic init --stdlib` 不属于核心交付。
 -   **目标：** 在不引入
     Package、包管理器、注册表、依赖求解器或锁文件的前提下，建立简单、显式、可分析的源码库组织和公共
     API 导出机制。
@@ -33,8 +32,9 @@
     Module，并将它的公开声明显式重新导出到当前 Module 的公共 API。
 6.  Re-export
     是**显式、平铺、按符号名**的；不扫描目录，不自动导出目录中的所有文件，也不自动公开子模块别名。
-7.  保持现有唯一 Source Root、路径大小写和 `.bas` 扩展名规则。所有
-    Import 路径仍相对于 Source Root，而不是相对于当前 `.bas` 文件。
+7.  保持唯一 Source Root、路径大小写和 `.bas` 扩展名规则。普通 Import
+    路径相对于 Source Root；唯一前导 `./` 路径相对于当前 `.bas` 文件，最终
+    都规范化为 Source-Root-relative canonical identity。
 8.  源码库通过 Git 仓库、Git tag/commit、Git
     submodule/subtree、源码归档或手工 vendoring
     分发。编译器不负责下载、安装、更新或解析版本。
@@ -103,8 +103,8 @@ EXPORT IMPORT "./stringify.bas"
 -   路径段必须与文件系统实际大小写完全一致。
 -   不允许搜索目录或隐式 fallback。
 
-语言标准第 21.2--21.4 节进一步规定：所有 Import 路径都从唯一 Source Root
-解释，而不是相对于当前源文件解释。
+语言标准第 21.2--21.4 节规定唯一 Source Root 和两种显式 Import literal
+形式：Source-Root-relative 与带唯一前导 `./` 的 Current-Module-relative。
 
 **本计划保留唯一 Source Root、安全检查和无搜索规则。** 普通路径保持
 Root-relative；仅显式的 `./` 前缀使用当前 Module 相对路径，随后归一到同一
@@ -173,7 +173,9 @@ Root-relative canonical identity。不加入 `@std` 这种隐式第二根路径�
   `docs/compiler/resource_layout.md`                              SDK 安装资源布局                          后续标准库源码交付需要更新安装布局
   ----------------------------------------------------------------------------------------------------------------------------------------------
 
-### 2.3 当前行为与目标之间的差距
+### 2.3 审计基线（`d2fdb646`）与目标之间的差距
+
+本节记录计划编写时的基线状态，不代表当前实现状态。相关差距已由后续 Phase 0–7 工作关闭。
 
 #### 已经符合目标的部分
 
@@ -188,7 +190,7 @@ Root-relative canonical identity。不加入 `@std` 这种隐式第二根路径�
 -   AST 已经有 `OM_AST_IMPORT` 和 `OM_AST_FLAG_EXPORTED`。
 -   当前公开声明和私有声明的可见性由 Name Resolver 检查。
 
-#### 尚未实现的部分
+#### 审计基线中尚未实现的部分
 
 -   没有目录 Facade 的规范约定。
 -   没有 `EXPORT IMPORT` 语法。
@@ -872,7 +874,7 @@ END ACTION
 
 ### 8.3 不新增 `@std` 隐式导入根
 
-当前语言规则是所有 Import 路径都相对于唯一 Source Root。若新增：
+Import 路径共用唯一 Source Root 作为 Module identity 和安全边界。普通路径从 Source Root 解析；唯一前导 `./` 从当前 Module 目录解析，之后仍规范化到该 Source Root。新增：
 
 ``` basic
 IMPORT "@std/string/string.bas"
@@ -959,17 +961,17 @@ target/sysroot 规则。
 ------------------------------------------------------------------------
 
 
-## 9. 语言标准必须修改的具体内容
+## 9. 已完成的语言标准变更
 
-本方案不是单纯的工程约定；它会改变 OMBasic 0.1 的规范性 Import 语义，因此必须修改 `OMBasic-Language-Standard.md`。
+本方案不是单纯的工程约定；它改变了 OMBasic 0.1 的规范性 Import 语义。以下变更已经写入 `OMBasic-Language-Standard.md`，并由 Conformance 覆盖。
 
 ### 9.1 修订 OM-21.02 — 唯一源码根目录
 
-当前含义：
+原有含义：
 
 > 所有 `IMPORT` literal 都从 Source Root 解释。
 
-建议改为：
+现行规则：
 
 > 每个编译目标仍然只有一个 canonical Source Root。所有 Module identity 都必须规范化为相对于该 Source Root 的 canonical path。Import literal 可以显式选择 Source Root 或当前 Module 目录作为解析起点。
 
@@ -1003,7 +1005,7 @@ IMPORT "./parser.bas"
 
 ### 9.3 修订 OM-21.04 — Import 路径规则
 
-规则建议改为：
+现行规则：
 
 1. Import 必须是带引号的显式 `.bas` 路径。
 2. 不以 `./` 开头时，从 Source Root 解析。
@@ -1103,15 +1105,13 @@ EXPORT IMPORT "./parser.bas"
 
 ---
 
-## 11. ADR 与语言标准变更
+## 10. ADR 与语言标准变更
 
-#### 10.1 新 ADR
+### 10.1 已接受的 ADR
 
-建议新增：
+`docs/architecture/adr/ADR-0026-module-facades-and-explicit-reexports.md`
 
-`docs/architecture/adr/ADR-0026-directory-facades-and-explicit-reexports.md`
-
-建议状态：在实现开始前先作为 Proposed 评审，决策完成后标记 Accepted。
+当前状态：Accepted，见 ADR-0026。
 
 ADR 应记录：
 
@@ -1130,16 +1130,17 @@ ADR 应记录：
 ADR-0025 已经接受源码库作为普通目录子树的模型。ADR-0026 应补充
 Facade/Re-export 规则，不应把 ADR-0025 改造成包管理方案。
 
-#### 10.2 语言标准新增 Rule ID
+### 10.2 语言标准 Rule ID
 
-现有 Rule ID 不重编号、不复用。建议在第 21 章追加新规则：
+现有 Rule ID 不重编号、不复用。第 21 章现有新增规则为：
 
 -   **OM-21.13 --- Directory Facade Convention**
--   **OM-21.14 --- Explicit Re-export**
--   **OM-21.15 --- Re-export Visibility and Conflicts**
--   **OM-21.16 --- Facade Public Surface**
+-   **OM-21.14 --- Current-Module-relative Import Resolution**
+-   **OM-21.15 --- Explicit Re-export**
+-   **OM-21.16 --- Re-export Visibility and Conflicts**
+-   **OM-21.17 --- Facade Public Surface and Canonical Identity**
 
-这些规则应写入 `OMBasic-Language-Standard.md`，而不是只写在 ADR
+这些规则已经写入 `OMBasic-Language-Standard.md`，不只存在于 ADR
 或开发计划中。
 
 标准至少要精确定义：
@@ -1155,7 +1156,7 @@ Facade/Re-export 规则，不应把 ADR-0025 改造成包管理方案。
 -   目录本身不是语言实体；
 -   Facade 不自动聚合目录内容。
 
-#### 10.3 Conformance
+### 10.3 Conformance
 
 新增的语言行为必须进入：
 
@@ -1178,16 +1179,16 @@ Facade/Re-export 规则，不应把 ADR-0025 改造成包管理方案。
 
 任务：
 
--   [ ] 以 `d2fdb646cd6705bfcb61181c0bf25300e9abd8e5` 为源码审计基线。
--   [ ] 确认 `0.1.0-rc1` 状态；若已经标记，遵循语言冻结政策。
--   [ ] 评审本计划中的目录 Facade 规则。
--   [ ] 评审 `EXPORT IMPORT` 的平铺 Re-export 语义。
--   [ ] 明确普通 Import 保持 Root-relative，`./` Import 使用当前 Module
+-   [x] 以 `d2fdb646cd6705bfcb61181c0bf25300e9abd8e5` 为源码审计基线。
+-   [x] 确认 `0.1.0-rc1` 状态；若已经标记，遵循语言冻结政策。
+-   [x] 评审本计划中的目录 Facade 规则。
+-   [x] 评审 `EXPORT IMPORT` 的平铺 Re-export 语义。
+-   [x] 明确普通 Import 保持 Root-relative，`./` Import 使用当前 Module
     相对路径，并归一到同一 canonical identity。
--   [ ] 确认 `@std` 不作为特殊导入根。
--   [ ] 确认 `print` 不在本次改动中迁移。
--   [ ] 建立 `E0308` 诊断的注册/使用审计。
--   [ ] 明确接口 metadata 和 fingerprint 的预期变化。
+-   [x] 确认 `@std` 不作为特殊导入根。
+-   [x] 确认 `print` 不在本次改动中迁移。
+-   [x] 建立 `E0308` 诊断的注册/使用审计。
+-   [x] 明确接口 metadata 和 fingerprint 的预期变化。
 
 **退出条件：**
 
@@ -1201,16 +1202,17 @@ Facade/Re-export 规则，不应把 ADR-0025 改造成包管理方案。
 
 任务：
 
--   [ ] 新建 ADR-0026。
--   [ ] 在 `OMBasic-Language-Standard.md` 追加 OM-21.13 至 OM-21.16。
--   [ ] 加入 `EXPORT IMPORT` 的规范示例。
--   [ ] 加入私有声明不可重导出的规则。
--   [ ] 加入重导出冲突规则。
--   [ ] 加入传递式 Re-export 和循环依赖规则。
--   [ ] 更新 `tests/conformance/README.md`。
--   [ ] 在 manifest 中登记最小正向/负向用例。
--   [ ] 运行 `tools/spec_check/check.py`。
--   [ ] 运行 `tools/conformance_check/check.py`。
+-   [x] 新建 ADR-0026。
+-   [x] 在 `OMBasic-Language-Standard.md` 更新 OM-21.02 至 OM-21.04，并定义
+    OM-21.13 至 OM-21.17。
+-   [x] 加入 `EXPORT IMPORT` 的规范示例。
+-   [x] 加入私有声明不可重导出的规则。
+-   [x] 加入重导出冲突规则。
+-   [x] 加入传递式 Re-export 和循环依赖规则。
+-   [x] 更新 `tests/conformance/README.md`。
+-   [x] 在 manifest 中登记最小正向/负向用例。
+-   [x] 运行 `tools/spec_check/check.py`。
+-   [x] 运行 `tools/conformance_check/check.py`。
 
 **退出条件：**
 
@@ -1233,16 +1235,16 @@ Facade/Re-export 规则，不应把 ADR-0025 改造成包管理方案。
 
 任务：
 
--   [ ] 为 Import AST 增加明确的 Re-export 标记，例如
+-   [x] 为 Import AST 增加明确的 Re-export 标记，例如
     `OM_AST_FLAG_REEXPORT`。
--   [ ] 扩展顶层解析分支，使 `EXPORT IMPORT "path.bas"` 进入 Import
+-   [x] 扩展顶层解析分支，使 `EXPORT IMPORT "path.bas"` 进入 Import
     解析。
--   [ ] 确保 `EXPORT FUNCTION` 等现有语法不受影响。
--   [ ] 确保 `EXPORT IMPORT` 只能位于 Import 前缀区。
--   [ ] 保留路径字面量和完整源码 Span。
--   [ ] 测试关键字大小写、缺少路径、缺少引号、尾随 token。
--   [ ] 测试声明之后出现 `EXPORT IMPORT` 必须失败。
--   [ ] 测试 `EXPORT` 后换行再写 `IMPORT` 不被意外解析为同一声明。
+-   [x] 确保 `EXPORT FUNCTION` 等现有语法不受影响。
+-   [x] 确保 `EXPORT IMPORT` 只能位于 Import 前缀区。
+-   [x] 保留路径字面量和完整源码 Span。
+-   [x] 测试关键字大小写、缺少路径、缺少引号、尾随 token。
+-   [x] 测试声明之后出现 `EXPORT IMPORT` 必须失败。
+-   [x] 测试 `EXPORT` 后换行再写 `IMPORT` 不被意外解析为同一声明。
 
 **退出条件：**
 
@@ -1264,16 +1266,16 @@ Facade/Re-export 规则，不应把 ADR-0025 改造成包管理方案。
 
 任务：
 
--   [ ] 扩展前缀扫描器以识别 `IMPORT` 和 `EXPORT IMPORT`。
--   [ ] 普通 `EXPORT FUNCTION` 必须结束 Import 前缀扫描，而不是误读成
+-   [x] 扩展前缀扫描器以识别 `IMPORT` 和 `EXPORT IMPORT`。
+-   [x] 普通 `EXPORT FUNCTION` 必须结束 Import 前缀扫描，而不是误读成
     Re-export。
--   [ ] 继续调用同一 Import path decoder 和 validator。
--   [ ] Re-export 目标加入现有 Module Graph。
--   [ ] 保持同一路径只加载一次。
--   [ ] 保持依赖优先拓扑顺序。
--   [ ] 保持循环链诊断，包括由 `EXPORT IMPORT` 引入的循环。
--   [ ] 增加 Scanner 与 Parser 语法识别一致性的测试。
--   [ ] 对恶意路径、超长路径、错误转义和路径逃逸执行现有安全测试。
+-   [x] 继续调用同一 Import path decoder 和 validator。
+-   [x] Re-export 目标加入现有 Module Graph。
+-   [x] 保持同一路径只加载一次。
+-   [x] 保持依赖优先拓扑顺序。
+-   [x] 保持循环链诊断，包括由 `EXPORT IMPORT` 引入的循环。
+-   [x] 增加 Scanner 与 Parser 语法识别一致性的测试。
+-   [x] 对恶意路径、超长路径、错误转义和路径逃逸执行现有安全测试。
 
 **退出条件：**
 
@@ -1296,23 +1298,23 @@ Facade/Re-export 规则，不应把 ADR-0025 改造成包管理方案。
 
 任务：
 
--   [ ] 为每个 Module 记录直接导出声明。
--   [ ] 在所有 Module 的直接声明完成预声明后，再计算 Re-export surface。
--   [ ] 使用依赖优先的拓扑顺序计算传递式导出。
--   [ ] 保留原始 Symbol ID 和声明 Span。
--   [ ] 在 Resolver 结果中暴露导出面查询 API。
--   [ ] 将 `module.member` 查询扩展为直接公开声明或 Re-export surface
+-   [x] 为每个 Module 记录直接导出声明。
+-   [x] 在所有 Module 的直接声明完成预声明后，再计算 Re-export surface。
+-   [x] 使用依赖优先的拓扑顺序计算传递式导出。
+-   [x] 保留原始 Symbol ID 和声明 Span。
+-   [x] 在 Resolver 结果中暴露导出面查询 API。
+-   [x] 将 `module.member` 查询扩展为直接公开声明或 Re-export surface
     查询。
--   [ ] 保持普通无限定名称只在本地 Scope 中查找。
--   [ ] 保持 `E0302` 私有符号访问诊断。
--   [ ] 对不同来源的同名导出生成 `E0308`。
--   [ ] 在诊断中标注两处来源。
--   [ ] 对同一原始 Symbol ID 的重复暴露去重。
--   [ ] 不生成合成函数或合成类型。
--   [ ] 测试本地导出与 Re-export 冲突。
--   [ ] 测试不同 Module 同名导出冲突。
--   [ ] 测试多层 Facade 的传递式 Re-export。
--   [ ] 测试 Module Graph 顺序变化不会改变解析结果。
+-   [x] 保持普通无限定名称只在本地 Scope 中查找。
+-   [x] 保持 `E0302` 私有符号访问诊断。
+-   [x] 对不同来源的同名导出生成 `E0308`。
+-   [x] 在诊断中标注两处来源。
+-   [x] 对同一原始 Symbol ID 的重复暴露去重。
+-   [x] 不生成合成函数或合成类型。
+-   [x] 测试本地导出与 Re-export 冲突。
+-   [x] 测试不同 Module 同名导出冲突。
+-   [x] 测试多层 Facade 的传递式 Re-export。
+-   [x] 测试 Module Graph 顺序变化不会改变解析结果。
 
 **退出条件：**
 
@@ -1338,20 +1340,20 @@ Facade/Re-export 规则，不应把 ADR-0025 改造成包管理方案。
 
 任务：
 
--   [ ] 验证通过 Facade 调用原始 Function。
--   [ ] 验证泛型函数 Re-export 后仍正确推导并 Specialize。
--   [ ] 验证 Record 类型可通过 Facade 访问并构造。
--   [ ] 验证 Message、Actor 和 Action 的公开访问规则。
--   [ ] 验证 Effect 信息来自原始声明。
--   [ ] 验证 Re-export 不创建额外 MIR 指令。
--   [ ] 验证接口 metadata 使用 Facade 的公开名称，同时保留原始定义位置。
--   [ ] 验证 API fingerprint 对公开契约变化敏感。
--   [ ] 验证只改变私有实现文件不造成不必要的公开 API fingerprint 变化。
--   [ ] 验证 LSP completion 在 `json.` 后显示 Facade 导出的成员。
--   [ ] 验证 hover 展示正确类型、Effect 和定义位置。
--   [ ] 验证 go-to-definition 跳转到原始声明。
--   [ ] 验证 Re-export 冲突诊断的源码位置。
--   [ ] 验证跨模块泛型、Actor 协议和序列化规则不因 Re-export 被绕过。
+-   [x] 验证通过 Facade 调用原始 Function。
+-   [x] 验证泛型函数 Re-export 后仍正确推导并 Specialize。
+-   [x] 验证 Record 类型可通过 Facade 访问并构造。
+-   [x] 验证 Message、Actor 和 Action 的公开访问规则。
+-   [x] 验证 Effect 信息来自原始声明。
+-   [x] 验证 Re-export 不创建额外 MIR 指令。
+-   [x] 验证接口 metadata 使用 Facade 的公开名称，同时保留原始定义位置。
+-   [x] 验证 API fingerprint 对公开契约变化敏感。
+-   [x] 验证只改变私有实现文件不造成不必要的公开 API fingerprint 变化。
+-   [x] 验证 LSP completion 在 `json.` 后显示 Facade 导出的成员。
+-   [x] 验证 hover 展示正确类型、Effect 和定义位置。
+-   [x] 验证 go-to-definition 跳转到原始声明。
+-   [x] 验证 Re-export 冲突诊断的源码位置。
+-   [x] 验证跨模块泛型、Actor 协议和序列化规则不因 Re-export 被绕过。
 
 **退出条件：**
 
@@ -1366,15 +1368,15 @@ Facade/Re-export 规则，不应把 ADR-0025 改造成包管理方案。
 
 任务：
 
--   [ ] 完成第 12 节所列 Conformance 正向和负向矩阵。
--   [ ] 运行 CTest 全套。
--   [ ] 运行 `tools/spec_check/check.py`。
--   [ ] 运行 `tools/conformance_check/check.py`。
--   [ ] 运行 architecture checker。
--   [ ] 运行 Linux Native AOT 构建和执行测试。
--   [ ] 运行 Windows `clang-cl` / LLD 构建和执行测试。
--   [ ] 运行 sanitizer 与 fuzz smoke tests。
--   [ ] 检查 Release Candidate 的 Standard/Conformance 覆盖报告。
+-   [x] 完成第 12 节所列 Conformance 正向和负向矩阵。
+-   [x] 运行 CTest 全套。
+-   [x] 运行 `tools/spec_check/check.py`。
+-   [x] 运行 `tools/conformance_check/check.py`。
+-   [x] 运行 architecture checker。
+-   [x] 运行 Linux Native AOT 构建和执行测试。
+-   [x] 运行 Windows `clang-cl` / LLD 构建和执行测试。
+-   [x] 运行 sanitizer 与 fuzz smoke tests。
+-   [x] 检查 Release Candidate 的 Standard/Conformance 覆盖报告。
 
 **退出条件：**
 
@@ -1405,18 +1407,18 @@ std/
 
 任务：
 
--   [ ] 先建立一个最小、可编译的示例库，验证 Facade/Re-export。
--   [ ] 确定标准库公开 API 后再逐个增加模块，不先承诺尚未实现的函数。
--   [ ] SDK 将标准库源码安装到 `share/ombasic/stdlib/`。
--   [ ] 更新 `docs/compiler/resource_layout.md`。
--   [ ] 更新 SDK 安装测试，确认 stdlib 源码在安装后仍存在。
--   [ ] 文档明确说明：使用标准库时把 `std/` 子树复制或 vendored 到项目
+-   [x] 先建立一个最小、可编译的示例库，验证 Facade/Re-export。
+-   [x] 确定标准库公开 API 后再逐个增加模块，不先承诺尚未实现的函数。
+-   [x] SDK 将标准库源码安装到 `share/ombasic/stdlib/`。
+-   [x] 更新 `docs/compiler/resource_layout.md`。
+-   [x] 更新 SDK 安装测试，确认 stdlib 源码在安装后仍存在。
+-   [x] 文档明确说明：使用标准库时把 `std/` 子树复制或 vendored 到项目
     Source Root。
--   [ ] 不让 Compiler 隐式搜索 SDK 的 stdlib 目录。
+-   [x] 不让 Compiler 隐式搜索 SDK 的 stdlib 目录。
 -   [ ] 可选：添加 `ombasic init --stdlib`，只复制 SDK
     源码到项目，不做依赖解析或更新。
--   [ ] 为第三方源码库写出 Git submodule/subtree/vendor 的推荐流程。
--   [ ] 明确标准库版本与 SDK release 对应；项目复制后的版本由项目 Git
+-   [x] 为第三方源码库写出 Git submodule/subtree/vendor 的推荐流程。
+-   [x] 明确标准库版本与 SDK release 对应；项目复制后的版本由项目 Git
     commit 固定。
 
 **退出条件：**
@@ -1444,7 +1446,7 @@ std/
 
 ## 12. 测试矩阵
 
-### 11.1 Parser 测试
+### 12.1 Parser 测试
 
   场景                             预期
   -------------------------------- ---------------------------------
@@ -1457,7 +1459,7 @@ std/
   声明后出现 `EXPORT IMPORT`       顶层顺序错误
   `EXPORT IMPORT` 后带额外 token   语法错误
 
-### 11.2 Module Loader / Graph 测试
+### 12.2 Module Loader / Graph 测试
 
   场景                                        预期
   ------------------------------------------- --------------------------
@@ -1472,7 +1474,7 @@ std/
   symlink/reparse point 逃逸                  失败
   Loader 与 Parser 对 Import 前缀认知不一致   测试失败
 
-### 11.3 Resolver 正向测试
+### 12.3 Resolver 正向测试
 
 至少包括：
 
@@ -1489,7 +1491,7 @@ std/
 -   `IMPORT "vendor/json/json.bas"` 的 Alias 是 `json`；
 -   `json.parse` 最终解析到原始 `parser.bas` Symbol。
 
-### 11.4 Resolver 负向测试
+### 12.4 Resolver 负向测试
 
 至少包括：
 
@@ -1506,7 +1508,7 @@ std/
 -   两个路径的文件名 stem 相同导致 Module Alias 冲突；
 -   Facade 未 Re-export 某个内部模块时，调用方访问该成员失败。
 
-### 11.5 类型和接口测试
+### 12.5 类型和接口测试
 
 -   公开 Function 的参数/返回类型正确；
 -   泛型实例化结果与直接导入原始 Module 一致；
@@ -1518,7 +1520,7 @@ std/
 -   只改内部私有实现不造成不必要的公开 API fingerprint 变化；
 -   LSP completion、hover、definition 和诊断位置正确。
 
-### 11.6 端到端测试
+### 12.6 端到端测试
 
 增加真实目录：
 
@@ -1542,7 +1544,7 @@ tests/conformance/06_modules/facade/
 
 同时添加冲突版本和私有符号的负向 fixture。
 
-### 11.7 Conformance Rule 覆盖
+### 12.7 Conformance Rule 覆盖
 
 每条新增 Rule ID 至少需要：
 
@@ -1587,14 +1589,14 @@ diagnostics、Conformance fixture 和文档，确保 `E0308` 未被占用。
 
 ## 14. 文件变更清单
 
-### 13.1 必须修改
+### 14.1 已修改
 
   ------------------------------------------------------------------------------------------------------------------
   文件/目录                                                                      变更
   ------------------------------------------------------------------------------ -----------------------------------
-  `OMBasic-Language-Standard.md`                                                 增加 OM-21.13 至 OM-21.16
+  `OMBasic-Language-Standard.md`                                                 修订 OM-21.02 至 OM-21.04，定义 OM-21.13 至 OM-21.17
 
-  `docs/architecture/adr/ADR-0026-directory-facades-and-explicit-reexports.md`   新建架构决策
+  `docs/architecture/adr/ADR-0026-module-facades-and-explicit-reexports.md`      已接受的架构决策
 
   `include/ombasic/syntax/ast.h`                                                 增加 Re-export AST flag
 
@@ -1619,7 +1621,7 @@ diagnostics、Conformance fixture 和文档，确保 `E0308` 未被占用。
   `docs/README.md`                                                               加入新 ADR/设计文档索引（如适用）
   ------------------------------------------------------------------------------------------------------------------
 
-### 13.2 需要审计，按实际调用关系修改
+### 14.2 已审计并按需修改
 
   ------------------------------------------------------------------------
   文件/区域                            审计内容
@@ -1646,7 +1648,7 @@ diagnostics、Conformance fixture 和文档，确保 `E0308` 未被占用。
   install tests                        
   ------------------------------------------------------------------------
 
-### 13.3 不应修改的区域
+### 14.3 保持未修改的区域
 
 除非审计发现真实缺陷，本计划不应改动：
 
@@ -1701,52 +1703,52 @@ Conformance；提交顺序不能成为绕过规范要求的理由。
 
 ### 语言与规范
 
--   [ ] ADR-0026 已 Accepted。
--   [ ] 标准新增的 Rule ID 不重编号、不复用。
--   [ ] `EXPORT IMPORT` 的语法和语义无歧义。
--   [ ] Facade 约定明确说明目录不是语言实体。
--   [ ] 标准明确禁止自动扫描目录和自动导出目录成员。
--   [ ] 普通 `IMPORT` 的既有行为没有意外变化。
+-   [x] ADR-0026 已 Accepted。
+-   [x] 标准新增的 Rule ID 不重编号、不复用。
+-   [x] `EXPORT IMPORT` 的语法和语义无歧义。
+-   [x] Facade 约定明确说明目录不是语言实体。
+-   [x] 标准明确禁止自动扫描目录和自动导出目录成员。
+-   [x] 普通 `IMPORT` 的既有行为没有意外变化。
 
 ### Loader 与 Resolver
 
--   [ ] Loader 能加载 `EXPORT IMPORT` 的依赖。
--   [ ] Loader 与 Parser 对 Import 前缀的认知一致。
--   [ ] Re-export 使用同一 Module Graph。
--   [ ] 循环依赖仍在编译期被拒绝。
--   [ ] 每个 Module 的公开导出面确定且唯一。
--   [ ] 私有声明不会被 Re-export。
--   [ ] 冲突会给出准确诊断和相关位置。
--   [ ] 不创建合成运行时函数或额外 MIR 指令。
+-   [x] Loader 能加载 `EXPORT IMPORT` 的依赖。
+-   [x] Loader 与 Parser 对 Import 前缀的认知一致。
+-   [x] Re-export 使用同一 Module Graph。
+-   [x] 循环依赖仍在编译期被拒绝。
+-   [x] 每个 Module 的公开导出面确定且唯一。
+-   [x] 私有声明不会被 Re-export。
+-   [x] 冲突会给出准确诊断和相关位置。
+-   [x] 不创建合成运行时函数或额外 MIR 指令。
 
 ### 类型系统与工具
 
--   [ ] Function、Action、Record、Message、Actor 和泛型 Re-export
+-   [x] Function、Action、Record、Message、Actor 和泛型 Re-export
     通过测试。
--   [ ] Effect、Actor protocol 和序列化约束保持有效。
--   [ ] Interface metadata 与 Facade 的公开 API 一致。
--   [ ] Fingerprint 有稳定性测试。
--   [ ] LSP completion、hover 和 go-to-definition 正确。
+-   [x] Effect、Actor protocol 和序列化约束保持有效。
+-   [x] Interface metadata 与 Facade 的公开 API 一致。
+-   [x] Fingerprint 有稳定性测试。
+-   [x] LSP completion、hover 和 go-to-definition 正确。
 
 ### 分发与标准库
 
--   [ ] 标准库使用普通 `.bas` 源码和 Facade 约定。
--   [ ] SDK 可以交付标准库源码。
--   [ ] 使用标准库不要求编译器搜索第二个隐式 Source Root。
--   [ ] 第三方源码库可以通过 Git/subtree/submodule/vendor 方式固定版本。
--   [ ] 不引入包管理器、Package 关键字、包清单或锁文件。
--   [ ] Native 库继续使用 `.omi` 和显式链接配置。
+-   [x] 标准库使用普通 `.bas` 源码和 Facade 约定。
+-   [x] SDK 可以交付标准库源码。
+-   [x] 使用标准库不要求编译器搜索第二个隐式 Source Root。
+-   [x] 第三方源码库可以通过 Git/subtree/submodule/vendor 方式固定版本。
+-   [x] 不引入包管理器、Package 关键字、包清单或锁文件。
+-   [x] Native 库继续使用 `.omi` 和显式链接配置。
 
 ### 工程质量
 
--   [ ] CTest 全套通过。
--   [ ] `tools/spec_check/check.py` 通过。
--   [ ] `tools/conformance_check/check.py` 通过。
--   [ ] Architecture checker 通过。
--   [ ] Linux Native AOT 端到端测试通过。
--   [ ] Windows Native AOT 端到端测试通过。
--   [ ] Sanitizer 和 Fuzz smoke tests 通过。
--   [ ] Conformance Rule coverage 报告没有缺口。
+-   [x] CTest 全套通过。
+-   [x] `tools/spec_check/check.py` 通过。
+-   [x] `tools/conformance_check/check.py` 通过。
+-   [x] Architecture checker 通过。
+-   [x] Linux Native AOT 端到端测试通过。
+-   [x] Windows Native AOT 端到端测试通过。
+-   [x] Sanitizer 和 Fuzz smoke tests 通过。
+-   [x] Conformance Rule coverage 报告没有缺口。
 -   [ ] Release Candidate gate 通过。
 
 ------------------------------------------------------------------------
@@ -1813,7 +1815,6 @@ Module。
 - 禁止 `..` 和隐式搜索；
 - 为同文件双路径引用增加 Source、Module Graph 和 Conformance 测试。
 
-### 风险 6
 ### 风险 6：语言冻结期间引入新语法
 
 **原因：** `EXPORT IMPORT` 是语义变更，不是纯实现重构。
@@ -1833,7 +1834,8 @@ Module。
 -   **Module：** 仍然是一个 `.bas` 文件。
 -   **目录：** 只是文件组织方式。
 -   **Facade：** `X/X.bas` 是目录 `X/` 的约定公共入口。
--   **Import：** 显式写 Source Root-relative `.bas` 路径。
+-   **Import：** 使用 Source-Root-relative 或显式前导 `./` 的
+    Current-Module-relative `.bas` literal；两者归一到同一 canonical identity。
 -   **Alias：** 由文件名 stem 决定。
 -   **Export：** 由声明上的 `EXPORT` 决定。
 -   **Re-export：** 用 `EXPORT IMPORT` 显式平铺导出目标 Module
