@@ -191,6 +191,41 @@ Om_Status om_runtime_string_view(const Om_Execution_Context *context,
     return OM_STATUS_OK;
 }
 
+Om_Status om_runtime_string_compare(const Om_Execution_Context *context,
+                                    const void *left,
+                                    const void *right,
+                                    int32_t *result)
+{
+    if (result == NULL) {
+        return OM_STATUS_INVALID_ARGUMENT;
+    }
+    *result = 0;
+    Om_String_View left_view = {0};
+    Om_String_View right_view = {0};
+    Om_Status status = om_runtime_string_view(context, left, &left_view);
+    if (status == OM_STATUS_OK) {
+        status = om_runtime_string_view(context, right, &right_view);
+    }
+    if (status != OM_STATUS_OK) {
+        return status;
+    }
+
+    const size_t common_length = left_view.length < right_view.length
+        ? left_view.length : right_view.length;
+    const int byte_order = common_length == 0 ? 0
+        : memcmp(left_view.data, right_view.data, common_length);
+    if (byte_order < 0) {
+        *result = -1;
+    } else if (byte_order > 0) {
+        *result = 1;
+    } else if (left_view.length < right_view.length) {
+        *result = -1;
+    } else if (left_view.length > right_view.length) {
+        *result = 1;
+    }
+    return OM_STATUS_OK;
+}
+
 Om_Status om_runtime_string_cstring_view(const Om_Execution_Context *context,
                                          const void *string,
                                          const uint8_t **bytes,

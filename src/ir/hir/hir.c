@@ -207,6 +207,7 @@ static Om_Hir_Kind kind_for_ast(const Om_Hir_Lower_Context *context,
     switch (node->kind) {
     case OM_AST_PROGRAM: return OM_HIR_PROGRAM;
     case OM_AST_IMPORT: return OM_HIR_IMPORT;
+    case OM_AST_NATIVE_IMPORT: return OM_HIR_IMPORT;
     case OM_AST_RECORD_DECLARATION: return OM_HIR_RECORD;
     case OM_AST_MESSAGE_DECLARATION: return OM_HIR_MESSAGE;
     case OM_AST_FUNCTION_DECLARATION: return OM_HIR_FUNCTION;

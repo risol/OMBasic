@@ -16,10 +16,12 @@
 #include "ombasic/semantic/semantic_analysis.h"
 #include "ombasic/semantic/type_inference.h"
 #include "ombasic/source/source_text.h"
+#include "ombasic/source/import_path.h"
 #include "ombasic/native/metadata/omi_project.h"
 #include "ombasic/tooling/diagnostics_json.h"
 #include "ombasic/tooling/interface_cache.h"
 #include "ombasic/tooling/type_format.h"
+#include "ombasic/toolchain/resources.h"
 
 #ifdef _WIN32
 #include <io.h>
@@ -1167,6 +1169,7 @@ cleanup:
 int om_cli_compile_command(int argc, char **argv, const char *command)
 {
     Om_Source_Root root = {0};
+    Om_Source_Root stdlib_root = {0};
     Om_Module_Project project = {0};
     Om_Omi_Project native_project = {0};
     Om_Lexer_Result *lexed = NULL;
@@ -1177,8 +1180,12 @@ int om_cli_compile_command(int argc, char **argv, const char *command)
     Om_Interface_Cache interfaces = {0};
     Om_Cli_Diagnostic_List diagnostics = {0};
     Om_String_View *native_metadata_paths = NULL;
+    Om_Omi_Project_Import *all_native_imports = NULL;
+    Om_Module_Native_Import *module_native_imports = NULL;
     Om_String_View *library_directories = NULL;
     size_t native_metadata_path_count = 0;
+    size_t module_native_import_count = 0;
+    size_t all_native_import_capacity = 0;
     size_t library_directory_count = 0;
     uint8_t *entry_source = NULL;
     size_t entry_source_length = 0;
@@ -1187,6 +1194,7 @@ int om_cli_compile_command(int argc, char **argv, const char *command)
     const char *entry_path = NULL;
     const char *output_path = NULL;
     const char *resource_dir_override = NULL;
+    char *stdlib_root_path = NULL;
     const char *target_triple_override = NULL;
     const char *sysroot = NULL;
     const char *entry_name = "main";
@@ -1313,21 +1321,56 @@ int om_cli_compile_command(int argc, char **argv, const char *command)
         }
     }
     status = om_source_root_init(&root, literal_view(root_path));
+    if (status == OM_STATUS_OK) {
+        const Om_Status resource_status = om_toolchain_resource_directory(
+            "share/ombasic/stdlib", resource_dir_override, &stdlib_root_path);
+        if (resource_status == OM_STATUS_OK) {
+            status = om_source_root_init(&stdlib_root, literal_view(stdlib_root_path));
+        } else if (resource_status != OM_STATUS_NOT_FOUND) {
+            status = resource_status;
+        }
+    }
     if (status == OM_STATUS_OK && read_source_stdin) {
         status = read_stdin_source(&entry_source, &entry_source_length);
     }
     if (status == OM_STATUS_OK && read_source_stdin) {
-        status = om_module_project_load_with_entry_source(
-            &root, literal_view(entry_path),
+        status = om_module_project_load_with_entry_source_and_stdlib(
+            &root, stdlib_root.owned_storage != NULL ? &stdlib_root : NULL,
+            literal_view(entry_path),
             (Om_Const_Byte_Slice){entry_source, entry_source_length},
             OM_SOURCE_TEXT_DEFAULT_MAX_BYTES, &project);
     } else if (status == OM_STATUS_OK) {
-        status = om_module_project_load(&root, literal_view(entry_path),
-                                        OM_SOURCE_TEXT_DEFAULT_MAX_BYTES, &project);
+        status = om_module_project_load_with_stdlib(
+            &root, stdlib_root.owned_storage != NULL ? &stdlib_root : NULL,
+            literal_view(entry_path), OM_SOURCE_TEXT_DEFAULT_MAX_BYTES, &project);
     }
     if (status != OM_STATUS_OK) {
-        (void)fprintf(stderr, "ombasic: cannot load project (%s)\n",
-                      om_status_name(status));
+        bool reported_stdlib = false;
+        if (status == OM_STATUS_NOT_FOUND
+            && project.error_span.source.value != UINT32_MAX
+            && project.failed_module.value != UINT32_MAX) {
+            for (size_t import_index = 0;
+                 import_index < om_module_project_import_count(
+                     &project, project.failed_module); ++import_index) {
+                Om_Module_Import_Info import_info = {0};
+                if (om_module_project_import_at(&project, project.failed_module,
+                        import_index, &import_info) == OM_STATUS_OK
+                    && import_info.span.start == project.error_span.start
+                    && import_info.span.end == project.error_span.end
+                    && import_info.path.length >= 5
+                    && memcmp(import_info.path.data, "@std/", 5) == 0) {
+                    (void)fprintf(stderr,
+                        "ombasic: SDK standard-library module '%.*s' is unavailable\n",
+                        (int)import_info.path.length, import_info.path.data);
+                    reported_stdlib = true;
+                    break;
+                }
+            }
+        }
+        if (!reported_stdlib) {
+            (void)fprintf(stderr, "ombasic: cannot load project (%s)\n",
+                          om_status_name(status));
+        }
         goto cleanup;
     }
 
@@ -1422,9 +1465,197 @@ int om_cli_compile_command(int argc, char **argv, const char *command)
     }
 
     if (all_syntax_valid) {
+        size_t maximum_native_imports = 0;
+        for (size_t module_index = 0; module_index < module_count; ++module_index) {
+            const Om_Ast *ast = &parsed[module_index].ast;
+            const Om_Ast_Node *program = om_ast_get_node(ast, ast->root);
+            if (program != NULL && !om_checked_size_add(maximum_native_imports,
+                    program->child_count, &maximum_native_imports)) {
+                status = OM_STATUS_OUT_OF_RANGE;
+                goto cleanup;
+            }
+        }
+        if (!om_checked_size_add(native_metadata_path_count,
+                                 maximum_native_imports,
+                                 &all_native_import_capacity)) {
+            status = OM_STATUS_OUT_OF_RANGE;
+            goto cleanup;
+        }
+        all_native_imports = om_alloc_array(all_native_import_capacity,
+                                             sizeof(*all_native_imports));
+        module_native_imports = om_alloc_array(maximum_native_imports,
+                                                sizeof(*module_native_imports));
+        if ((all_native_import_capacity != 0 && all_native_imports == NULL)
+            || (maximum_native_imports != 0 && module_native_imports == NULL)) {
+            status = OM_STATUS_OUT_OF_MEMORY;
+            goto cleanup;
+        }
+        if (all_native_import_capacity != 0) {
+            (void)memset(all_native_imports, 0,
+                all_native_import_capacity * sizeof(*all_native_imports));
+        }
+        for (size_t index = 0; index < native_metadata_path_count; ++index) {
+            all_native_imports[index] = (Om_Omi_Project_Import){
+                &root, native_metadata_paths[index]};
+        }
+        size_t unique_local_count = 0;
+        for (size_t module_index = 0; module_index < module_count; ++module_index) {
+            const Om_Ast *ast = &parsed[module_index].ast;
+            const Om_Ast_Node *program = om_ast_get_node(ast, ast->root);
+            const Om_Source_Text *source = om_module_project_source(
+                &project, (Om_Module_Id){(uint32_t)module_index});
+            if (program == NULL || source == NULL) {
+                status = OM_STATUS_INVALID_ARGUMENT;
+                goto cleanup;
+            }
+            for (size_t child_index = 0; child_index < program->child_count;
+                 ++child_index) {
+                const Om_Ast_Node *child = om_ast_get_node(ast,
+                    om_ast_get_child(ast, program, child_index));
+                if (child == NULL || child->kind != OM_AST_NATIVE_IMPORT) {
+                    continue;
+                }
+                if (child->name.length < 3 || child->name.data[0] != '"'
+                    || child->name.data[child->name.length - 1] != '"') {
+                    status = OM_STATUS_INVALID_ARGUMENT;
+                    goto cleanup;
+                }
+                const Om_String_View literal = {
+                    child->name.data + 1, child->name.length - 2};
+                const bool from_stdlib = source->canonical_path.length >= 5
+                    && memcmp(source->canonical_path.data, "@std/", 5) == 0;
+                const Om_Source_Root *native_root = from_stdlib
+                    ? &stdlib_root : &root;
+                Om_Resolved_Import_Path resolved = {0};
+                status = om_import_file_path_resolve(source->canonical_path,
+                    literal, (Om_String_View){".omi", 4}, &resolved);
+                if (status != OM_STATUS_OK || native_root->owned_storage == NULL) {
+                    om_resolved_import_path_destroy(&resolved);
+                    project.error_span = child->span;
+                    project.failed_module = (Om_Module_Id){(uint32_t)module_index};
+                    (void)fprintf(stderr,
+                        "ombasic: cannot resolve Native import at %.*s (%s)\n",
+                        (int)source->canonical_path.length,
+                        source->canonical_path.data,
+                        om_status_name(status != OM_STATUS_OK ? status
+                                                              : OM_STATUS_NOT_FOUND));
+                    status = status != OM_STATUS_OK ? status : OM_STATUS_NOT_FOUND;
+                    goto cleanup;
+                }
+                Om_String_View metadata_path = {resolved.data, resolved.length};
+                if (resolved.root_kind == OM_IMPORT_ROOT_STDLIB) {
+                    if (metadata_path.length <= 5
+                        || memcmp(metadata_path.data, "@std/", 5) != 0) {
+                        om_resolved_import_path_destroy(&resolved);
+                        status = OM_STATUS_INVALID_ARGUMENT;
+                        goto cleanup;
+                    }
+                    (void)memmove(resolved.data, resolved.data + 5,
+                                  resolved.length - 5);
+                    resolved.length -= 5;
+                    resolved.data[resolved.length] = '\0';
+                    metadata_path = (Om_String_View){resolved.data,
+                                                     resolved.length};
+                }
+                size_t metadata_index = SIZE_MAX;
+                for (size_t prior = 0; prior < unique_local_count; ++prior) {
+                    const Om_Omi_Project_Import *item =
+                        &all_native_imports[native_metadata_path_count + prior];
+                    if (item->source_root == native_root
+                        && om_string_view_equal(item->metadata_path,
+                                                metadata_path)) {
+                        metadata_index = prior;
+                        break;
+                    }
+                }
+                if (metadata_index == SIZE_MAX) {
+                    metadata_index = unique_local_count++;
+                    all_native_imports[native_metadata_path_count + metadata_index] =
+                        (Om_Omi_Project_Import){native_root, metadata_path};
+                    resolved.data = NULL;
+                }
+                bool already_mapped = false;
+                for (size_t prior = 0; prior < module_native_import_count; ++prior) {
+                    if (module_native_imports[prior].module_id.value
+                            == module_index
+                        && module_native_imports[prior].metadata_index
+                            == metadata_index) {
+                        already_mapped = true;
+                        break;
+                    }
+                }
+                if (already_mapped) {
+                    om_resolved_import_path_destroy(&resolved);
+                    continue;
+                }
+                module_native_imports[module_native_import_count++] =
+                    (Om_Module_Native_Import){
+                        .module_id = {(uint32_t)module_index},
+                        .native_module = NULL,
+                        .import_span = child->span,
+                        .metadata_index = metadata_index,
+                    };
+                om_resolved_import_path_destroy(&resolved);
+            }
+        }
+        if (unique_local_count != 0) {
+            om_omi_project_destroy(&native_project);
+            status = om_omi_project_load_imports(all_native_imports,
+                native_metadata_path_count + unique_local_count,
+                (uint32_t)module_count, OM_SOURCE_TEXT_DEFAULT_MAX_BYTES,
+                &native_project);
+            if (status != OM_STATUS_OK) {
+                (void)fprintf(stderr,
+                    "ombasic: cannot load Native import metadata (%s)\n",
+                    om_status_name(status));
+                goto cleanup;
+            }
+            for (size_t mapping_index = 0;
+                 mapping_index < module_native_import_count; ++mapping_index) {
+                module_native_imports[mapping_index].native_module =
+                    &native_project.modules[native_metadata_path_count
+                        + module_native_imports[mapping_index].metadata_index];
+            }
+            for (size_t index = 0; index < unique_local_count; ++index) {
+                om_free((void *)all_native_imports[native_metadata_path_count
+                                                   + index].metadata_path.data);
+                all_native_imports[native_metadata_path_count
+                                   + index].metadata_path.data = NULL;
+            }
+            for (size_t metadata_index = native_metadata_path_count;
+                 metadata_index < native_project.module_count; ++metadata_index) {
+                const Om_Omi_Module *native_module =
+                    &native_project.modules[metadata_index];
+                const Om_Source_Text *native_source =
+                    &native_project.sources[metadata_index];
+                for (size_t diagnostic_index = 0;
+                     diagnostic_index < native_module->diagnostic_count;
+                     ++diagnostic_index) {
+                    const Om_Omi_Diagnostic *diagnostic =
+                        &native_module->diagnostics[diagnostic_index];
+                    Om_Source_Location location = {0};
+                    (void)om_source_text_location(native_source,
+                        diagnostic->span.start, &location);
+                    (void)fprintf(stderr, "%.*s:%u:%u: %s\n",
+                        (int)native_source->canonical_path.length,
+                        native_source->canonical_path.data, location.line,
+                        location.byte_column,
+                        om_omi_diagnostic_code_name(diagnostic->code));
+                    status = OM_STATUS_INVALID_ARGUMENT;
+                }
+            }
+            if (status != OM_STATUS_OK) {
+                goto cleanup;
+            }
+        }
+    }
+
+    if (all_syntax_valid) {
         const Om_Resolver_Config resolver_config = {
             .native_modules = native_project.modules,
-            .native_module_count = native_project.module_count,
+            .native_module_count = native_metadata_path_count,
+            .module_native_imports = module_native_imports,
+            .module_native_import_count = module_native_import_count,
         };
         status = om_name_resolve_project(&project, parsed, module_count,
                                          &resolver_config, &resolution);
@@ -1481,6 +1712,14 @@ int om_cli_compile_command(int argc, char **argv, const char *command)
     }
 
 cleanup:
+    if (all_native_imports != NULL) {
+        for (size_t index = native_metadata_path_count;
+             index < all_native_import_capacity; ++index) {
+            om_free((void *)all_native_imports[index].metadata_path.data);
+        }
+    }
+    om_free(all_native_imports);
+    om_free(module_native_imports);
     om_free(entry_source);
     om_free(diagnostics.items);
     om_interface_cache_destroy(&interfaces);
@@ -1502,6 +1741,8 @@ cleanup:
     om_free(lexed);
     om_module_project_destroy(&project);
     om_source_root_destroy(&root);
+    om_source_root_destroy(&stdlib_root);
+    om_free(stdlib_root_path);
     om_free(library_directories);
     om_free(native_metadata_paths);
     return exit_code;

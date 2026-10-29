@@ -1,0 +1,26 @@
+IMPORT "@std/text/text.bas"
+
+ACTION main()
+    joined = text.concat("café", " 東京")
+    matches = text.equals("café 東京", "café 東京")
+    empty = text.is_empty("")
+    nonempty = text.is_empty("café 東京")
+    unicode_order = "é" < "東京"
+    scalar_length = text.length("é東京")
+    starts = text.starts_with("café 東京", "café")
+    ends = text.ends_with("café 東京", "東京")
+    found = text.find("café 東京", "東京")
+    sliced = text.slice("aé東京z", 1, 2)
+    parts = text.split("one,,東京,", ",")
+    joined_parts = text.join(parts, "|")
+    chars = text.split("é界", "")
+    overlap = text.split("aaaa", "aa")
+    empty_field = text.split("", ",")
+    empty_chars = text.split("", "")
+    empty_join = text.join([], ",")
+    overlap_join = text.join(overlap, "|")
+    joined_chars = text.join(chars, "")
+    joined_empty_chars = text.join(empty_chars, ",")
+    print($"{joined}|{matches}|{empty}|{nonempty}|{unicode_order}|{scalar_length}|{starts}|{ends}|{found}|{sliced}|{joined_parts}|{chars[0]}{chars[1]}")
+    print($"{overlap_join}|{text.is_empty(empty_join)}|{empty_field[0]}|{joined_chars}|{text.is_empty(joined_empty_chars)}")
+END ACTION

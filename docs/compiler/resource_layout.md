@@ -18,6 +18,7 @@ It does not embed build-tree archive paths.
 │   └── ombasic_foundation[.lib|.a]
 └── share/ombasic/
     ├── target-manifest.json
+    ├── stdlib-manifest.json
     ├── stdlib/
     │   └── math/
     │       ├── math.bas
@@ -28,19 +29,22 @@ It does not embed build-tree archive paths.
         └── ombasic_lsp.py
 ```
 
-The manifest stores relative resource paths and the target triple used to build
-this SDK. Installed static archives have debug records stripped so they do not
-retain paths from the machine that built the SDK.
+The target manifest stores relative resource paths, the standard-library
+version and content digest, and the target triple used to build this SDK.
+`stdlib-manifest.json` lists each `.bas` file by relative path and SHA-256. Its
+aggregate digest is repeated in the target manifest. Installed static archives
+have debug records stripped so they do not retain paths from the machine that
+built the SDK.
 
 ## Standard-library source
 
 The SDK ships OMBasic standard-library source under `share/ombasic/stdlib/`.
-The compiler does not search that directory as an additional import root. To
-use a library, copy or vendor the needed subtree into the project's Source Root
-and import its `.bas` Facade like any other source file. For example, copy
-`stdlib/math/` to `src/math/`, then write `IMPORT "math/math.bas"`. The project
-should pin the copied source with its own Git commit; SDK releases identify the
-version of the source they provide.
+The compiler makes this tree available only through an explicit `@std/` Import,
+for example `IMPORT "@std/math/math.bas"`. It remains ordinary OMBasic source
+and participates in normal semantic analysis and compilation. Relative `./`
+imports within the tree preserve the SDK root. Standard-library modules cannot
+import project files, and a missing SDK resource is an error without fallback.
+The selected SDK version fixes the standard-library source version.
 
 Third-party libraries can be pinned the same way: use a Git submodule, subtree,
 vendor the selected source files, or unpack a source archive at a reviewed

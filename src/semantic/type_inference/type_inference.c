@@ -1005,13 +1005,16 @@ static Om_Status initialize_builtin(Om_Infer_Context *context,
     if (symbol->builtin_id == OM_BUILTIN_RESULT) {
         return OM_STATUS_OK;
     }
-    Om_Type_Id unknown_builtin = OM_TYPE_ID_INVALID;
-    Om_Status status = om_type_store_variable(&context->type_store, 1,
-                                              &unknown_builtin);
-    if (status == OM_STATUS_OK) {
-        status = generalize_symbol(context, symbol->id, unknown_builtin, 0);
+    if (symbol->builtin_id == OM_BUILTIN_NONE) {
+        Om_Type_Id prelude_type = OM_TYPE_ID_INVALID;
+        Om_Status status = om_type_store_variable(&context->type_store, 1,
+                                                  &prelude_type);
+        if (status == OM_STATUS_OK) {
+            status = generalize_symbol(context, symbol->id, prelude_type, 0);
+        }
+        return status;
     }
-    return status;
+    return OM_STATUS_INVALID_ARGUMENT;
 }
 
 static Om_Status initialize_callable(Om_Infer_Context *context,
@@ -1839,6 +1842,8 @@ static Om_Status infer_binary(Om_Infer_Context *context,
     status = unify_at(context, module, node->span, left, right);
     const uint32_t constraint = node->token_kind == OM_TOKEN_PERCENT
         ? (uint32_t)OM_TYPE_CONSTRAINT_INTEGRAL
+        : node->token_kind == OM_TOKEN_PLUS
+        ? (uint32_t)OM_TYPE_CONSTRAINT_ADDITIVE
         : (uint32_t)OM_TYPE_CONSTRAINT_NUMERIC;
     if (status == OM_STATUS_OK) {
         status = require_constraint_at(context, module, node->span, left,
@@ -2306,6 +2311,7 @@ static Om_Status infer_expression(Om_Infer_Context *context,
         return OM_STATUS_INVALID_ARGUMENT;
     case OM_AST_PROGRAM:
     case OM_AST_IMPORT:
+    case OM_AST_NATIVE_IMPORT:
     case OM_AST_RECORD_DECLARATION:
     case OM_AST_MESSAGE_DECLARATION:
     case OM_AST_FUNCTION_DECLARATION:
@@ -3276,7 +3282,8 @@ Om_Status om_type_infer_project(const Om_Module_Project *project,
                                            type_for_symbol_scheme(&context,
                                                                   field_symbol));
                 }
-            } else if (declaration->kind != OM_AST_IMPORT) {
+            } else if (declaration->kind != OM_AST_IMPORT
+                       && declaration->kind != OM_AST_NATIVE_IMPORT) {
                 status = OM_STATUS_INVALID_ARGUMENT;
             }
         }

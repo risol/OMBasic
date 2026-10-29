@@ -7,6 +7,8 @@
 #include <string.h>
 
 #include "ombasic/foundation/memory.h"
+#include "ombasic/runtime/abi/json.h"
+#include "ombasic/runtime/abi/text.h"
 
 #define RUNTIME_ASSERT(expression)                                               \
     do {                                                                         \
@@ -397,6 +399,11 @@ static bool test_runtime_cstring_conversion(void)
     bool passed = false;
     static const uint8_t embedded_nul[] = {'a', 0, 'b'};
     static const uint8_t invalid_utf8[] = {UINT8_C(0xc3), UINT8_C(0x78), 0};
+    static const uint8_t latin_e_acute[] = {UINT8_C(0xc3), UINT8_C(0xa9)};
+    static const uint8_t tokyo[] = {
+        UINT8_C(0xe6), UINT8_C(0x9d), UINT8_C(0xb1),
+        UINT8_C(0xe4), UINT8_C(0xba), UINT8_C(0xac),
+    };
     static const char regular_text[] = "borrowed text";
     static const char owned_text[] = "owned text";
 
@@ -421,6 +428,16 @@ static bool test_runtime_cstring_conversion(void)
     RUNTIME_ASSERT(view_length == sizeof(regular_text) - 1
         && memcmp(view_bytes, regular_text, view_length) == 0
         && view_bytes[view_length] == 0);
+
+    RUNTIME_ASSERT(om_runtime_string_create_utf8_default(context,
+        latin_e_acute, sizeof(latin_e_acute), &roots[0]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_string_create_utf8_default(context,
+        tokyo, sizeof(tokyo), &roots[1]) == OM_STATUS_OK);
+    int32_t string_order = 0;
+    RUNTIME_ASSERT(om_runtime_string_compare(context, roots[0], roots[1],
+        &string_order) == OM_STATUS_OK && string_order < 0);
+    RUNTIME_ASSERT(om_runtime_string_compare(context, roots[0], roots[0],
+        &string_order) == OM_STATUS_OK && string_order == 0);
 
     char *owned_copy = malloc(sizeof(owned_text));
     RUNTIME_ASSERT(owned_copy != NULL);
@@ -449,6 +466,33 @@ static bool test_runtime_cstring_conversion(void)
         orphaned_copy, release_test_cstring, NULL)
         == OM_STATUS_INVALID_ARGUMENT);
     RUNTIME_ASSERT(cstring_release_count == 3);
+
+    static const char unicode_text[] = {
+        'a', (char)0xc3, (char)0xa9, (char)0xe6, (char)0x9d, (char)0xb1,
+        (char)0xe4, (char)0xba, (char)0xac, 'z', 0
+    };
+    static const char unicode_query[] = {
+        (char)0xe6, (char)0x9d, (char)0xb1, (char)0xe4, (char)0xba,
+        (char)0xac, 0
+    };
+    static const char expected_slice[] = {
+        (char)0xc3, (char)0xa9, (char)0xe6, (char)0x9d, (char)0xb1, 0
+    };
+    RUNTIME_ASSERT(om_runtime_text_length(unicode_text) == 5);
+    RUNTIME_ASSERT(om_runtime_text_starts_with(unicode_text, "a"));
+    RUNTIME_ASSERT(om_runtime_text_ends_with(unicode_text, "z"));
+    RUNTIME_ASSERT(om_runtime_text_find(unicode_text, unicode_query, 0) == 2);
+    RUNTIME_ASSERT(om_runtime_text_find_last(unicode_text,
+        unicode_query) == 2);
+    RUNTIME_ASSERT(om_runtime_text_find_last("a.b.c", ".") == 3);
+    RUNTIME_ASSERT(om_runtime_text_find_last("abc", "") == 3);
+    RUNTIME_ASSERT(om_runtime_text_find(unicode_text, "", 4) == 4);
+    RUNTIME_ASSERT(om_runtime_text_find(unicode_text, "missing", 0) == -1);
+    char *slice = om_runtime_text_slice(unicode_text, 1, 2);
+    RUNTIME_ASSERT(slice != NULL
+        && memcmp(slice, expected_slice, sizeof(expected_slice)) == 0);
+    om_runtime_text_release(slice);
+    RUNTIME_ASSERT(om_runtime_text_slice(unicode_text, 6, 0) == NULL);
     passed = true;
 
 cleanup:
@@ -456,6 +500,93 @@ cleanup:
         (void)om_runtime_roots_pop(context, frame);
     }
     om_runtime_context_destroy(context);
+    return passed;
+}
+
+static bool test_json_native(void)
+{
+    bool passed = false;
+    char *owned = NULL;
+    char *oversized = NULL;
+    static const char source[] =
+        " { \"a\" : [true, null, -0, 1.234567890123456789e+999, "
+        "\"\\uD834\\uDD1E\"], \"x\":\"line\\nbreak\" } \t";
+    static const char compact_expected[] =
+        "{\"a\":[true,null,-0,1.234567890123456789e+999,"
+        "\"\\uD834\\uDD1E\"],\"x\":\"line\\nbreak\"}";
+    RUNTIME_ASSERT(om_runtime_json_valid(source));
+    RUNTIME_ASSERT(om_runtime_json_kind(source)
+                   == OM_RUNTIME_JSON_KIND_OBJECT);
+    owned = om_runtime_json_compact(source);
+    RUNTIME_ASSERT(owned != NULL && strcmp(owned, compact_expected) == 0);
+    om_runtime_json_release(owned);
+    owned = NULL;
+
+    static const char array[] = "[1, {\"x\":[2]}, \"z\"]";
+    RUNTIME_ASSERT(om_runtime_json_array_length(array) == 3);
+    RUNTIME_ASSERT(om_runtime_json_array_index_valid(array, 1));
+    RUNTIME_ASSERT(!om_runtime_json_array_index_valid(array, -1));
+    RUNTIME_ASSERT(!om_runtime_json_array_index_valid(array, 3));
+    owned = om_runtime_json_array_get(array, 1);
+    RUNTIME_ASSERT(owned != NULL && strcmp(owned, "{\"x\":[2]}") == 0);
+    om_runtime_json_release(owned);
+    owned = NULL;
+
+    static const char escaped_key[] = "{\"\\u0061\":1}";
+    RUNTIME_ASSERT(om_runtime_json_object_key_valid(escaped_key, "a"));
+    owned = om_runtime_json_object_get(escaped_key, "a");
+    RUNTIME_ASSERT(owned != NULL && strcmp(owned, "1") == 0);
+    om_runtime_json_release(owned);
+    owned = NULL;
+
+    static const char duplicate_key[] = "{\"a\":1,\"\\u0061\":2}";
+    RUNTIME_ASSERT(!om_runtime_json_valid(duplicate_key));
+    RUNTIME_ASSERT(om_runtime_json_error_code(duplicate_key)
+                   == OM_RUNTIME_JSON_ERROR_DUPLICATE_KEY);
+    RUNTIME_ASSERT(om_runtime_json_error_offset(duplicate_key) == 7);
+    owned = om_runtime_json_error_message(duplicate_key);
+    RUNTIME_ASSERT(owned != NULL && strcmp(owned, "duplicate object key") == 0);
+    om_runtime_json_release(owned);
+    owned = NULL;
+
+    static const char invalid_number[] = "[01]";
+    RUNTIME_ASSERT(om_runtime_json_error_code(invalid_number)
+                   == OM_RUNTIME_JSON_ERROR_SYNTAX);
+    static const char invalid_surrogate[] = "\"\\uD800\"";
+    RUNTIME_ASSERT(om_runtime_json_error_code(invalid_surrogate)
+                   == OM_RUNTIME_JSON_ERROR_SYNTAX);
+    static const char invalid_utf8[] = {(char)0xc3, (char)0x28, 0};
+    RUNTIME_ASSERT(om_runtime_json_error_code(invalid_utf8)
+                   == OM_RUNTIME_JSON_ERROR_UTF8);
+    RUNTIME_ASSERT(om_runtime_json_error_offset(invalid_utf8) == 0);
+
+    char nested[260] = {0};
+    (void)memset(nested, '[', 129);
+    nested[129] = '0';
+    (void)memset(nested + 130, ']', 129);
+    nested[259] = '\0';
+    RUNTIME_ASSERT(om_runtime_json_error_code(nested)
+                   == OM_RUNTIME_JSON_ERROR_DEPTH);
+
+    const size_t oversized_length = (size_t)1024 * (size_t)1024 + 1;
+    oversized = om_alloc(oversized_length + 1);
+    RUNTIME_ASSERT(oversized != NULL);
+    (void)memset(oversized, ' ', oversized_length);
+    oversized[oversized_length] = '\0';
+    RUNTIME_ASSERT(om_runtime_json_error_code(oversized)
+                   == OM_RUNTIME_JSON_ERROR_SIZE);
+    om_free(oversized);
+    oversized = NULL;
+
+    static const char quote_input[] = {'a', '\n', '"', '\\', 0};
+    static const char quote_expected[] = "\"a\\n\\\"\\\\\"";
+    owned = om_runtime_json_quote(quote_input);
+    RUNTIME_ASSERT(owned != NULL && strcmp(owned, quote_expected) == 0);
+    passed = true;
+
+cleanup:
+    om_runtime_json_release(owned);
+    om_free(oversized);
     return passed;
 }
 
@@ -619,11 +750,11 @@ bool om_runtime_test_lists(void)
 {
     Om_Execution_Context *context = om_runtime_context_create(0);
     Om_Runtime_Root_Frame *frame = NULL;
-    void *roots[2] = {NULL, NULL};
+    void *roots[4] = {NULL, NULL, NULL, NULL};
     bool passed = false;
     static const uint8_t item[] = "list item";
     RUNTIME_ASSERT(context != NULL);
-    frame = om_runtime_roots_push(context, roots, 2);
+    frame = om_runtime_roots_push(context, roots, 4);
     RUNTIME_ASSERT(frame != NULL);
     RUNTIME_ASSERT(om_runtime_string_create_utf8_default(context, item,
         sizeof(item) - 1, &roots[1]) == OM_STATUS_OK);
@@ -639,10 +770,26 @@ bool om_runtime_test_lists(void)
     RUNTIME_ASSERT(om_runtime_list_get(context, roots[0], 0, &value)
                    == OM_STATUS_OK);
     RUNTIME_ASSERT(value.managed == roots[1]);
+    RUNTIME_ASSERT(om_runtime_list_create(context, &TEST_STRING_LIST_TYPE,
+        &roots[2]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_append(context, roots[2],
+        (Om_Runtime_Value){.managed = roots[1]}) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_concat(context, roots[0], roots[2],
+        &roots[3]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_length(context, roots[3], &length)
+                   == OM_STATUS_OK);
+    RUNTIME_ASSERT(length == 2);
+    RUNTIME_ASSERT(om_runtime_list_get(context, roots[3], 1, &value)
+                   == OM_STATUS_OK);
+    RUNTIME_ASSERT(value.managed == roots[1]);
     roots[1] = NULL;
     RUNTIME_ASSERT(om_runtime_collect(context) == OM_STATUS_OK);
-    RUNTIME_ASSERT(om_runtime_live_object_count(context) == 2);
+    RUNTIME_ASSERT(om_runtime_live_object_count(context) == 4);
     roots[0] = NULL;
+    roots[2] = NULL;
+    RUNTIME_ASSERT(om_runtime_collect(context) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_live_object_count(context) == 2);
+    roots[3] = NULL;
     RUNTIME_ASSERT(om_runtime_collect(context) == OM_STATUS_OK);
     RUNTIME_ASSERT(om_runtime_live_object_count(context) == 0);
     passed = true;
@@ -701,6 +848,11 @@ bool om_runtime_test_native_pointers(void)
 {
     return test_native_pointer_lifecycle();
 }
+
+bool om_runtime_test_json(void)
+{
+    return test_json_native();
+}
 #endif
 
 #ifndef OM_RUNTIME_TEST_SUPPORT_ONLY
@@ -713,12 +865,15 @@ int main(void)
     const bool container_passed = test_unit_null_containers_and_root_order();
     const bool fault_passed = test_runtime_fault_boundary();
     const bool native_pointer_passed = test_native_pointer_lifecycle();
+    const bool json_passed = test_json_native();
     (void)fprintf(stdout, "Native runtime tests: %s\n",
         objects_passed && threshold_passed && cstring_passed && cycles_passed
             && container_passed && fault_passed && native_pointer_passed
+            && json_passed
             ? "passed" : "failed");
     return objects_passed && threshold_passed && cstring_passed && cycles_passed
             && container_passed && fault_passed && native_pointer_passed
+            && json_passed
         ? 0 : 1;
 }
 #endif

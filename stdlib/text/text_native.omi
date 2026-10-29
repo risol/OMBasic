@@ -1,0 +1,44 @@
+NATIVE "ombasic_runtime"
+FUNCTION scalar_length(value: CString BORROWED): CInt64
+    SYMBOL "om_runtime_text_length"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION scalar_starts_with(value: CString BORROWED, prefix: CString BORROWED): CBool
+    SYMBOL "om_runtime_text_starts_with"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION scalar_ends_with(value: CString BORROWED, suffix: CString BORROWED): CBool
+    SYMBOL "om_runtime_text_ends_with"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION scalar_find(value: CString BORROWED, needle: CString BORROWED, start_index: CInt64): CInt64
+    SYMBOL "om_runtime_text_find"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION scalar_find_last(value: CString BORROWED, needle: CString BORROWED): CInt64
+    SYMBOL "om_runtime_text_find_last"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION scalar_slice(value: CString BORROWED, start_index: CInt64, scalar_count: CInt64): CString
+    SYMBOL "om_runtime_text_slice"
+    EFFECT PURE
+    NONBLOCKING
+    RETURNS OWNED WITH release_text
+END FUNCTION
+
+FUNCTION release_text(value: CPointer OWNED): CVoid
+    SYMBOL "om_runtime_text_release"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+END NATIVE

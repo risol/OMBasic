@@ -1,0 +1,4 @@
+/* id, owning builtin, spelling, standard rule, semantic value */
+OM_BUILTIN_MEMBER(OM_BUILTIN_MEMBER_ACTOR_DOWN_REASON_NORMAL, OM_BUILTIN_ACTOR_DOWN_REASON, "normal", "OM-17.04", "normal termination")
+OM_BUILTIN_MEMBER(OM_BUILTIN_MEMBER_ACTOR_DOWN_REASON_FAILED, OM_BUILTIN_ACTOR_DOWN_REASON, "failed", "OM-17.04", "actor failure")
+OM_BUILTIN_MEMBER(OM_BUILTIN_MEMBER_ACTOR_DOWN_REASON_NODE_UNREACHABLE, OM_BUILTIN_ACTOR_DOWN_REASON, "node_unreachable", "OM-17.04", "remote status unknown")

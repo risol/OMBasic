@@ -23,6 +23,49 @@ Om_Status om_runtime_list_create(Om_Execution_Context *context,
     return status;
 }
 
+Om_Status om_runtime_list_concat(Om_Execution_Context *context,
+                                 const void *left_pointer,
+                                 const void *right_pointer,
+                                 void **result)
+{
+    Om_Runtime_Object_Header *left = find_object(context, left_pointer);
+    Om_Runtime_Object_Header *right = find_object(context, right_pointer);
+    if (context == NULL || left == NULL || right == NULL || result == NULL
+        || left->fields.type->kind != OM_RUNTIME_TYPE_LIST
+        || right->fields.type->kind != OM_RUNTIME_TYPE_LIST
+        || !runtime_descriptor_compatible(left->fields.type,
+                                          right->fields.type, 0)) {
+        return OM_STATUS_INVALID_ARGUMENT;
+    }
+    *result = NULL;
+    void *roots[3] = {(void *)left_pointer, (void *)right_pointer, NULL};
+    Om_Runtime_Root_Frame *frame = om_runtime_roots_push(context, roots, 3);
+    if (frame == NULL) {
+        return OM_STATUS_OUT_OF_MEMORY;
+    }
+    Om_Status status = om_runtime_list_create(context, left->fields.type,
+                                               &roots[2]);
+    for (size_t source_index = 0; status == OM_STATUS_OK && source_index < 2;
+         ++source_index) {
+        size_t length = 0;
+        status = om_runtime_list_length(context, roots[source_index], &length);
+        for (size_t index = 0; status == OM_STATUS_OK && index < length;
+             ++index) {
+            Om_Runtime_Value item = {0};
+            status = om_runtime_list_get(context, roots[source_index], index,
+                                         &item);
+            if (status == OM_STATUS_OK) {
+                status = om_runtime_list_append(context, roots[2], item);
+            }
+        }
+    }
+    if (status == OM_STATUS_OK) {
+        *result = roots[2];
+    }
+    const Om_Status pop_status = om_runtime_roots_pop(context, frame);
+    return status == OM_STATUS_OK ? pop_status : status;
+}
+
 static Om_Status list_reserve(Om_Execution_Context *context,
                               Om_Runtime_Object_Header *object,
                               size_t requested_capacity)

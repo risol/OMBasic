@@ -1,0 +1,3 @@
+EXPORT ACTION run()
+    add(1, 2)
+END ACTION

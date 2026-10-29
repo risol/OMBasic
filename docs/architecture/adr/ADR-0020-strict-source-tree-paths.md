@@ -4,7 +4,8 @@ Status: Accepted
 
 ## Context
 
-Module imports must resolve deterministically below one canonical source root.
+Module imports resolve deterministically below one of two typed roots: the
+project Source Root or the SDK Standard Library Root selected by `@std/`.
 Portable, race-resistant support for safe in-root symlinks would require
 different platform-specific resolution strategies.
 
@@ -15,6 +16,8 @@ different platform-specific resolution strategies.
 - Require every requested path segment to use its exact filesystem casing.
 - Reject an import alias that resolves to a different canonical path, even if
   its target remains inside the source root.
+- Apply the same traversal, exact-case and symlink/reparse-point checks to each
+  root independently. Root selection is explicit and never falls back.
 
 ## Consequences
 

@@ -1552,6 +1552,27 @@ static Om_Status parse_import(Om_Parser *parser, bool reexport,
                      0, 0.0, NULL, 0, out);
 }
 
+static Om_Status parse_native_import(Om_Parser *parser,
+                                    Om_Ast_Node_Id *out)
+{
+    const Om_Token *begin = advance(parser);
+    Om_Status status = expect_keyword(parser, OM_KEYWORD_IMPORT);
+    const Om_Token *path = peek(parser);
+    if (status == OM_STATUS_OK) {
+        status = expect_kind(parser, OM_TOKEN_STRING);
+    }
+    if (status == OM_STATUS_OK) {
+        status = consume_line_end(parser);
+    }
+    if (status != OM_STATUS_OK) {
+        return status;
+    }
+    return make_node(parser, OM_AST_NATIVE_IMPORT,
+                     span_between(begin->span, path->span), path->lexeme,
+                     OM_TOKEN_STRING, OM_KEYWORD_NATIVE, OM_AST_FLAG_NONE,
+                     0, 0, 0.0, NULL, 0, out);
+}
+
 static Om_Status parse_simple_declaration(Om_Parser *parser, bool exported,
                                           Om_Ast_Kind kind, Om_Ast_Node_Id *out)
 {
@@ -1893,6 +1914,21 @@ Om_Status om_parser_parse(const Om_Lexer_Result *lexed, Om_Parser_Result *result
             Om_Ast_Node_Id import_node = OM_AST_NODE_ID_INVALID;
             if (status == OM_STATUS_OK) {
                 status = parse_import(&parser, false, NULL, &import_node);
+            }
+            if (status == OM_STATUS_OK) {
+                status = push_id(&top_level, import_node);
+            }
+        } else if (at_keyword(&parser, OM_KEYWORD_NATIVE)
+                   && peek_next(&parser)->kind == OM_TOKEN_KEYWORD
+                   && peek_next(&parser)->keyword == OM_KEYWORD_IMPORT) {
+            if (!imports_open) {
+                status = add_diagnostic(&parser, OM_PARSE_DIAGNOSTIC_E0203,
+                                        peek(&parser)->span, OM_TOKEN_ERROR,
+                                        OM_KEYWORD_NONE);
+            }
+            Om_Ast_Node_Id import_node = OM_AST_NODE_ID_INVALID;
+            if (status == OM_STATUS_OK) {
+                status = parse_native_import(&parser, &import_node);
             }
             if (status == OM_STATUS_OK) {
                 status = push_id(&top_level, import_node);

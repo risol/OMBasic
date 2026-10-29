@@ -6,6 +6,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import hashlib
+import json
 
 
 def main() -> int:
@@ -162,6 +164,72 @@ def main() -> int:
             raise AssertionError(
                 f"relocated output failed: {ran.stdout!r} {ran.stderr!r}")
 
+        stdlib_source_root = temporary_root / "stdlib-source"
+        stdlib_source_root.mkdir()
+        (stdlib_source_root / "main.bas").write_text(
+            'IMPORT "@std/math/math.bas"\n'
+            'IMPORT "@std/text/text.bas"\n'
+            'IMPORT "@std/json/json.bas"\n'
+            "ACTION main()\n"
+            "    sum = math.add(20, 22)\n"
+            "    magnitude = math.abs(-7)\n"
+            '    print($\"{sum},{magnitude},'
+            '{math.min(sum, magnitude)},{math.max(sum, magnitude)},'
+            '{math.clamp(100, 0, 10)},{math.clamp(5, 10, 0)}\")\n'
+            '    scalar_length = text.length("é東京")\n'
+            '    print($"{scalar_length}")\n'
+            "    print(text.slice(\"aé東京z\", 1, 2))\n"
+            '    SELECT json.parse("[1,2]")\n'
+            '    CASE Ok(document)\n'
+            '        SELECT json.array_length(document)\n'
+            '        CASE Ok(count)\n'
+            '            print($"json={count}")\n'
+            '        CASE Error(problem)\n'
+            '            print("json failed")\n'
+            '        END SELECT\n'
+            '    CASE Error(problem)\n'
+            '        print("json parse failed")\n'
+            '    END SELECT\n'
+            "END ACTION\n",
+            encoding="utf-8", newline="\n")
+        stdlib_check = subprocess.run(
+            [str(compiler), "check", "--root", str(stdlib_source_root), "main.bas"],
+            cwd=temporary_root, capture_output=True, text=True, check=False,
+            env=compiler_environment)
+        if stdlib_check.returncode != 0:
+            raise AssertionError(
+                f"relocated SDK @std check failed: {stdlib_check.stdout!r} "
+                f"{stdlib_check.stderr!r}")
+        stdlib_output = temporary_root / (
+            "relocated-stdlib.exe" if sys.platform == "win32" else "relocated-stdlib")
+        stdlib_build = subprocess.run(
+            [str(compiler), "build", "--root", str(stdlib_source_root), "main.bas",
+             "-o", str(stdlib_output)],
+            cwd=temporary_root, capture_output=True, text=True, check=False,
+            env=compiler_environment)
+        if stdlib_build.returncode != 0 or not stdlib_output.is_file():
+            raise AssertionError(
+                f"relocated SDK @std build failed: {stdlib_build.stdout!r} "
+                f"{stdlib_build.stderr!r}")
+        stdlib_run = subprocess.run(
+            [str(stdlib_output)], cwd=temporary_root,
+            capture_output=True, text=True, encoding="utf-8", check=False)
+        if stdlib_run.returncode != 0 or stdlib_run.stdout != "42,7,7,42,10,5\n3\né東\njson=2\n":
+            raise AssertionError(
+                f"relocated SDK @std output mismatch: {stdlib_run.stdout!r} "
+                f"{stdlib_run.stderr!r}")
+        missing_stdlib = subprocess.run(
+            [str(compiler), "check", "--root", str(stdlib_source_root), "main.bas",
+             "--resource-dir", str(empty_resources)],
+            cwd=temporary_root, capture_output=True, text=True, check=False,
+            env=compiler_environment)
+        if (missing_stdlib.returncode == 0
+                or "SDK standard-library module" not in missing_stdlib.stderr
+                or "@std/math/math.bas" not in missing_stdlib.stderr):
+            raise AssertionError(
+                "missing @std resource did not produce a precise SDK diagnostic: "
+                f"{missing_stdlib.stdout!r} {missing_stdlib.stderr!r}")
+
         actor_output = temporary_root / (
             "relocated-actor.exe" if sys.platform == "win32" else "relocated-actor")
         actor_root = repository / "examples" / "actor"
@@ -259,6 +327,26 @@ def main() -> int:
         manifest_text = manifest.read_text(encoding="utf-8")
         if str(repository) in manifest_text or str(build_root) in manifest_text:
             raise AssertionError("SDK manifest contains a development-machine path")
+        target_manifest = json.loads(manifest_text)
+        stdlib_manifest_path = moved_sdk / target_manifest["stdlib"]["manifest"]
+        stdlib_manifest = json.loads(stdlib_manifest_path.read_text(encoding="utf-8"))
+        aggregate = hashlib.sha256()
+        for entry in stdlib_manifest["files"]:
+            relative = pathlib.PurePosixPath(entry["path"])
+            if relative.is_absolute() or ".." in relative.parts:
+                raise AssertionError("SDK standard-library manifest escapes its root")
+            source_file = moved_sdk / "share" / "ombasic" / "stdlib" / pathlib.Path(*relative.parts)
+            file_hash = hashlib.sha256(source_file.read_bytes()).hexdigest()
+            if file_hash != entry["sha256"]:
+                raise AssertionError(f"SDK standard-library hash mismatch: {entry['path']}")
+            aggregate.update(entry["path"].encode("utf-8"))
+            aggregate.update(b"\0")
+            aggregate.update(file_hash.encode("ascii"))
+            aggregate.update(b"\n")
+        if (aggregate.hexdigest() != stdlib_manifest["content_sha256"]
+                or aggregate.hexdigest() != target_manifest["stdlib"]["content_sha256"]
+                or stdlib_manifest["ombasic_version"] != target_manifest["stdlib"]["version"]):
+            raise AssertionError("SDK standard-library manifest identity is inconsistent")
 
         stdlib = moved_sdk / "share" / "ombasic" / "stdlib" / "math"
         facade = stdlib / "math.bas"

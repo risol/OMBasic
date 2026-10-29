@@ -908,6 +908,53 @@ bool om_test_name_resolution_builtin_identities(void)
     }
     SEMANTIC_ASSERT(found_actor_down_reason && found_ok && found_error
                     && found_actor_down);
+    bool registered[OM_BUILTIN_SYSTEM_MESSAGE_TIMER_AFTER + 1] = {false};
+    SEMANTIC_ASSERT(om_builtin_descriptor_count()
+                    == (size_t)OM_BUILTIN_SYSTEM_MESSAGE_TIMER_AFTER);
+    for (size_t index = 0; index < om_builtin_descriptor_count(); ++index) {
+        const Om_Builtin_Descriptor *descriptor =
+            om_builtin_descriptor_at(index);
+        SEMANTIC_ASSERT(descriptor != NULL
+            && descriptor->id > OM_BUILTIN_NONE
+            && descriptor->id <= OM_BUILTIN_SYSTEM_MESSAGE_TIMER_AFTER
+            && !registered[descriptor->id]
+            && om_string_view_is_valid(descriptor->spelling)
+            && descriptor->spelling.length != 0
+            && descriptor->type_rule.length != 0
+            && descriptor->lowering_or_protocol.length != 0
+            && descriptor->standard_rule.length != 0
+            && descriptor->category <= OM_BUILTIN_CATEGORY_RUNTIME_PRIMITIVE);
+        registered[descriptor->id] = true;
+        for (size_t prior = 0; prior < index; ++prior) {
+            const Om_Builtin_Descriptor *other =
+                om_builtin_descriptor_at(prior);
+            SEMANTIC_ASSERT(other != NULL
+                && !om_string_view_equal(descriptor->spelling,
+                                         other->spelling));
+        }
+    }
+    SEMANTIC_ASSERT(om_builtin_descriptor_at(
+        om_builtin_descriptor_count()) == NULL);
+    bool registered_members[OM_BUILTIN_MEMBER_ACTOR_DOWN_REASON_NODE_UNREACHABLE + 1]
+        = {false};
+    SEMANTIC_ASSERT(om_builtin_member_descriptor_count()
+                    == (size_t)OM_BUILTIN_MEMBER_ACTOR_DOWN_REASON_NODE_UNREACHABLE);
+    for (size_t index = 0;
+         index < om_builtin_member_descriptor_count(); ++index) {
+        const Om_Builtin_Member_Descriptor *descriptor =
+            om_builtin_member_descriptor_at(index);
+        SEMANTIC_ASSERT(descriptor != NULL
+            && descriptor->id > OM_BUILTIN_MEMBER_NONE
+            && descriptor->id <= OM_BUILTIN_MEMBER_ACTOR_DOWN_REASON_NODE_UNREACHABLE
+            && !registered_members[descriptor->id]
+            && descriptor->owner == OM_BUILTIN_ACTOR_DOWN_REASON
+            && descriptor->spelling.length != 0
+            && descriptor->standard_rule.length != 0
+            && descriptor->semantic_value.length != 0);
+        registered_members[descriptor->id] = true;
+    }
+    SEMANTIC_ASSERT(om_builtin_member_descriptor_at(
+        om_builtin_member_descriptor_count()) == NULL);
     const struct {
         const char *name;
         Om_Builtin_Member_Id id;

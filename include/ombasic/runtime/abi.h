@@ -6,6 +6,7 @@
 #include "ombasic/runtime/abi/program_descriptor.h"
 #include "ombasic/runtime/abi/gc.h"
 #include "ombasic/runtime/abi/data.h"
+#include "ombasic/runtime/abi/json.h"
 #include "ombasic/runtime/abi/actor.h"
 #include "ombasic/runtime/abi/native.h"
 #include "ombasic/runtime/abi/distribution.h"

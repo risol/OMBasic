@@ -6,5 +6,5 @@ END ACTOR
 
 ACTION main()
     writer_ref = SPAWN Writer
-    SEND Console, Console_Write("system-io", writer_ref)
+    SEND Console, Console_Write("console-actor", writer_ref)
 END ACTION

@@ -78,3 +78,26 @@ bool om_test_module_graph_cycle(void)
     om_module_graph_destroy(&graph);
     return true;
 }
+
+bool om_test_module_graph_root_aware_identity(void)
+{
+    Om_Module_Graph graph = {0};
+    Om_Module_Id project_math = OM_MODULE_ID_INVALID;
+    Om_Module_Id stdlib_math = OM_MODULE_ID_INVALID;
+    Om_Module_Id duplicate = OM_MODULE_ID_INVALID;
+    OM_TEST_ASSERT(om_module_graph_init(&graph) == OM_STATUS_OK);
+    OM_TEST_ASSERT(om_module_graph_add(&graph,
+        (Om_String_View){"math/math.bas", sizeof("math/math.bas") - 1},
+        &project_math) == OM_STATUS_OK);
+    OM_TEST_ASSERT(om_module_graph_add(&graph,
+        (Om_String_View){"@std/math/math.bas", sizeof("@std/math/math.bas") - 1},
+        &stdlib_math) == OM_STATUS_OK);
+    OM_TEST_ASSERT(om_module_graph_add(&graph,
+        (Om_String_View){"math/math.bas", sizeof("math/math.bas") - 1},
+        &duplicate) == OM_STATUS_OK);
+    OM_TEST_ASSERT(project_math.value != stdlib_math.value);
+    OM_TEST_ASSERT(project_math.value == duplicate.value);
+    OM_TEST_ASSERT(graph.modules.length == 2);
+    om_module_graph_destroy(&graph);
+    return true;
+}

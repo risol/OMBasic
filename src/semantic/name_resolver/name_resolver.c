@@ -12,6 +12,7 @@
 typedef struct Om_Resolver {
     const Om_Module_Project *project;
     const Om_Parser_Result *parsed_modules;
+    const Om_Resolver_Config *config;
     size_t module_count;
     Om_Vector symbols;
     Om_Vector scopes;
@@ -409,56 +410,52 @@ static Om_Status declare_symbol(Om_Resolver *resolver,
     return status;
 }
 
+static const Om_Builtin_Descriptor builtin_descriptors[] = {
+#define OM_BUILTIN(id, spelling, category, type_rule, lowering, rule) \
+    {id, {spelling, sizeof(spelling) - 1}, category, \
+     {type_rule, sizeof(type_rule) - 1}, \
+     {lowering, sizeof(lowering) - 1}, {rule, sizeof(rule) - 1}},
+#include "ombasic/semantic/builtin_registry.def"
+#undef OM_BUILTIN
+};
+
+static const Om_Builtin_Member_Descriptor builtin_member_descriptors[] = {
+#define OM_BUILTIN_MEMBER(id, owner, spelling, rule, semantic_value) \
+    {id, owner, {spelling, sizeof(spelling) - 1}, \
+     {rule, sizeof(rule) - 1}, \
+     {semantic_value, sizeof(semantic_value) - 1}},
+#include "ombasic/semantic/builtin_member_registry.def"
+#undef OM_BUILTIN_MEMBER
+};
+
+size_t om_builtin_descriptor_count(void)
+{
+    return sizeof(builtin_descriptors) / sizeof(builtin_descriptors[0]);
+}
+
+const Om_Builtin_Descriptor *om_builtin_descriptor_at(size_t index)
+{
+    return index < om_builtin_descriptor_count()
+        ? &builtin_descriptors[index] : NULL;
+}
+
+size_t om_builtin_member_descriptor_count(void)
+{
+    return sizeof(builtin_member_descriptors)
+        / sizeof(builtin_member_descriptors[0]);
+}
+
+const Om_Builtin_Member_Descriptor *om_builtin_member_descriptor_at(size_t index)
+{
+    return index < om_builtin_member_descriptor_count()
+        ? &builtin_member_descriptors[index] : NULL;
+}
+
 static Om_Builtin_Id builtin_id_for_name(Om_String_View name)
 {
-    static const struct {
-        Om_String_View spelling;
-        Om_Builtin_Id id;
-    } builtins[] = {
-        {{"Unit", 4}, OM_BUILTIN_UNIT},
-        {{"Result", 6}, OM_BUILTIN_RESULT},
-        {{"Node_Ref", 8}, OM_BUILTIN_NODE_REF},
-        {{"Actor_Id", 8}, OM_BUILTIN_ACTOR_ID},
-        {{"Actor_Down_Reason", 17}, OM_BUILTIN_ACTOR_DOWN_REASON},
-        {{"Ok", 2}, OM_BUILTIN_OK},
-        {{"Error", 5}, OM_BUILTIN_ERROR},
-        {{"Actor_Down", 10}, OM_BUILTIN_ACTOR_DOWN},
-        {{"print", 5}, OM_BUILTIN_PRINT},
-        {{OM_SYSTEM_ACTOR_NAME_CONSOLE,
-          sizeof(OM_SYSTEM_ACTOR_NAME_CONSOLE) - 1},
-         OM_BUILTIN_SYSTEM_ACTOR_CONSOLE},
-        {{OM_SYSTEM_ACTOR_NAME_TIMER,
-          sizeof(OM_SYSTEM_ACTOR_NAME_TIMER) - 1},
-         OM_BUILTIN_SYSTEM_ACTOR_TIMER},
-        {{OM_SYSTEM_ACTOR_NAME_FILE_SYSTEM,
-          sizeof(OM_SYSTEM_ACTOR_NAME_FILE_SYSTEM) - 1},
-         OM_BUILTIN_SYSTEM_ACTOR_FILE_SYSTEM},
-        {{OM_SYSTEM_MESSAGE_NAME_CONSOLE_WRITE,
-          sizeof(OM_SYSTEM_MESSAGE_NAME_CONSOLE_WRITE) - 1},
-         OM_BUILTIN_SYSTEM_MESSAGE_CONSOLE_WRITE},
-        {{OM_SYSTEM_MESSAGE_NAME_CONSOLE_WRITE_COMPLETED,
-          sizeof(OM_SYSTEM_MESSAGE_NAME_CONSOLE_WRITE_COMPLETED) - 1},
-         OM_BUILTIN_SYSTEM_MESSAGE_CONSOLE_WRITE_COMPLETED},
-        {{OM_SYSTEM_MESSAGE_NAME_FILE_READ,
-          sizeof(OM_SYSTEM_MESSAGE_NAME_FILE_READ) - 1},
-         OM_BUILTIN_SYSTEM_MESSAGE_FILE_READ},
-        {{OM_SYSTEM_MESSAGE_NAME_FILE_READ_COMPLETED,
-          sizeof(OM_SYSTEM_MESSAGE_NAME_FILE_READ_COMPLETED) - 1},
-         OM_BUILTIN_SYSTEM_MESSAGE_FILE_READ_COMPLETED},
-        {{OM_SYSTEM_MESSAGE_NAME_FILE_WRITE,
-          sizeof(OM_SYSTEM_MESSAGE_NAME_FILE_WRITE) - 1},
-         OM_BUILTIN_SYSTEM_MESSAGE_FILE_WRITE},
-        {{OM_SYSTEM_MESSAGE_NAME_FILE_WRITE_COMPLETED,
-          sizeof(OM_SYSTEM_MESSAGE_NAME_FILE_WRITE_COMPLETED) - 1},
-         OM_BUILTIN_SYSTEM_MESSAGE_FILE_WRITE_COMPLETED},
-        {{OM_SYSTEM_MESSAGE_NAME_TIMER_AFTER,
-          sizeof(OM_SYSTEM_MESSAGE_NAME_TIMER_AFTER) - 1},
-         OM_BUILTIN_SYSTEM_MESSAGE_TIMER_AFTER},
-    };
-    for (size_t index = 0; index < sizeof(builtins) / sizeof(builtins[0]);
-         ++index) {
-        if (om_string_view_equal(name, builtins[index].spelling)) {
-            return builtins[index].id;
+    for (size_t index = 0; index < om_builtin_descriptor_count(); ++index) {
+        if (om_string_view_equal(name, builtin_descriptors[index].spelling)) {
+            return builtin_descriptors[index].id;
         }
     }
     return OM_BUILTIN_NONE;
@@ -800,10 +797,78 @@ static Om_Status predeclare_module(Om_Resolver *resolver, Om_Module_Id module)
         && import_index != om_module_project_import_count(resolver->project, module)) {
         return OM_STATUS_INVALID_ARGUMENT;
     }
+    for (size_t native_index = 0; status == OM_STATUS_OK
+                                  && resolver->config != NULL
+                                  && native_index < resolver->config->module_native_import_count;
+         ++native_index) {
+        const Om_Module_Native_Import *native_import =
+            &resolver->config->module_native_imports[native_index];
+        if (native_import->module_id.value != module.value
+            || native_import->native_module == NULL) {
+            continue;
+        }
+        const Om_Omi_Module *native_module = native_import->native_module;
+        const Om_Scope_Id scope = resolver->module_scopes[module.value];
+        for (size_t record_index = 0; status == OM_STATUS_OK
+                                      && record_index < native_module->record_count;
+             ++record_index) {
+            const Om_Omi_Native_Record *record = &native_module->records[record_index];
+            if (record->name.data == NULL
+                || om_name_classify(record->name) == OM_NAME_CLASS_INVALID) {
+                continue;
+            }
+            const bool has_existing =
+                find_in_scope(resolver, scope, record->name, false).value
+                    != UINT32_MAX
+                || find_in_scope(resolver, scope, record->name, true).value
+                    != UINT32_MAX;
+            Om_Symbol_Id symbol_id = OM_SYMBOL_ID_INVALID;
+            status = declare_symbol(resolver, module, scope, record->name,
+                OM_SYMBOL_RECORD, native_import->import_span,
+                OM_AST_NODE_ID_INVALID, false, false, OM_MODULE_ID_INVALID,
+                &symbol_id);
+            if (status == OM_STATUS_OK && !has_existing
+                && symbol_id.value < resolver->symbols.length) {
+                Om_Symbol *symbol = om_vector_at(&resolver->symbols, symbol_id.value);
+                symbol->native_module = native_module;
+                symbol->native_record_index = record_index;
+            }
+        }
+        for (size_t function_index = 0; status == OM_STATUS_OK
+                                        && function_index < native_module->function_count;
+             ++function_index) {
+            if (!native_function_source_callable(native_module, function_index)) {
+                continue;
+            }
+            const Om_Omi_Native_Function *function =
+                &native_module->functions[function_index];
+            if (function->name.data == NULL
+                || om_name_classify(function->name) == OM_NAME_CLASS_INVALID) {
+                continue;
+            }
+            const bool has_existing =
+                find_in_scope(resolver, scope, function->name, false).value
+                    != UINT32_MAX
+                || find_in_scope(resolver, scope, function->name, true).value
+                    != UINT32_MAX;
+            Om_Symbol_Id symbol_id = OM_SYMBOL_ID_INVALID;
+            status = declare_symbol(resolver, module, scope, function->name,
+                OM_SYMBOL_BUILTIN, native_import->import_span,
+                OM_AST_NODE_ID_INVALID, false, false, OM_MODULE_ID_INVALID,
+                &symbol_id);
+            if (status == OM_STATUS_OK && !has_existing
+                && symbol_id.value < resolver->symbols.length) {
+                Om_Symbol *symbol = om_vector_at(&resolver->symbols, symbol_id.value);
+                symbol->native_module = native_module;
+                symbol->native_function_index = function_index;
+            }
+        }
+    }
     for (size_t index = 0; status == OM_STATUS_OK && index < program->child_count; ++index) {
         const Om_Ast_Node_Id child_id = ast_child(resolver, module, program, index);
         const Om_Ast_Node *child = om_ast_get_node(ast, child_id);
-        if (child == NULL || child->kind == OM_AST_IMPORT) {
+        if (child == NULL || child->kind == OM_AST_IMPORT
+            || child->kind == OM_AST_NATIVE_IMPORT) {
             continue;
         }
         const Om_Symbol_Kind kind = symbol_kind_for_declaration(child->kind);
@@ -880,16 +945,16 @@ static Om_Status resolve_module_member(Om_Resolver *resolver,
     }
     if (receiver->kind == OM_SYMBOL_BUILTIN
         && receiver->builtin_id == OM_BUILTIN_ACTOR_DOWN_REASON) {
-        static const Om_String_View members[] = {
-            {"normal", 6}, {"failed", 6}, {"node_unreachable", 16}
-        };
-        for (size_t index = 0; index < sizeof(members) / sizeof(members[0]);
-             ++index) {
-            if (om_string_view_equal(member->name, members[index])) {
+        for (size_t index = 0;
+             index < om_builtin_member_descriptor_count(); ++index) {
+            const Om_Builtin_Member_Descriptor *builtin_member =
+                &builtin_member_descriptors[index];
+            if (builtin_member->owner == receiver->builtin_id
+                && om_string_view_equal(member->name,
+                                        builtin_member->spelling)) {
                 return set_node_builtin_member(
                     resolver, module, member_id, receiver_symbol,
-                    (Om_Builtin_Member_Id)(OM_BUILTIN_MEMBER_ACTOR_DOWN_REASON_NORMAL
-                                           + index));
+                    builtin_member->id);
             }
         }
         return report_undefined(resolver, module, member_name_span(member));
@@ -997,6 +1062,7 @@ static Om_Status resolve_expression(Om_Resolver *resolver,
         return status;
     case OM_AST_PROGRAM:
     case OM_AST_IMPORT:
+    case OM_AST_NATIVE_IMPORT:
     case OM_AST_RECORD_DECLARATION:
     case OM_AST_MESSAGE_DECLARATION:
     case OM_AST_FUNCTION_DECLARATION:
@@ -1574,7 +1640,8 @@ static Om_Status resolve_module(Om_Resolver *resolver, Om_Module_Id module)
     for (size_t index = 0; index < program->child_count; ++index) {
         const Om_Ast_Node_Id declaration_id = ast_child(resolver, module, program, index);
         const Om_Ast_Node *declaration = om_ast_get_node(ast, declaration_id);
-        if (declaration == NULL || declaration->kind == OM_AST_IMPORT) {
+        if (declaration == NULL || declaration->kind == OM_AST_IMPORT
+            || declaration->kind == OM_AST_NATIVE_IMPORT) {
             continue;
         }
         const Om_Status status = resolve_declaration(
@@ -1618,11 +1685,14 @@ Om_Status om_name_resolve_project(
         || result->owned_node_scopes != NULL || result->owned_diagnostics != NULL
         || result->exports != NULL || result->owned_exports != NULL
         || (config != NULL && config->prelude_name_count != 0
-            && config->prelude_names == NULL)) {
+            && config->prelude_names == NULL)
+        || (config != NULL && config->module_native_import_count != 0
+            && config->module_native_imports == NULL)) {
         return OM_STATUS_INVALID_ARGUMENT;
     }
     resolver.project = project;
     resolver.parsed_modules = parsed_modules;
+    resolver.config = config;
     resolver.module_count = om_module_project_module_count(project);
     if (resolver.module_count == 0 || parsed_module_count != resolver.module_count
         || resolver.module_count > UINT32_MAX) {

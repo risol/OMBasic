@@ -1597,6 +1597,17 @@ static Om_Status lower_binary(Om_Mir_Lowering_Context *context,
     Om_Mir_Opcode opcode = OM_MIR_COMPARE;
     switch (node->operator_kind) {
     case OM_HIR_OPERATOR_ADD:
+        if (result_kind == OM_TYPE_STRING) {
+            return emit_string_operation(context, node,
+                OM_MIR_RUNTIME_STRING_CONCAT, result_type, operands, 2,
+                out_value);
+        }
+        if (result_kind == OM_TYPE_LIST) {
+            return emit_instruction(context, node, OM_MIR_LIST_CONCAT,
+                result_type, node->operator_kind,
+                OM_FUNCTION_INSTANCE_ID_INVALID, operands, 2, 0, 0.0,
+                out_value);
+        }
         opcode = result_kind == OM_TYPE_INT ? OM_MIR_INT_ADD_CHECKED
             : result_kind == OM_TYPE_FLOAT ? OM_MIR_FLOAT_ADD : 0;
         break;

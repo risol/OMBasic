@@ -27,6 +27,11 @@ Om_Status om_toolchain_runtime_resources_resolve(
 /* Resolve a non-runtime SDK file (for example share/ombasic/tools/...). */
 Om_Status om_toolchain_resource_path(const char *relative_path,
                                      char **path_out);
+/* Resolve an SDK directory such as share/ombasic/stdlib without pinning an
+   absolute path into the logical module identity. */
+Om_Status om_toolchain_resource_directory(const char *relative_path,
+                                         const char *resource_dir_override,
+                                         char **path_out);
 
 void om_toolchain_resources_destroy(Om_Toolchain_Resources *resources);
 

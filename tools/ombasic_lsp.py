@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import pathlib
 import re
 import subprocess
@@ -59,12 +60,42 @@ def byte_column_to_utf16(text: str, line_number: int, byte_column: int) -> int:
         return 0
 
 
+def sdk_resource_root(compiler: pathlib.Path) -> pathlib.Path | None:
+    configured = os.environ.get("OMBASIC_RESOURCE_DIR")
+    candidates = []
+    if configured:
+        candidates.append(pathlib.Path(configured))
+    executable_directory = compiler.resolve().parent
+    candidates.extend((executable_directory.parent, executable_directory))
+    for candidate in candidates:
+        if (candidate / "share" / "ombasic" / "stdlib").is_dir():
+            return candidate.resolve()
+    return None
+
+
+def interface_source_path(root: pathlib.Path, resource_root: pathlib.Path | None,
+                          logical_path: str) -> pathlib.Path:
+    if logical_path.startswith("@std/"):
+        if resource_root is None:
+            raise ValueError("SDK standard-library source root is unavailable")
+        base = (resource_root / "share" / "ombasic" / "stdlib").resolve()
+        source = (base / logical_path[len("@std/"):]).resolve()
+        source.relative_to(base)
+        return source
+    source = (root / logical_path).resolve()
+    source.relative_to(root.resolve())
+    return source
+
+
 def compiler_analysis(compiler: pathlib.Path, root: pathlib.Path,
                       path: pathlib.Path, text: str) -> dict:
     relative = path.resolve().relative_to(root.resolve()).as_posix()
     command = [str(compiler), "check", "--root", str(root.resolve()), relative,
                "--source-stdin", "--diagnostics=json", "--include-inferred",
                "--include-interfaces"]
+    resource_root = sdk_resource_root(compiler)
+    if resource_root is not None:
+        command.extend(("--resource-dir", str(resource_root)))
     completed = subprocess.run(command, input=text.encode("utf-8"),
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                cwd=root, check=False)
@@ -133,6 +164,7 @@ class Server:
     def __init__(self, compiler: pathlib.Path, root: pathlib.Path):
         self.compiler = compiler.resolve()
         self.root = root.resolve()
+        self.resource_root = sdk_resource_root(self.compiler)
         self.documents: dict[str, dict] = {}
         self.shutdown_requested = False
 
@@ -338,8 +370,8 @@ class Server:
                         source_range = definition.get("range") if definition else None
                         if not definition or not source_range:
                             continue
-                        definition_path = (self.root / definition["path"]).resolve()
-                        definition_path.relative_to(self.root)
+                        definition_path = interface_source_path(
+                            self.root, self.resource_root, definition["path"])
                         definition_text = definition_path.read_text(encoding="utf-8")
                         start = source_range["start"]
                         end = source_range["end"]

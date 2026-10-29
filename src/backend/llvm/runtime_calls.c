@@ -244,6 +244,14 @@ Om_Status initialize_types(Om_Llvm_Backend_Context *backend)
         string_concat_parameters, 4, 0);
     backend->runtime_string_concat = LLVMAddFunction(backend->module,
         "om_runtime_string_concat", string_concat_type);
+    LLVMTypeRef string_compare_parameters[4] = {
+        backend->byte_pointer_type, backend->byte_pointer_type,
+        backend->byte_pointer_type, LLVMPointerType(backend->i32_type, 0),
+    };
+    LLVMTypeRef string_compare_type = LLVMFunctionType(backend->i32_type,
+        string_compare_parameters, 4, 0);
+    backend->runtime_string_compare = LLVMAddFunction(backend->module,
+        "om_runtime_string_compare", string_compare_type);
     LLVMTypeRef print_parameters[2] = {
         backend->byte_pointer_type, backend->byte_pointer_type,
     };
@@ -265,6 +273,15 @@ Om_Status initialize_types(Om_Llvm_Backend_Context *backend)
         "om_runtime_record_create", object_create_type);
     backend->runtime_list_create = LLVMAddFunction(backend->module,
         "om_runtime_list_create", object_create_type);
+    LLVMTypeRef list_concat_parameters[4] = {
+        backend->byte_pointer_type, backend->byte_pointer_type,
+        backend->byte_pointer_type,
+        LLVMPointerType(backend->byte_pointer_type, 0),
+    };
+    LLVMTypeRef list_concat_type = LLVMFunctionType(backend->i32_type,
+        list_concat_parameters, 4, 0);
+    backend->runtime_list_concat = LLVMAddFunction(backend->module,
+        "om_runtime_list_concat", list_concat_type);
     backend->runtime_map_create = LLVMAddFunction(backend->module,
         "om_runtime_map_create", object_create_type);
     LLVMTypeRef record_set_parameters[4] = {
@@ -480,11 +497,13 @@ Om_Status initialize_types(Om_Llvm_Backend_Context *backend)
         || backend->runtime_string_from_owned_cstring == NULL
         || backend->runtime_string_format == NULL
         || backend->runtime_string_concat == NULL
+        || backend->runtime_string_compare == NULL
         || backend->runtime_print == NULL
         || backend->runtime_record_create == NULL
         || backend->runtime_record_set == NULL
         || backend->runtime_record_get == NULL
         || backend->runtime_list_create == NULL
+        || backend->runtime_list_concat == NULL
         || backend->runtime_list_append == NULL
         || backend->runtime_list_get == NULL
         || backend->runtime_list_length == NULL

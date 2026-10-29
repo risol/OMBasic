@@ -40,7 +40,8 @@ typedef enum Om_Type_Constraint {
     OM_TYPE_CONSTRAINT_PRINTABLE = 1u << 4,
     OM_TYPE_CONSTRAINT_HASH_KEY = 1u << 5,
     OM_TYPE_CONSTRAINT_ACTOR_REF = 1u << 6,
-    OM_TYPE_CONSTRAINT_MESSAGE = 1u << 7
+    OM_TYPE_CONSTRAINT_MESSAGE = 1u << 7,
+    OM_TYPE_CONSTRAINT_ADDITIVE = 1u << 8
 } Om_Type_Constraint;
 
 #define OM_TYPE_PRIMITIVE_COUNT 10u

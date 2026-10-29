@@ -728,7 +728,15 @@ Om_Status om_source_root_load_file(
         || source->owned_storage != NULL || source_id.value == UINT32_MAX) {
         return OM_STATUS_INVALID_ARGUMENT;
     }
-    status = om_source_path_validate(path, required_extension);
+    Om_String_View filesystem_path = path;
+    if (required_extension.length == 4 && required_extension.data != NULL
+        && memcmp(required_extension.data, ".bas", 4) == 0
+        && path.length > 5 && path.data != NULL
+        && memcmp(path.data, "@std/", 5) == 0) {
+        filesystem_path.data += 5;
+        filesystem_path.length -= 5;
+    }
+    status = om_source_path_validate(filesystem_path, required_extension);
     if (status != OM_STATUS_OK) {
         return status;
     }
@@ -744,7 +752,7 @@ Om_Status om_source_root_load_file(
     size_t actual_length = 0;
     HANDLE file = INVALID_HANDLE_VALUE;
     FILE_ATTRIBUTE_TAG_INFO attributes = {0};
-    status = windows_expected_path(storage, path, &expected_path, &expected_length);
+    status = windows_expected_path(storage, filesystem_path, &expected_path, &expected_length);
     if (status != OM_STATUS_OK) {
         goto windows_load_cleanup;
     }
@@ -827,7 +835,7 @@ windows_load_cleanup:
     om_free(actual_path);
 #else
     int file = -1;
-    status = open_relative_posix(storage, path, &file);
+    status = open_relative_posix(storage, filesystem_path, &file);
     if (status != OM_STATUS_OK) {
         goto posix_load_cleanup;
     }

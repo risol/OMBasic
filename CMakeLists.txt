@@ -326,10 +326,12 @@ add_library(ombasic_runtime STATIC
     src/runtime/core/object.c
     src/runtime/core/value.c
     src/runtime/data/list.c
+    src/runtime/data/json_native.c
     src/runtime/data/map.c
     src/runtime/data/native_pointer.c
     src/runtime/data/record.c
     src/runtime/data/string.c
+    src/runtime/data/text_native.c
     src/runtime/fault/fault.c
     src/runtime/gc/heap.c
     src/runtime/gc/roots.c
@@ -603,7 +605,7 @@ if(MSVC OR CMAKE_C_SIMULATE_ID STREQUAL "MSVC")
     set(OM_WINDOWS_UM_LIBRARY_DIRECTORY
         "${OM_WINDOWS_KITS_LIBRARY_DIRECTORY}/um/${OM_WINDOWS_TARGET_ARCH}")
 else()
-    set(OM_NATIVE_LINK_DRIVER "clang")
+    set(OM_NATIVE_LINK_DRIVER "${CMAKE_C_COMPILER}")
     set(OM_NATIVE_LINK_DRIVER_STYLE_MSVC 0)
     set(OM_MSVC_LIBRARY_DIRECTORY "")
     set(OM_WINDOWS_UCRT_LIBRARY_DIRECTORY "")
@@ -633,9 +635,32 @@ set(OM_BUILD_RESOURCE_ROOT "${CMAKE_CURRENT_BINARY_DIR}")
 set(OM_BUILD_RUNTIME_DIRECTORY
     "${OM_BUILD_RESOURCE_ROOT}/lib/ombasic/${OM_LLVM_TARGET_TRIPLE}")
 set(OM_BUILD_TOOL_DIRECTORY "${OM_BUILD_RESOURCE_ROOT}/share/ombasic/tools")
+set(OM_BUILD_STDLIB_DIRECTORY "${OM_BUILD_RESOURCE_ROOT}/share/ombasic/stdlib")
+set(OM_STDLIB_MANIFEST
+    "${CMAKE_CURRENT_BINARY_DIR}/share/ombasic/stdlib-manifest.json")
+file(GLOB_RECURSE OM_STDLIB_SOURCE_FILES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/stdlib/*.bas")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    ${OM_STDLIB_SOURCE_FILES}
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/release/write_stdlib_manifest.py")
+execute_process(
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/release/write_stdlib_manifest.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}/stdlib" "${PROJECT_VERSION}"
+            "${OM_STDLIB_MANIFEST}"
+    RESULT_VARIABLE OM_STDLIB_MANIFEST_RESULT
+)
+if(NOT OM_STDLIB_MANIFEST_RESULT EQUAL 0)
+    message(FATAL_ERROR "Failed to generate the SDK standard-library manifest")
+endif()
+file(READ "${OM_STDLIB_MANIFEST}" OM_STDLIB_MANIFEST_JSON)
+string(JSON OM_STDLIB_CONTENT_SHA256 GET "${OM_STDLIB_MANIFEST_JSON}"
+    content_sha256)
 add_custom_target(ombasic_build_resources
     COMMAND "${CMAKE_COMMAND}" -E make_directory "${OM_BUILD_RUNTIME_DIRECTORY}"
     COMMAND "${CMAKE_COMMAND}" -E make_directory "${OM_BUILD_TOOL_DIRECTORY}"
+    COMMAND "${CMAKE_COMMAND}" -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/stdlib" "${OM_BUILD_STDLIB_DIRECTORY}"
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different
             "$<TARGET_FILE:ombasic_runtime>" "${OM_BUILD_RUNTIME_DIRECTORY}"
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different
@@ -661,7 +686,7 @@ add_dependencies(ombasic ombasic_build_resources)
 
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/share/ombasic")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/share/ombasic/target-manifest.json"
-    "{\n  \"format_version\": 1,\n  \"ombasic_version\": \"${PROJECT_VERSION}\",\n  \"targets\": {\n    \"${OM_LLVM_TARGET_TRIPLE}\": {\n      \"runtime_dir\": \"lib/ombasic/${OM_LLVM_TARGET_TRIPLE}\"\n    }\n  }\n}\n")
+    "{\n  \"format_version\": 2,\n  \"ombasic_version\": \"${PROJECT_VERSION}\",\n  \"stdlib\": {\n    \"manifest\": \"share/ombasic/stdlib-manifest.json\",\n    \"version\": \"${PROJECT_VERSION}\",\n    \"content_sha256\": \"${OM_STDLIB_CONTENT_SHA256}\"\n  },\n  \"targets\": {\n    \"${OM_LLVM_TARGET_TRIPLE}\": {\n      \"runtime_dir\": \"lib/ombasic/${OM_LLVM_TARGET_TRIPLE}\"\n    }\n  }\n}\n")
 install(TARGETS ombasic RUNTIME DESTINATION bin)
 install(TARGETS ombasic_runtime ombasic_runtime_services
                 ombasic_runtime_distribution ombasic_distribution
@@ -675,6 +700,7 @@ install(FILES tools/ombasic_bind.py tools/ombasic_lsp.py
         DESTINATION share/ombasic/tools)
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/share/ombasic/target-manifest.json"
         DESTINATION share/ombasic)
+install(FILES "${OM_STDLIB_MANIFEST}" DESTINATION share/ombasic)
 install(DIRECTORY stdlib/ DESTINATION share/ombasic/stdlib)
 if(WIN32)
     install(FILES "${OM_LLVM_C_DLL}" DESTINATION bin)
@@ -888,6 +914,8 @@ if(BUILD_TESTING)
         tests/runtime/map_tests.c runtime_map)
     add_runtime_component_test(ombasic_runtime_native_pointer_tests
         tests/runtime/native_pointer_tests.c runtime_native_pointer)
+    add_runtime_component_test(ombasic_runtime_json_tests
+        tests/runtime/json_tests.c runtime_json)
 
     add_executable(ombasic_native_actor_tests tests/runtime/native_actor_tests.c)
     target_include_directories(ombasic_native_actor_tests PRIVATE
@@ -1079,4 +1107,11 @@ if(OM_BUILD_FUZZERS)
     target_link_libraries(ombasic_fuzz_native_descriptor_codec PRIVATE
         ombasic::runtime_distribution ombasic::runtime_services
         ombasic_warnings ombasic_sanitizers)
+
+    add_executable(ombasic_fuzz_json_parser tests/fuzz/json_parser_fuzzer.c)
+    target_compile_options(ombasic_fuzz_json_parser PRIVATE
+        -fsanitize=fuzzer-no-link)
+    target_link_options(ombasic_fuzz_json_parser PRIVATE -fsanitize=fuzzer)
+    target_link_libraries(ombasic_fuzz_json_parser PRIVATE
+        ombasic::runtime ombasic_warnings ombasic_sanitizers)
 endif()

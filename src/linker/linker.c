@@ -335,6 +335,8 @@ int om_linker_link_native(const Om_Linker_Request *request,
         arguments[count++] = "-B";
         arguments[count++] = (char *)OM_LLD_LINKER_DIRECTORY;
     }
+    arguments[count++] = "-L";
+    arguments[count++] = resources->target_runtime_root;
     arguments[count++] = (char *)object_path;
     arguments[count++] = resources->runtime_distribution_archive;
     arguments[count++] = resources->distribution_archive;

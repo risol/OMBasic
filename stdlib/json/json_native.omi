@@ -1,0 +1,84 @@
+NATIVE "ombasic_runtime"
+FUNCTION json_valid(source: CString BORROWED): CBool
+    SYMBOL "om_runtime_json_valid"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION json_kind(source: CString BORROWED): CInt64
+    SYMBOL "om_runtime_json_kind"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION json_error_code(source: CString BORROWED): CInt64
+    SYMBOL "om_runtime_json_error_code"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION json_error_offset(source: CString BORROWED): CInt64
+    SYMBOL "om_runtime_json_error_offset"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION json_error_message(source: CString BORROWED): CString
+    SYMBOL "om_runtime_json_error_message"
+    EFFECT PURE
+    NONBLOCKING
+    RETURNS OWNED WITH release_json
+END FUNCTION
+
+FUNCTION json_compact(source: CString BORROWED): CString
+    SYMBOL "om_runtime_json_compact"
+    EFFECT PURE
+    NONBLOCKING
+    RETURNS OWNED WITH release_json
+END FUNCTION
+
+FUNCTION json_quote(source: CString BORROWED): CString
+    SYMBOL "om_runtime_json_quote"
+    EFFECT PURE
+    NONBLOCKING
+    RETURNS OWNED WITH release_json
+END FUNCTION
+
+FUNCTION json_array_length(source: CString BORROWED): CInt64
+    SYMBOL "om_runtime_json_array_length"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION json_array_index_valid(source: CString BORROWED, index: CInt64): CBool
+    SYMBOL "om_runtime_json_array_index_valid"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION json_array_get(source: CString BORROWED, index: CInt64): CString
+    SYMBOL "om_runtime_json_array_get"
+    EFFECT PURE
+    NONBLOCKING
+    RETURNS OWNED WITH release_json
+END FUNCTION
+
+FUNCTION json_object_key_valid(source: CString BORROWED, key: CString BORROWED): CBool
+    SYMBOL "om_runtime_json_object_key_valid"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION json_object_get(source: CString BORROWED, key: CString BORROWED): CString
+    SYMBOL "om_runtime_json_object_get"
+    EFFECT PURE
+    NONBLOCKING
+    RETURNS OWNED WITH release_json
+END FUNCTION
+
+FUNCTION release_json(value: CPointer OWNED): CVoid
+    SYMBOL "om_runtime_json_release"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+END NATIVE

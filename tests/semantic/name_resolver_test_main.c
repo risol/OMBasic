@@ -15,6 +15,7 @@ bool om_test_type_store_nominal_identity(void);
 bool om_test_type_store_generalize_and_instantiate(void);
 bool om_test_type_store_scheme_constraints(void);
 bool om_test_type_store_actor_ref_protocol_variable(void);
+bool om_test_type_store_additive_constraint(void);
 bool om_test_type_inference_project(void);
 bool om_test_semantic_constraints(void);
 
@@ -45,6 +46,8 @@ int main(void)
          om_test_type_store_scheme_constraints},
         {"type_store_actor_ref_protocol_variable",
          om_test_type_store_actor_ref_protocol_variable},
+        {"type_store_additive_constraint",
+         om_test_type_store_additive_constraint},
         {"type_inference_project", om_test_type_inference_project},
         {"semantic_constraints", om_test_semantic_constraints},
     };

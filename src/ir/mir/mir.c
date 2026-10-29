@@ -1153,6 +1153,18 @@ static Om_Status verify_instruction(const Om_Mir_Project *project,
         }
         return status;
     }
+    case OM_MIR_LIST_CONCAT: {
+        MIR_EXPECT_OPERANDS(2);
+        MIR_EXPECT_RESULT(OM_TYPE_LIST);
+        Om_Type_Id result_type = OM_TYPE_ID_INVALID;
+        status = resolve_type(project->type_store, result->type_id,
+                              &result_type);
+        for (size_t index = 0; status == OM_STATUS_OK && index < 2; ++index) {
+            status = verify_value_type(project, diagnostics, function->id,
+                block->id, operands[index], result_type, instruction->span);
+        }
+        return status;
+    }
     case OM_MIR_LIST_LENGTH: {
         MIR_EXPECT_OPERANDS(1);
         MIR_EXPECT_RESULT(OM_TYPE_INT);
@@ -1927,9 +1939,11 @@ static Om_Status verify_instruction(const Om_Mir_Project *project,
             || instruction->opcode == OM_MIR_RUNTIME_ACTOR_WATCH
             || instruction->opcode == OM_MIR_RUNTIME_ACTOR_STOP
             || instruction->opcode == OM_MIR_RUNTIME_SYSTEM_ACTOR
-            || instruction->opcode == OM_MIR_NATIVE_CALL
             || instruction->opcode == OM_MIR_NATIVE_CALLBACK_ADDRESS
-            || instruction->opcode == OM_MIR_CSTRING_CONVERT)) {
+            || (instruction->opcode == OM_MIR_NATIVE_CALL
+                && (instruction->effects != OM_EFFECT_NONE
+                    || (instruction->flags
+                        & OM_MIR_INSTRUCTION_FLAG_NATIVE_BLOCKING) != 0)))) {
         return add_diagnostic(diagnostics, OM_MIR_DIAGNOSTIC_E1104,
                               function->id, block->id, result->id,
                               instruction->span);
@@ -3336,7 +3350,7 @@ const char *om_mir_opcode_name(Om_Mir_Opcode opcode)
         "bool-not", "compare", "call-direct", "function-ref",
         "call-indirect", "alloc-object",
         "load-field", "store-init-field", "copy-managed", "list-create",
-        "list-length", "list-get", "map-create", "map-length",
+        "list-concat", "list-length", "list-get", "map-create", "map-length",
         "map-key-at", "map-get", "result-make-ok",
         "result-make-error", "result-tag", "result-ok-payload",
         "result-error-payload", "runtime-string-create", "runtime-string-format",

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -120,9 +121,12 @@ def check_compilation(compiler: Path, project_root: Path, entry: str,
 def run_runtime(compiler: Path, project_root: Path, entry: str,
                 expectation: dict[str, Any], timeout: int) -> list[str]:
     try:
-        result = run_process(
-            [str(compiler), "run", "--root", str(project_root), entry],
-            project_root, timeout)
+        with tempfile.TemporaryDirectory(prefix="ombasic-conformance-runtime-") as directory:
+            runtime_root = Path(directory) / "project"
+            shutil.copytree(project_root, runtime_root)
+            result = run_process(
+                [str(compiler), "run", "--root", str(runtime_root), entry],
+                runtime_root, timeout)
     except (OSError, subprocess.TimeoutExpired) as error:
         return [f"runtime case failed to run: {error}"]
     expected = expectation["run"]

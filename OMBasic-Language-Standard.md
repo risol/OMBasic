@@ -786,11 +786,13 @@ identity<T>(T) -> T
 **OM-09.01 — 算术运算**
 
 
-```text
-+  -  *  /  %
-```
+`+`、`-`、`*`、`/`、`%` 是固定内建运算符，不支持用户重载。
 
-用户不得重载这些运算符。
+- Int 与 Float 使用同型算术；Int 运算遵循 checked overflow 规则。
+- `%` 仅接受 Int。
+- `+` 还接受两个 String，并按 UTF-8 字节序列拼接为新的托管 String。
+- `+` 也接受元素类型相同的两个 `List<T>`，并产生包含左侧全部元素后接右侧全部元素的新 List。
+- String 的 `+` 两侧必须同为 String；不进行隐式格式化或类型转换。
 
 ### 9.2 比较
 **OM-09.02 — 比较**
@@ -1566,7 +1568,9 @@ storage/cache.bas
 **OM-21.02 — 唯一源码根目录**
 
 
-每个编译目标必须具有一个明确的源码根目录（source root）。
+每个编译目标必须具有一个明确的 Project Source Root。使用 SDK 标准库时，还可
+显式引用 SDK 固定的 Standard Library Root；它只通过 `@std/` 路径选择，不是
+项目的搜索路径或第二个隐式源码根。
 
 规范示例使用：
 
@@ -1574,9 +1578,9 @@ storage/cache.bas
 src/
 ```
 
-源码根目录是唯一的 Module 身份空间和文件安全边界。Import literal 可以使用
-Source-Root-relative 或显式的 Current-Module-relative 形式；两者解析出的文件
-都必须位于该源码根目录内，并规范化为相对于该根目录的 canonical path。
+每个 Root 都是独立的文件安全边界。Module 身份由 Root 类型与该 Root 下的
+canonical 相对路径共同构成。普通 Import 和 `./` Import 不能在两个 Root 间
+切换。
 
 普通路径不以 `./` 开头时相对于 Source Root 解析，无论当前文件位于何处：
 
@@ -1590,21 +1594,31 @@ IMPORT "storage/database.bas"
 <source-root>/storage/database.bas
 ```
 
-OMBasic 0.1 不定义多级 import 搜索路径。
+OMBasic 0.1 不定义多级 import 搜索路径。SDK 标准库必须显式写成 `@std/`：
+
+```basic
+IMPORT "@std/math/math.bas"
+```
+
+该形式只在 Import 字符串中有效，且不会自动导入符号。
+
+Native ABI metadata 使用独立的 `NATIVE IMPORT` 声明，规则见 OM-21.19；它不
+属于 `.bas` Module Import graph。
 
 显式的 `./` 路径相对于当前 `.bas` 文件所在目录解析。例如，位于
 `vendor/json/json.bas` 的 `IMPORT "./parser.bas"` 表示
 `vendor/json/parser.bas`。两种形式最终都进入同一 canonical Module identity；
-编译器不定义第二个 Source Root，也不搜索目录。
+Project Module 的 `./` 留在 Project Source Root；Standard Library Module 的
+`./` 留在 SDK Standard Library Root。路径不得跨根或逃逸。
 
 ### 21.3 Import 直接使用文件路径
 **OM-21.03 — Import 直接使用文件路径**
 
 
-`IMPORT` 后必须写一个带引号的 `.bas` 文件路径。合法路径形式有两种：普通形式
-相对于 Source Root 解析，例如 `IMPORT "vendor/json/json.bas"`；唯一前导 `./`
-形式相对于当前 Module 所在目录解析，例如 `IMPORT "./parser.bas"`。两种路径都
-必须位于同一 Source Root 内，并规范化为 Source-Root-relative canonical path。
+`IMPORT` 后必须写一个带引号的 `.bas` 文件路径。合法路径形式有三种：普通形式
+普通形式相对于 Project Source Root 解析；唯一前导 `./` 形式相对于当前 Module
+所在目录解析；`@std/` 形式相对于 SDK Standard Library Root 解析。三种路径都
+必须完整指定 `.bas` 文件并保留 Root 类型作为 Module identity 的一部分。
 `IMPORT` 只能出现在 Module 顶层，并且必须位于该文件其他声明或语句之前：
 
 ```basic
@@ -1631,8 +1645,8 @@ IMPORT storage.database
 
 Import literal 必须满足：
 
-1. 使用 Source-Root-relative 形式，或仅以一个 `./` 开头的
-   Current-Module-relative 形式；
+1. 使用 Project Source-Root-relative、唯一前导 `./` 的 Current-Module-relative，
+   或大小写精确的 `@std/` Standard-Library-relative 形式；
 2. 必须以 `.bas` 结尾；
 3. 必须使用 `/` 作为源码中的路径分隔符；
 4. 不得以 `/` 开头；
@@ -1643,7 +1657,9 @@ Import literal 必须满足：
 8. 每个目录名和文件名（不含 `.bas` 后缀）都必须符合普通名称 lower_snake_case 规则；
 9. 一个规范 Import 路径必须唯一对应一个 `.bas` 文件，并且各路径段必须与文件系统中的实际大小写完全一致。
 
-根入口路径也必须符合以上路径规则。编译器先规范化 source root，再解析每个相对路径。实现可以采用严格策略拒绝源码树中的所有符号链接；如果允许符号链接，解析后的目标仍必须位于规范化 source root 内。路径比较不得依赖当前工作目录或环境变量。
+根入口路径也必须符合 Project Source Root 路径规则。编译器先规范化并固定各自
+Root，再解析 Import。每个 Root 内的大小写及 symlink/reparse-point 规则一致；
+模块不得跨 Root 逃逸。路径比较不得依赖当前工作目录。
 
 以下写法非法：
 
@@ -1787,7 +1803,11 @@ a.bas -> b.bas -> c.bas -> a.bas
 ### 21.14 当前 Module 相对 Import
 **OM-21.14 — 当前 Module 相对 Import**
 
-`./` 开头的 Import 路径相对于包含该 Import 的 `.bas` 文件所在目录解析。解析结果仍须位于固定 Source Root 内，并遵守本节规定的路径大小写、扩展名和符号链接安全规则。其他 Import 路径仍相对于 Source Root 解析。两种形式都必须在进入 Module Graph 前转换为 Source-Root-relative canonical path；指向同一文件的路径必须使用同一个 Module identity。路径解析不得搜索目录或隐式回退。
+`./` 开头的 Import 路径相对于包含该 Import 的 `.bas` 文件所在目录解析，并保留
+导入方的 Root 类型。普通路径只适用于 Project Module；Standard Library Module
+必须用 `./` 引用同一根内文件，或用 `@std/` 引用另一个标准库 Module。路径结果
+以 Root 类型和 canonical 相对路径形成 Module identity；同根同路径去重，不同根
+同名路径必须保持不同身份。SDK Root 缺失时，导入失败且不得回退到项目 Root。
 
 ### 21.15 显式 Re-export
 **OM-21.15 — 显式 Re-export**
@@ -1803,6 +1823,31 @@ a.bas -> b.bas -> c.bas -> a.bas
 **OM-21.17 — Facade 公开面与 canonical identity**
 
 Module 的公开面由其 `EXPORT` 声明和有效的 `EXPORT IMPORT` 共同确定。导入别名仍由目标文件名 stem 决定；Facade 不会改变 Module identity。公开接口 metadata 应反映 Facade 可见名称并保留原始声明位置，公开 API fingerprint 不应因私有实现内容变化而变化。
+
+**OM-21.18 — SDK 标准库 Import 根**
+
+`@std/` 是唯一特殊标准库根，映射到所选 SDK 的 `share/ombasic/stdlib/`。
+它只允许出现在 Import path literal 中，必须精确小写，且不自动导入任何名称。
+标准库源码按普通 `.bas` Module 参与解析、类型检查和编译。SDK Module 的 `./`
+保留 SDK 根；标准库不得使用 Project-root-relative 路径导入调用方源码。
+Module identity 为 Root 类型与 canonical 相对路径的组合。缺少标准库资源时必须
+报告失败，禁止回退到项目源码、工作目录或仓库路径。
+
+**OM-21.19 — Module-scoped Native Import**
+
+Module 可以在顶层 Import preamble 中写：
+
+```basic
+NATIVE IMPORT "./text_native.omi"
+```
+
+路径使用 Project-root-relative、唯一前导 `./` 的 current-module-relative，或
+`@std/` SDK-root-relative 形式，并且必须以 `.omi` 结尾。Native declarations
+只在声明它的 `.bas` Module 作用域中可见，不进入全局 Prelude，也不能直接
+`EXPORT` 或 re-export。需要公开 Native 功能时，Module 必须通过普通 OMBasic
+wrapper 显式导出。Native metadata 仅声明 ABI；`check` 读取 metadata 但不链接
+库，`build` / `run` 按现有 ABI、effect 和 blocking 规则链接库。`NATIVE IMPORT`
+不会创建 OMBasic source Module 或改变 source Module identity。
 
 ---
 
@@ -2529,9 +2574,11 @@ AST              -> Arena
 12. 不存在 Async/Await/Future/Promise/Coroutine 语言语义。
 13. 外部等待通过 Send/Receive 分段表达。
 14. `.bas` 文件即 Module，文件路径即 Module 的唯一身份。
-15. Import literal 使用 Source-Root-relative 形式，或仅带一个前导 `./` 的
-    Current-Module-relative 形式。两者都必须规范化到唯一 Source Root 下的
-    canonical `.bas` 路径；不得搜索、使用其他 `.`/`..` 路径段或省略扩展名。
+15. Import literal 支持 Project-Root-relative、仅带一个前导 `./` 的
+    Current-Module-relative，以及以 `@std/` 开始的 SDK-root-relative 形式。
+    项目源码和 SDK 源码必须分别解析到各自根目录；canonical module identity
+    包含根类型，因此相同相对路径也不会混淆。不得搜索备用根目录、使用其他
+    `.`/`..` 路径段或省略 `.bas` 扩展名。
 16. Import 是静态依赖而非文本包含，且无运行时副作用。
 17. Module Import graph 必须无循环。
 18. Module 不拥有长期可变全局状态。
@@ -2764,6 +2811,8 @@ CLI 指定的根源码是入口 Module。它必须恰好定义一个无参数、
 
 
 .omi 恰好有一个 NATIVE block，使用独立于 .bas 的元数据 token 模式。元数据关键字必须精确匹配产生式中的大写拼写；abi_type 中的 CVoid、CInt8 等拼写是 .omi 专用终结符，不要求符合 OMBasic 实体名称模式。每个 Native function 必须恰有一个 SYMBOL、一个 EFFECT 和一个 BLOCKING 或 NONBLOCKING 注解。EFFECT 为 PURE，或 NATIVE、FILE_IO、NETWORK_IO、CLOCK 的非空组合。指针参数必须注明 BORROWED、OWNED 或 STATIC 中恰好一个；指针返回必须恰有一个 RETURNS BORROWED FROM 参数、RETURNS STATIC 或 RETURNS OWNED WITH 释放函数声明。Owned 返回必须有释放函数。Native 未明确证明 PURE 时视为有副作用。Foreign-thread callback 只能通过 Runtime trampoline 入队，不得直接执行 Actor handler。
+
+EFFECT PURE 且 NONBLOCKING 的 Native function 可从普通 OMBasic FUNCTION 调用；Native function 若声明任何副作用或 BLOCKING，则受普通 OMBasic 函数的 effect 规则限制，不能从纯 FUNCTION 调用。此声明是 Native library 作者对其实现的契约，编译器无法验证外部 C 函数是否遵守 PURE。
 
 ~~~text
 native_file = "NATIVE" string_literal NEWLINE

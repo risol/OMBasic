@@ -38,6 +38,22 @@ Om_Status om_module_project_load_with_entry_source(
     size_t maximum_source_byte_length,
     Om_Module_Project *project
 );
+/* Loads Project modules from source_root and @std modules from stdlib_root. */
+Om_Status om_module_project_load_with_stdlib(
+    const Om_Source_Root *source_root,
+    const Om_Source_Root *stdlib_root,
+    Om_String_View entry_path,
+    size_t maximum_source_byte_length,
+    Om_Module_Project *project
+);
+Om_Status om_module_project_load_with_entry_source_and_stdlib(
+    const Om_Source_Root *source_root,
+    const Om_Source_Root *stdlib_root,
+    Om_String_View entry_path,
+    Om_Const_Byte_Slice entry_source,
+    size_t maximum_source_byte_length,
+    Om_Module_Project *project
+);
 void om_module_project_destroy(Om_Module_Project *project);
 
 /* Returns NULL for an invalid module ID or a source that failed to load. */

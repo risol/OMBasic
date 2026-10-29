@@ -485,3 +485,56 @@ cleanup:
     OM_TEST_ASSERT(passed);
     return true;
 }
+
+bool om_test_type_store_additive_constraint(void)
+{
+    Om_Type_Store store = {0};
+    Om_Type_Scheme scheme = {0};
+    bool passed = false;
+    TYPE_STORE_ASSERT(om_type_store_init(&store) == OM_STATUS_OK);
+    Om_Type_Id variable = OM_TYPE_ID_INVALID;
+    Om_Type_Id string_type = OM_TYPE_ID_INVALID;
+    Om_Type_Id float_type = OM_TYPE_ID_INVALID;
+    Om_Type_Id bool_type = OM_TYPE_ID_INVALID;
+    TYPE_STORE_ASSERT(om_type_store_variable(&store, 1, &variable)
+                      == OM_STATUS_OK);
+    TYPE_STORE_ASSERT(get_primitive(&store, OM_TYPE_STRING, &string_type));
+    TYPE_STORE_ASSERT(get_primitive(&store, OM_TYPE_FLOAT, &float_type));
+    TYPE_STORE_ASSERT(get_primitive(&store, OM_TYPE_BOOL, &bool_type));
+    bool satisfied = false;
+    TYPE_STORE_ASSERT(om_type_store_require(&store, variable,
+                          OM_TYPE_CONSTRAINT_ADDITIVE, &satisfied)
+                      == OM_STATUS_OK && satisfied);
+    TYPE_STORE_ASSERT(om_type_store_generalize(&store, variable, 0, &scheme)
+                      == OM_STATUS_OK
+                      && scheme.quantified_variable_count == 1
+                      && scheme.quantified_constraints[0]
+                          == (uint32_t)OM_TYPE_CONSTRAINT_ADDITIVE);
+
+    bool unified = false;
+    Om_Type_Id string_instance = OM_TYPE_ID_INVALID;
+    TYPE_STORE_ASSERT(om_type_store_instantiate(&store, &scheme, 0,
+                                                &string_instance)
+                      == OM_STATUS_OK);
+    TYPE_STORE_ASSERT(om_type_store_unify(&store, string_instance, string_type,
+                                          &unified) == OM_STATUS_OK && unified);
+    Om_Type_Id float_instance = OM_TYPE_ID_INVALID;
+    TYPE_STORE_ASSERT(om_type_store_instantiate(&store, &scheme, 0,
+                                                &float_instance)
+                      == OM_STATUS_OK);
+    TYPE_STORE_ASSERT(om_type_store_unify(&store, float_instance, float_type,
+                                          &unified) == OM_STATUS_OK && unified);
+    Om_Type_Id bool_instance = OM_TYPE_ID_INVALID;
+    TYPE_STORE_ASSERT(om_type_store_instantiate(&store, &scheme, 0,
+                                                &bool_instance)
+                      == OM_STATUS_OK);
+    TYPE_STORE_ASSERT(om_type_store_unify(&store, bool_instance, bool_type,
+                                          &unified) == OM_STATUS_OK && !unified);
+    passed = true;
+
+cleanup:
+    om_type_scheme_destroy(&scheme);
+    om_type_store_destroy(&store);
+    OM_TEST_ASSERT(passed);
+    return true;
+}

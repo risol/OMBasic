@@ -1,0 +1,20 @@
+IMPORT "@std/path/path.bas"
+
+ACTION main()
+    slash_absolute = path.is_absolute("/tmp/file")
+    drive_absolute = path.is_absolute("C:/temp")
+    relative = path.is_absolute("a/b")
+    joined = path.join("a/b", "../file.txt")
+    rooted = path.join("a", "/rooted")
+    base = path.basename("a/b/file.tar.gz")
+    directory = path.dirname("a/b/file.txt")
+    local_directory = path.dirname("file.txt")
+    trailing_base = path.basename("a/b/")
+    suffix = path.extension("a/file.tar.gz")
+    hidden_suffix = path.extension(".hidden")
+    trailing_suffix = path.extension("trailing.")
+    print($"{slash_absolute}|{drive_absolute}|{relative}")
+    print($"{joined}|{rooted}")
+    print($"{base}|{directory}|{local_directory}|{trailing_base}")
+    print($"{suffix}|{hidden_suffix}|{trailing_suffix}")
+END ACTION

@@ -443,3 +443,38 @@ Om_Status om_toolchain_resource_path(const char *relative_path,
     }
     return status;
 }
+
+Om_Status om_toolchain_resource_directory(const char *relative_path,
+                                         const char *resource_dir_override,
+                                         char **path_out)
+{
+    if (relative_path == NULL || relative_path[0] == '\0' || path_out == NULL) {
+        return OM_STATUS_INVALID_ARGUMENT;
+    }
+    *path_out = NULL;
+    char *roots[2] = {NULL, NULL};
+    size_t root_count = 0;
+    Om_Status status = resolve_resource_roots(resource_dir_override, roots,
+                                               2, &root_count);
+    if (status != OM_STATUS_OK) {
+        return status;
+    }
+    status = OM_STATUS_NOT_FOUND;
+    for (size_t index = 0; index < root_count; ++index) {
+        char *candidate = join_path(roots[index], relative_path);
+        if (candidate == NULL) {
+            status = OM_STATUS_OUT_OF_MEMORY;
+            break;
+        }
+        if (is_directory(candidate)) {
+            *path_out = candidate;
+            status = OM_STATUS_OK;
+            break;
+        }
+        om_free(candidate);
+    }
+    for (size_t index = 0; index < root_count; ++index) {
+        om_free(roots[index]);
+    }
+    return status;
+}

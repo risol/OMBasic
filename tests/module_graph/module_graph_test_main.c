@@ -2,6 +2,7 @@
 
 bool om_test_module_graph_order(void);
 bool om_test_module_graph_cycle(void);
+bool om_test_module_graph_root_aware_identity(void);
 bool om_test_module_project_load(void);
 bool om_test_module_project_cycle(void);
 bool om_test_module_project_errors(void);
@@ -12,6 +13,7 @@ int main(void)
     const Om_Test_Case tests[] = {
         {"module_graph_order", om_test_module_graph_order},
         {"module_graph_cycle", om_test_module_graph_cycle},
+        {"module_graph_root_aware_identity", om_test_module_graph_root_aware_identity},
         {"module_project_load", om_test_module_project_load},
         {"module_project_cycle", om_test_module_project_cycle},
         {"module_project_errors", om_test_module_project_errors},

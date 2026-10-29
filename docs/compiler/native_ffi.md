@@ -4,6 +4,12 @@ Native declarations are supplied with `.omi` metadata. `check` loads them for
 name resolution and type checking; `build` and `run` also link the library
 declared by each metadata file.
 
+Use a module-level `NATIVE IMPORT "path.omi"` when the declarations should be
+visible only to one `.bas` module. Those declarations are private to that
+module; export ordinary OMBasic wrappers when a library wants to expose a
+stable source API. The command-line `--native` option remains available for
+explicit project-wide integrations.
+
 ```text
 ombasic run --root app app/main.bas --native native/math.omi -L build/native
 ```
@@ -38,6 +44,11 @@ Borrowed and static results are copied directly. Owned results name a release
 function; the Runtime invokes it after the copy attempt, including when UTF-8
 validation or managed-string allocation fails. A null return or invalid UTF-8
 raises a recoverable runtime fault.
+
+Only Native functions declared both `EFFECT PURE` and `NONBLOCKING` may be
+called from ordinary OMBasic `FUNCTION`s. Other Native effects remain subject
+to the language's normal effect restrictions. `PURE` is a library-author
+contract and is not verified against the external implementation.
 
 ```text
 FUNCTION echo(value: CString BORROWED): CString

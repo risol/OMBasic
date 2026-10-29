@@ -58,6 +58,34 @@ typedef enum Om_Builtin_Member_Id {
     OM_BUILTIN_MEMBER_ACTOR_DOWN_REASON_NODE_UNREACHABLE
 } Om_Builtin_Member_Id;
 
+typedef enum Om_Builtin_Category {
+    OM_BUILTIN_CATEGORY_CORE = 0,
+    OM_BUILTIN_CATEGORY_RUNTIME_SERVICE,
+    OM_BUILTIN_CATEGORY_RUNTIME_PRIMITIVE
+} Om_Builtin_Category;
+
+typedef struct Om_Builtin_Descriptor {
+    Om_Builtin_Id id;
+    Om_String_View spelling;
+    Om_Builtin_Category category;
+    Om_String_View type_rule;
+    Om_String_View lowering_or_protocol;
+    Om_String_View standard_rule;
+} Om_Builtin_Descriptor;
+
+typedef struct Om_Builtin_Member_Descriptor {
+    Om_Builtin_Member_Id id;
+    Om_Builtin_Id owner;
+    Om_String_View spelling;
+    Om_String_View standard_rule;
+    Om_String_View semantic_value;
+} Om_Builtin_Member_Descriptor;
+
+size_t om_builtin_descriptor_count(void);
+const Om_Builtin_Descriptor *om_builtin_descriptor_at(size_t index);
+size_t om_builtin_member_descriptor_count(void);
+const Om_Builtin_Member_Descriptor *om_builtin_member_descriptor_at(size_t index);
+
 bool om_builtin_id_is_system_actor(Om_Builtin_Id id);
 bool om_builtin_id_is_system_message(Om_Builtin_Id id);
 
@@ -150,7 +178,17 @@ typedef struct Om_Resolver_Config {
        destroyed. Names that collide with the built-in/additional prelude fail. */
     const Om_Omi_Module *native_modules;
     size_t native_module_count;
+    /* Native metadata visible only in the importing BASIC module. */
+    const struct Om_Module_Native_Import *module_native_imports;
+    size_t module_native_import_count;
 } Om_Resolver_Config;
+
+typedef struct Om_Module_Native_Import {
+    Om_Module_Id module_id;
+    const Om_Omi_Module *native_module;
+    Om_Source_Span import_span;
+    size_t metadata_index;
+} Om_Module_Native_Import;
 
 typedef struct Om_Resolution_Result {
     const Om_Symbol *symbols;

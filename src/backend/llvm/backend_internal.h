@@ -118,11 +118,13 @@ typedef struct Om_Llvm_Backend_Context {
     LLVMValueRef runtime_string_from_owned_cstring;
     LLVMValueRef runtime_string_format;
     LLVMValueRef runtime_string_concat;
+    LLVMValueRef runtime_string_compare;
     LLVMValueRef runtime_print;
     LLVMValueRef runtime_record_create;
     LLVMValueRef runtime_record_set;
     LLVMValueRef runtime_record_get;
     LLVMValueRef runtime_list_create;
+    LLVMValueRef runtime_list_concat;
     LLVMValueRef runtime_list_append;
     LLVMValueRef runtime_list_get;
     LLVMValueRef runtime_list_length;

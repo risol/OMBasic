@@ -11,6 +11,17 @@
 - [Implementation status](development/implementation_status.md)
 - [Engineering convergence status](development/engineering_convergence_status.md)
 - [Release gates](development/release_gates.md)
+- [Prelude builtin inventory](development/prelude_inventory.md)
+
+## Standard library
+
+- [Math](stdlib/math.md)
+- [Console](stdlib/console.md)
+- [Time](stdlib/time.md)
+- [File system](stdlib/file_system.md)
+- [Text](stdlib/text.md)
+- [Path](stdlib/path.md)
+- [JSON](stdlib/json.md)
 
 ## Compiler and Runtime contracts
 

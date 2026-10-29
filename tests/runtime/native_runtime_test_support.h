@@ -11,5 +11,6 @@ bool om_runtime_test_records(void);
 bool om_runtime_test_lists(void);
 bool om_runtime_test_maps(void);
 bool om_runtime_test_native_pointers(void);
+bool om_runtime_test_json(void);
 
 #endif

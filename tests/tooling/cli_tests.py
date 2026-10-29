@@ -1759,6 +1759,57 @@ def main() -> int:
                     and entity_definition["result"]["range"]["start"]["line"]
                         == expected_entity_lines[entity_name],
                     f"LSP definition did not reach entity {entity_name}")
+
+    with tempfile.TemporaryDirectory(prefix="ombasic-lsp-stdlib-") as temporary:
+        stdlib_root = pathlib.Path(temporary)
+        stdlib_source = ('IMPORT "@std/math/math.bas"\nACTION main()\n'
+                         '    value = math.abs(-42)\nEND ACTION\n')
+        stdlib_document_path = stdlib_root / "main.bas"
+        stdlib_document_path.write_text(stdlib_source, encoding="utf-8")
+        stdlib_document = stdlib_document_path.as_uri()
+        stdlib_requests = [
+            {"jsonrpc": "2.0", "id": 30, "method": "initialize", "params": {}},
+            {"jsonrpc": "2.0", "method": "textDocument/didOpen", "params": {
+                "textDocument": {"uri": stdlib_document, "languageId": "ombasic",
+                                 "version": 1, "text": stdlib_source}}},
+            {"jsonrpc": "2.0", "id": 31, "method": "textDocument/completion", "params": {
+                "textDocument": {"uri": stdlib_document},
+                "position": {"line": 2, "character": 17}}},
+            {"jsonrpc": "2.0", "id": 32, "method": "textDocument/hover", "params": {
+                "textDocument": {"uri": stdlib_document},
+                "position": {"line": 2, "character": 18}}},
+            {"jsonrpc": "2.0", "id": 33, "method": "textDocument/definition", "params": {
+                "textDocument": {"uri": stdlib_document},
+                "position": {"line": 2, "character": 20}}},
+            {"jsonrpc": "2.0", "id": 34, "method": "shutdown", "params": None},
+            {"jsonrpc": "2.0", "method": "exit", "params": None},
+        ]
+        stdlib_server = subprocess.run(
+            [str(compiler), "lsp", "--root", str(stdlib_root)],
+            input=b"".join(lsp_message(item) for item in stdlib_requests),
+            capture_output=True, cwd=repository, timeout=45, check=False)
+        require(stdlib_server.returncode == 0,
+                "LSP stdlib server failed: " + stdlib_server.stderr.decode(
+                    "utf-8", errors="replace"))
+        stdlib_responses = read_lsp_messages(stdlib_server.stdout)
+        stdlib_completion = next((item for item in stdlib_responses
+                                  if item.get("id") == 31), None)
+        require(stdlib_completion is not None and any(
+            item.get("label") == "abs"
+            for item in stdlib_completion["result"]["items"]),
+            "LSP completion omitted an @std module member")
+        stdlib_hover = next((item for item in stdlib_responses
+                             if item.get("id") == 32), None)
+        require(stdlib_hover is not None and stdlib_hover["result"] is not None
+                and "Int" in stdlib_hover["result"]["contents"]["value"],
+                "LSP hover omitted @std module member type information")
+        stdlib_definition = next((item for item in stdlib_responses
+                                  if item.get("id") == 33), None)
+        require(stdlib_definition is not None and stdlib_definition["result"] is not None
+                and "/share/ombasic/stdlib/math/integer.bas" in
+                    stdlib_definition["result"]["uri"].replace("\\", "/"),
+                "LSP definition did not resolve an @std source path: "
+                + repr(stdlib_definition))
     print("PASS tooling CLI, native run/build, formatter, diagnostics JSON, bind, LSP hover/inlay/completion")
     return 0
 

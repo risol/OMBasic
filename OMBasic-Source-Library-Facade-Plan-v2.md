@@ -1,5 +1,9 @@
 # OMBasic 源码库、目录 Facade、相对 Import 与标准库重构计划
 
+> 状态：此计划的 Facade 与相对 Import 部分已完成；关于 SDK 标准库只能复制
+> 到项目 Source Root 的旧决定已由 `OMBasic-Prelude-and-Stdlib-Development-Plan.md`
+> 与 ADR-0027 取代。后续标准库工作以新计划和 OM-21.18 为准。
+
 -   **项目：** OMBasic
 -   **计划日期：** 2026-10-29
 -   **审计基线：** `d2fdb646cd6705bfcb61181c0bf25300e9abd8e5`

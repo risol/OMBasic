@@ -6,7 +6,6 @@ static Om_Status emit_checked_integer(Om_Llvm_Backend_Context *backend,
                                       LLVMValueRef left,
                                       LLVMValueRef right,
                                       const char *intrinsic_name,
-                                      bool negate,
                                       LLVMValueRef *result);
 static Om_Status emit_integer_division(Om_Llvm_Backend_Context *backend,
                                        Om_Mir_Block_Id block_id,
@@ -174,7 +173,6 @@ static Om_Status emit_checked_integer(Om_Llvm_Backend_Context *backend,
                                       LLVMValueRef left,
                                       LLVMValueRef right,
                                       const char *intrinsic_name,
-                                      bool negate,
                                       LLVMValueRef *result)
 {
     const unsigned intrinsic_id = LLVMLookupIntrinsicID(intrinsic_name,
@@ -189,10 +187,9 @@ static Om_Status emit_checked_integer(Om_Llvm_Backend_Context *backend,
         return OM_STATUS_NOT_FOUND;
     }
     LLVMValueRef arguments[2] = {left, right};
-    const unsigned argument_count = negate ? 1u : 2u;
     LLVMValueRef pair = LLVMBuildCall2(backend->builder,
         LLVMGlobalGetValueType(intrinsic), intrinsic, arguments,
-        argument_count, "checked_pair");
+        2, "checked_pair");
     if (pair == NULL) {
         return OM_STATUS_OUT_OF_MEMORY;
     }
@@ -656,6 +653,20 @@ Om_Status emit_instruction(Om_Llvm_Backend_Context *backend,
         }
         break;
     }
+    case OM_MIR_LIST_CONCAT: {
+        if (instruction->operand_count != 2) {
+            status = OM_STATUS_INVALID_ARGUMENT;
+            break;
+        }
+        LLVMValueRef arguments[4] = {NULL, left, right, NULL};
+        status = emit_runtime_object_call(backend, function, block_id,
+            backend->runtime_list_concat, arguments, 4, &result);
+        if (status == OM_STATUS_OK) {
+            status = store_value_root(backend, function->id,
+                instruction->result_id, result);
+        }
+        break;
+    }
     case OM_MIR_LIST_LENGTH:
     case OM_MIR_MAP_LENGTH: {
         if (instruction->operand_count != 1) {
@@ -787,13 +798,13 @@ Om_Status emit_instruction(Om_Llvm_Backend_Context *backend,
                 ? "llvm.ssub.with.overflow.i64"
                 : "llvm.smul.with.overflow.i64";
         status = emit_checked_integer(backend, block_id, instruction,
-            left, right, intrinsic_name, false, &result);
+            left, right, intrinsic_name, &result);
         break;
     }
     case OM_MIR_INT_NEGATE_CHECKED: {
         LLVMValueRef zero = LLVMConstInt(backend->i64_type, 0, 0);
         status = emit_checked_integer(backend, block_id, instruction,
-            zero, left, "llvm.ssub.with.overflow.i64", true, &result);
+            zero, left, "llvm.ssub.with.overflow.i64", &result);
         break;
     }
     case OM_MIR_INT_DIV_CHECKED:
@@ -846,6 +857,33 @@ Om_Status emit_instruction(Om_Llvm_Backend_Context *backend,
             result = LLVMBuildFCmp(backend->builder,
                 real_predicate(instruction->operator_kind), left, right,
                 "compare");
+        } else if (operand_kind == OM_TYPE_STRING) {
+            LLVMValueRef comparison_slot = entry_alloca(backend, function,
+                backend->i32_type, "string_comparison_slot");
+            LLVMValueRef context = context_for_function(backend, function);
+            if (comparison_slot == NULL || context == NULL) {
+                status = comparison_slot == NULL ? OM_STATUS_OUT_OF_MEMORY
+                                                 : OM_STATUS_INVALID_ARGUMENT;
+                break;
+            }
+            LLVMValueRef arguments[4] = {
+                context, left, right, comparison_slot,
+            };
+            LLVMValueRef compare_status = LLVMBuildCall2(
+                backend->builder,
+                LLVMGlobalGetValueType(backend->runtime_string_compare),
+                backend->runtime_string_compare, arguments, 4,
+                "string_compare_status");
+            status = emit_runtime_status_check(backend, block_id,
+                                               compare_status);
+            if (status != OM_STATUS_OK) {
+                break;
+            }
+            LLVMValueRef comparison = LLVMBuildLoad2(backend->builder,
+                backend->i32_type, comparison_slot, "string_comparison");
+            result = LLVMBuildICmp(backend->builder,
+                integer_predicate(instruction->operator_kind), comparison,
+                LLVMConstInt(backend->i32_type, 0, 0), "string_compare");
         } else {
             status = OM_STATUS_INVALID_ARGUMENT;
         }

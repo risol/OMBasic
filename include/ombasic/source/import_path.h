@@ -4,9 +4,16 @@
 #include "ombasic/foundation/status.h"
 #include "ombasic/foundation/string_view.h"
 
+typedef enum Om_Import_Root_Kind {
+    OM_IMPORT_ROOT_PROJECT = 0,
+    OM_IMPORT_ROOT_STDLIB
+} Om_Import_Root_Kind;
+
 typedef struct Om_Resolved_Import_Path {
     char *data;
     size_t length;
+    /* The root is part of the logical module identity. */
+    Om_Import_Root_Kind root_kind;
 } Om_Resolved_Import_Path;
 
 /* Validate the source-root-relative canonical path form required by §21.4. */
@@ -20,6 +27,11 @@ Om_Status om_import_path_validate(Om_String_View path);
 Om_Status om_import_path_resolve(Om_String_View importer_canonical_path,
                                  Om_String_View import_literal,
                                  Om_Resolved_Import_Path *out);
+/* Resolve a module-relative path using a caller-selected file extension. */
+Om_Status om_import_file_path_resolve(Om_String_View importer_canonical_path,
+                                     Om_String_View import_literal,
+                                     Om_String_View required_extension,
+                                     Om_Resolved_Import_Path *out);
 void om_resolved_import_path_destroy(Om_Resolved_Import_Path *path);
 
 /* Validate a source-root-relative lower_snake_case path with an exact suffix. */

@@ -116,7 +116,8 @@ static Om_Status require_recursive(Om_Type_Store_Storage *storage,
         | (uint32_t)OM_TYPE_CONSTRAINT_PRINTABLE
         | (uint32_t)OM_TYPE_CONSTRAINT_HASH_KEY
         | (uint32_t)OM_TYPE_CONSTRAINT_ACTOR_REF
-        | (uint32_t)OM_TYPE_CONSTRAINT_MESSAGE;
+        | (uint32_t)OM_TYPE_CONSTRAINT_MESSAGE
+        | (uint32_t)OM_TYPE_CONSTRAINT_ADDITIVE;
     if (depth >= OM_TYPE_MAX_RECURSION_DEPTH
         || (constraints & ~all_constraints) != 0) {
         return OM_STATUS_INVALID_ARGUMENT;
@@ -141,7 +142,7 @@ static Om_Status require_recursive(Om_Type_Store_Storage *storage,
         return status;
     }
     *satisfied = true;
-    for (uint32_t bit = UINT32_C(1); bit <= (uint32_t)OM_TYPE_CONSTRAINT_MESSAGE;
+    for (uint32_t bit = UINT32_C(1); bit <= (uint32_t)OM_TYPE_CONSTRAINT_ADDITIVE;
          bit <<= 1) {
         if ((constraints & bit) == 0) {
             continue;
@@ -149,6 +150,10 @@ static Om_Status require_recursive(Om_Type_Store_Storage *storage,
         bool bit_satisfied = false;
         if (bit == (uint32_t)OM_TYPE_CONSTRAINT_NUMERIC) {
             bit_satisfied = node->kind == OM_TYPE_INT || node->kind == OM_TYPE_FLOAT;
+        } else if (bit == (uint32_t)OM_TYPE_CONSTRAINT_ADDITIVE) {
+            bit_satisfied = node->kind == OM_TYPE_INT || node->kind == OM_TYPE_FLOAT
+                            || node->kind == OM_TYPE_STRING
+                            || node->kind == OM_TYPE_LIST;
         } else if (bit == (uint32_t)OM_TYPE_CONSTRAINT_INTEGRAL) {
             bit_satisfied = node->kind == OM_TYPE_INT;
         } else if (bit == (uint32_t)OM_TYPE_CONSTRAINT_ORDERED) {

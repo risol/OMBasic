@@ -21,7 +21,7 @@ jobs:
       - name: Install LLVM 23 and build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y ca-certificates curl gnupg ninja-build
+          sudo apt-get install -y ca-certificates curl gnupg ninja-build libzstd-dev
           sudo install -d -m 0755 /etc/apt/keyrings
           curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key \
             | sudo tee /etc/apt/keyrings/apt.llvm.org.asc >/dev/null

@@ -392,6 +392,23 @@ static Om_Status extract_imports(
                 || memcmp(source->bytes.data + token_start, "IMPORT", 6) != 0)
                 return OM_STATUS_OK;
             reexport = true;
+        } else if (cursor - token_start == 6
+                   && memcmp(source->bytes.data + token_start, "NATIVE", 6) == 0) {
+            size_t lookahead = cursor;
+            while (lookahead < source->bytes.length
+                   && is_horizontal_space(source->bytes.data[lookahead])) {
+                ++lookahead;
+            }
+            if (lookahead + 6 > source->bytes.length
+                || memcmp(source->bytes.data + lookahead, "IMPORT", 6) != 0
+                || (lookahead + 6 < source->bytes.length
+                    && is_identifier_continue(
+                        source->bytes.data[lookahead + 6]))) {
+                return OM_STATUS_OK;
+            }
+            cursor = lookahead + 6;
+            (void)skip_line_comment(source, &cursor);
+            continue;
         } else if (cursor - token_start != 6
                    || memcmp(source->bytes.data + token_start, "IMPORT", 6) != 0) {
             return OM_STATUS_OK;
@@ -553,6 +570,7 @@ static Om_Status ensure_source_record(
 
 static Om_Status module_project_load(
     const Om_Source_Root *source_root,
+    const Om_Source_Root *stdlib_root,
     Om_String_View entry_path,
     Om_Const_Byte_Slice entry_source,
     bool use_entry_source,
@@ -687,8 +705,17 @@ static Om_Status module_project_load(
         }
         if (imported_record->state == OM_MODULE_UNSEEN) {
             const Om_String_View imported_path = om_module_graph_path(&project->graph, imported);
+            const bool is_stdlib = imported_path.length >= 5
+                && memcmp(imported_path.data, "@std/", 5) == 0;
+            const Om_Source_Root *import_root = is_stdlib ? stdlib_root : source_root;
+            if (import_root == NULL || import_root->owned_storage == NULL) {
+                project->failed_module = importer;
+                project->error_span = import.span;
+                status = OM_STATUS_NOT_FOUND;
+                goto cleanup;
+            }
             status = om_source_root_load(
-                source_root,
+                import_root,
                 (Om_Source_Id){imported.value},
                 imported_path,
                 maximum_source_byte_length,
@@ -734,8 +761,8 @@ Om_Status om_module_project_load(
     Om_Module_Project *project
 )
 {
-    return module_project_load(source_root, entry_path, (Om_Const_Byte_Slice){0},
-                               false, maximum_source_byte_length, project);
+    return module_project_load(source_root, NULL, entry_path,
+        (Om_Const_Byte_Slice){0}, false, maximum_source_byte_length, project);
 }
 
 Om_Status om_module_project_load_with_entry_source(
@@ -746,6 +773,29 @@ Om_Status om_module_project_load_with_entry_source(
     Om_Module_Project *project
 )
 {
-    return module_project_load(source_root, entry_path, entry_source, true,
+    return module_project_load(source_root, NULL, entry_path, entry_source, true,
                                maximum_source_byte_length, project);
+}
+
+Om_Status om_module_project_load_with_stdlib(
+    const Om_Source_Root *source_root,
+    const Om_Source_Root *stdlib_root,
+    Om_String_View entry_path,
+    size_t maximum_source_byte_length,
+    Om_Module_Project *project)
+{
+    return module_project_load(source_root, stdlib_root, entry_path,
+        (Om_Const_Byte_Slice){0}, false, maximum_source_byte_length, project);
+}
+
+Om_Status om_module_project_load_with_entry_source_and_stdlib(
+    const Om_Source_Root *source_root,
+    const Om_Source_Root *stdlib_root,
+    Om_String_View entry_path,
+    Om_Const_Byte_Slice entry_source,
+    size_t maximum_source_byte_length,
+    Om_Module_Project *project)
+{
+    return module_project_load(source_root, stdlib_root, entry_path, entry_source,
+        true, maximum_source_byte_length, project);
 }

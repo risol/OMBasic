@@ -40,6 +40,11 @@ Om_Status om_runtime_string_format_value(Om_Execution_Context *context,
 Om_Status om_runtime_string_view(const Om_Execution_Context *context,
                                  const void *string,
                                  Om_String_View *result);
+/* Compares valid UTF-8 strings by Unicode scalar value order. */
+Om_Status om_runtime_string_compare(const Om_Execution_Context *context,
+                                    const void *left,
+                                    const void *right,
+                                    int32_t *result);
 /* The UTF-8 view is borrowed unless the bytes contain an embedded NUL. */
 Om_Status om_runtime_string_cstring_view(const Om_Execution_Context *context,
                                          const void *string,
@@ -62,6 +67,10 @@ Om_Status om_runtime_record_get(const Om_Execution_Context *context,
 
 Om_Status om_runtime_list_create(Om_Execution_Context *context,
                                  const Om_Runtime_Type_Descriptor *type,
+                                 void **result);
+Om_Status om_runtime_list_concat(Om_Execution_Context *context,
+                                 const void *left,
+                                 const void *right,
                                  void **result);
 Om_Status om_runtime_list_append_value(Om_Execution_Context *context,
                                       void *list,

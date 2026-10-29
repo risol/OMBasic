@@ -3,7 +3,8 @@
 The optional libFuzzer targets exercise source import paths, the lexer/parser,
 `.omi` metadata, distribution frame/message decoders, constructed HIR/MIR
 verifier inputs, LLVM object emission from verified MIR, nested wire payloads,
-and the Runtime's descriptor-to-native-message codec round trip. Inputs are
+and the Runtime's descriptor-to-native-message codec round trip, and JSON
+parser validation/accessor/compaction behavior. Inputs are
 bounded, and collection/nesting limits keep malformed inputs from requesting
 unbounded work.
 
@@ -32,6 +33,7 @@ longer time budget:
 ./build/fuzz/ombasic_fuzz_distribution_serializer -runs=10000
 ./build/fuzz/ombasic_fuzz_llvm_backend -runs=100
 ./build/fuzz/ombasic_fuzz_native_descriptor_codec -runs=10000
+./build/fuzz/ombasic_fuzz_json_parser -runs=10000
 ```
 
 GitHub Actions builds every fuzzer and runs a short smoke set for each pull

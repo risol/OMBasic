@@ -7,9 +7,8 @@
 
 Source libraries are ordinary source trees (ADR-0025). Their consumers need
 one stable public entry point without introducing packages, directory imports,
-or implicit discovery. OMBasic modules are individual `.bas` files. The Source
-Root is the sole identity and security boundary, while an Import literal may
-resolve either from that root or from the importing Module directory.
+or implicit discovery. OMBasic modules are individual `.bas` files. Project and
+SDK standard-library roots are separate identity and security boundaries.
 
 ## Decision
 
@@ -24,12 +23,13 @@ resolve either from that root or from the importing Module directory.
   remain compile-time errors.
 - Re-exporting the same original symbol more than once is harmless. Distinct
   symbols with the same exported name in one module are a compile-time conflict.
-- Paths without a `./` prefix remain Source Root-relative. A `./` prefix is
-  resolved from the importing module's directory, then canonicalized and
-  validated inside the same Source Root. No directory search is introduced.
-- No `@std` root, package manager, manifest, or lockfile is introduced.
-- Standard-library source, when distributed by an SDK, must be copied or
-  vendored beneath the consuming project's Source Root before ordinary import.
+- Project-relative paths resolve below the Project Source Root. `./` resolves
+  below the importing Module directory while preserving its root kind.
+- `@std/` explicitly selects the chosen SDK's `share/ombasic/stdlib` root.
+  Standard-library modules may use `./` or another explicit `@std/` path;
+  they may not import from the consuming project's source root.
+- Root kind plus canonical relative path forms Module identity. No directory
+  search, fallback, package manager, dependency solver, or lockfile is added.
 - The `print` builtin and native library boundary are unchanged.
 
 ## Consequences

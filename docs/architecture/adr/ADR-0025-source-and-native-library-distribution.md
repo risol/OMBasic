@@ -21,8 +21,9 @@ boundary between generated-code ABI and Runtime implementation.
 -   A reusable source library is an ordinary directory subtree
     containing `.bas` files and optional documentation, licenses, tests,
     or resources. It is not a first-class compiler entity.
--   Imports follow the canonical source-root path rules in ADR-0020.
-    This ADR adds no implicit discovery or extra import search path.
+-   Project source imports follow ADR-0020. An SDK may provide one fixed
+    standard source tree under `share/ombasic/stdlib`, available only through
+    the explicit `@std/` import root; this is not a search path.
 -   Source libraries may be distributed through Git repositories, source
     archives, vendored files, or other external file-distribution
     mechanisms. The compiler does not download, install, update, or

@@ -2,6 +2,177 @@
   "schema_version": 2,
   "cases": [
     {
+      "id": "sdk-stdlib-explicit-import",
+      "rules": [
+        "OM-21.18"
+      ],
+      "kind": "run",
+      "source": "06_modules/std-root/main.bas",
+      "tags": [
+        "module",
+        "semantic"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "42,7,7,42,10,5\n"
+        }
+      }
+    },
+    {
+      "id": "sdk-stdlib-text-source-helpers",
+      "rules": [
+        "OM-21.18",
+        "OM-06.03",
+        "OM-09.01"
+      ],
+      "kind": "run",
+      "source": "06_modules/std-text/main.bas",
+      "tags": [
+        "module",
+        "type",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "café 東京|true|true|false|true|3|true|true|5|é東|one||東京||é界\n|||true||é界|true\n"
+        }
+      }
+    },
+    {
+      "id": "sdk-stdlib-json-facade",
+      "rules": [
+        "OM-21.18",
+        "OM-06.03"
+      ],
+      "kind": "run",
+      "source": "06_modules/std-json/main.bas",
+      "tags": [
+        "module",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "{\"large\":123456789012345678901234567890.00e+0,\"items\":[true,null,\"é\"]}\nobject\nitems=3\n\"é\"\nduplicate=5\ninvalid=1:1\n{\"label\":\"café\",\"n\":1.2300e+5}\n{}\n[]\n"
+        }
+      },
+      "include_interfaces": true,
+      "expected_exports": [
+        "Value",
+        "Entry",
+        "Parse_Error",
+        "null_value",
+        "boolean",
+        "number",
+        "string_value",
+        "array",
+        "object",
+        "parse",
+        "kind",
+        "array_length",
+        "array_get",
+        "object_get",
+        "stringify"
+      ]
+    },
+    {
+      "id": "sdk-stdlib-console-payload-helpers",
+      "rules": [
+        "OM-17.03",
+        "OM-17.04",
+        "OM-21.18"
+      ],
+      "kind": "run",
+      "source": "06_modules/std-console/main.bas",
+      "tags": [
+        "module",
+        "actor",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "console actorconsole actor\n"
+        }
+      },
+      "include_interfaces": true,
+      "expected_exports": [
+        "write_payload",
+        "write_line_payload"
+      ]
+    },
+    {
+      "id": "sdk-stdlib-path-logical-operations",
+      "rules": [
+        "OM-21.18",
+        "OM-06.03"
+      ],
+      "kind": "run",
+      "source": "06_modules/std-path/main.bas",
+      "tags": [
+        "module",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "true|true|false\na/b/../file.txt|/rooted\nfile.tar.gz|a/b|.|\n.gz||\n"
+        }
+      }
+    },
+    {
+      "id": "sdk-stdlib-math-rejects-string-arguments",
+      "rules": [
+        "OM-21.18",
+        "OM-06.03"
+      ],
+      "kind": "compile",
+      "source": "06_modules/math_rejects_string.bas",
+      "tags": [
+        "module",
+        "type",
+        "diagnostic"
+      ],
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E0401",
+          "primary_span": {
+            "line": 4,
+            "start_byte_column": 22,
+            "end_byte_column": 25
+          }
+        }
+      }
+    },
+    {
+      "id": "stdlib-math-abs-int64-min-overflow",
+      "rules": [
+        "OM-21.18",
+        "OM-37.03"
+      ],
+      "kind": "run",
+      "source": "06_modules/math_int64_min_abs_overflow.bas",
+      "tags": [
+        "module",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 70,
+          "stderr": "@std/math/integer.bas:7:16: runtime fault: integer overflow\n"
+        }
+      }
+    },
+    {
       "id": "keyword-uppercase",
       "rules": [
         "OM-05.02",
@@ -592,6 +763,29 @@
       }
     },
     {
+      "id": "string-concat-rejects-mixed-types",
+      "rules": [
+        "OM-09.01"
+      ],
+      "kind": "compile",
+      "source": "09_operators/string_concat_mixed_types_rejected.bas",
+      "tags": [
+        "type",
+        "diagnostic"
+      ],
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E0401",
+          "primary_span": {
+            "line": 2,
+            "start_byte_column": 13,
+            "end_byte_column": 24
+          }
+        }
+      }
+    },
+    {
       "id": "assignment-is-a-statement",
       "rules": [
         "OM-07.03"
@@ -799,6 +993,27 @@
       }
     },
     {
+      "id": "immutable-list-concatenation",
+      "rules": [
+        "OM-09.01",
+        "OM-12.01",
+        "OM-12.03"
+      ],
+      "kind": "run",
+      "source": "12_collections/list_concat.bas",
+      "tags": [
+        "runtime",
+        "type"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "é|東京|!|done|東京|!\n"
+        }
+      }
+    },
+    {
       "id": "result-select-constructors",
       "rules": [
         "OM-14.02",
@@ -941,18 +1156,190 @@
       }
     },
     {
-      "id": "system-io-uses-an-actor",
+      "id": "system-console-actor-write",
       "rules": [
         "OM-17.03"
       ],
-      "kind": "compile",
+      "kind": "run",
       "source": "17_actors/system_console.bas",
       "tags": [
         "actor",
         "runtime"
       ],
       "expect": {
-        "compiles": true
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "console-actor"
+        }
+      }
+    },
+    {
+      "id": "system-timer-delivers-message",
+      "rules": [
+        "OM-17.03",
+        "OM-17.04"
+      ],
+      "kind": "run",
+      "source": "17_actors/system_timer.bas",
+      "tags": [
+        "actor",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "timer-fired\n"
+        }
+      }
+    },
+    {
+      "id": "system-timer-respects-mailbox-order",
+      "rules": [
+        "OM-17.01",
+        "OM-17.02"
+      ],
+      "kind": "run",
+      "source": "17_actors/system_timer_mailbox.bas",
+      "tags": [
+        "actor",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "mailbox-first\ntimer-second\n"
+        }
+      }
+    },
+    {
+      "id": "system-file-system-utf8-roundtrip",
+      "rules": [
+        "OM-17.03",
+        "OM-17.04"
+      ],
+      "kind": "run",
+      "source": "17_actors/system_file_system.bas",
+      "tags": [
+        "actor",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "utf8: café 東京\n"
+        }
+      }
+    },
+    {
+      "id": "system-file-missing-file-error",
+      "rules": [
+        "OM-17.03",
+        "OM-17.04"
+      ],
+      "kind": "run",
+      "source": "17_actors/system_file_missing.bas",
+      "tags": [
+        "actor",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "missing-file-error\n"
+        }
+      }
+    },
+    {
+      "id": "system-file-invalid-utf8-error",
+      "rules": [
+        "OM-17.03",
+        "OM-17.04"
+      ],
+      "kind": "run",
+      "source": "17_actors/system_file_invalid_utf8.bas",
+      "tags": [
+        "actor",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "invalid-utf8-error\n"
+        }
+      }
+    },
+    {
+      "id": "system-file-directory-write-error",
+      "rules": [
+        "OM-17.03",
+        "OM-17.04"
+      ],
+      "kind": "run",
+      "source": "17_actors/system_file_directory_write.bas",
+      "tags": [
+        "actor",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "directory-target-error\n"
+        }
+      }
+    },
+    {
+      "id": "system-file-protected-target-error",
+      "rules": [
+        "OM-17.03",
+        "OM-17.04"
+      ],
+      "kind": "run",
+      "source": "17_actors/system_file_permission_error.bas",
+      "platforms": [
+        "linux"
+      ],
+      "tags": [
+        "actor",
+        "runtime",
+        "linux"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "permission-error\n"
+        }
+      }
+    },
+    {
+      "id": "system-file-storage-error",
+      "rules": [
+        "OM-17.03",
+        "OM-17.04"
+      ],
+      "kind": "run",
+      "source": "17_actors/system_file_storage_error.bas",
+      "platforms": [
+        "linux"
+      ],
+      "tags": [
+        "actor",
+        "runtime",
+        "linux"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "storage-error\n"
+        }
       }
     },
     {
@@ -1426,6 +1813,82 @@
           },
           "text": "Any"
         }
+      }
+    },
+    {
+      "id": "native-import-declares-local-native-symbols",
+      "rules": [
+        "OM-21.19"
+      ],
+      "kind": "multi_file",
+      "project_root": "21_native/module_scope_valid",
+      "entry": "main.bas",
+      "tags": [
+        "native",
+        "module",
+        "semantic"
+      ],
+      "expect": {
+        "compiles": true
+      }
+    },
+    {
+      "id": "native-import-is-module-scoped",
+      "rules": [
+        "OM-21.19"
+      ],
+      "kind": "multi_file",
+      "project_root": "21_native/module_scope",
+      "entry": "main.bas",
+      "tags": [
+        "native",
+        "module",
+        "diagnostic"
+      ],
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E0301",
+          "primary_span": {
+            "line": 2,
+            "start_byte_column": 5,
+            "end_byte_column": 8
+          }
+        }
+      }
+    },
+    {
+      "id": "native-import-metadata-missing",
+      "rules": [
+        "OM-21.19"
+      ],
+      "kind": "multi_file",
+      "project_root": "21_native/module_scope_missing",
+      "entry": "main.bas",
+      "tags": [
+        "native",
+        "diagnostic"
+      ],
+      "expect": {
+        "compiles": false,
+        "project_error": "cannot load Native import metadata (not found)"
+      }
+    },
+    {
+      "id": "native-import-path-escape-rejected",
+      "rules": [
+        "OM-21.19"
+      ],
+      "kind": "multi_file",
+      "project_root": "21_native/module_scope_invalid_path",
+      "entry": "main.bas",
+      "tags": [
+        "native",
+        "diagnostic"
+      ],
+      "expect": {
+        "compiles": false,
+        "project_error": "cannot resolve Native import"
       }
     },
     {

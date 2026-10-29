@@ -28,17 +28,15 @@ void om_omi_project_destroy(Om_Omi_Project *project)
     *project = (Om_Omi_Project){0};
 }
 
-Om_Status om_omi_project_load(
-    const Om_Source_Root *source_root,
-    const Om_String_View *metadata_paths,
+Om_Status om_omi_project_load_imports(
+    const Om_Omi_Project_Import *imports,
     size_t metadata_path_count,
     uint32_t first_source_id,
     size_t maximum_source_byte_length,
     Om_Omi_Project *project)
 {
-    if (source_root == NULL || source_root->owned_storage == NULL
-        || project == NULL || project->owned_storage != NULL
-        || (metadata_path_count != 0 && metadata_paths == NULL)
+    if (project == NULL || project->owned_storage != NULL
+        || (metadata_path_count != 0 && imports == NULL)
         || (metadata_path_count != 0 && first_source_id == UINT32_MAX)
         || metadata_path_count > (size_t)(UINT32_MAX - first_source_id)) {
         return OM_STATUS_INVALID_ARGUMENT;
@@ -75,8 +73,9 @@ Om_Status om_omi_project_load(
     for (size_t index = 0; status == OM_STATUS_OK
                            && index < metadata_path_count; ++index) {
         for (size_t prior = 0; prior < index; ++prior) {
-            if (om_string_view_equal(metadata_paths[index],
-                                     metadata_paths[prior])) {
+            if (imports[index].source_root == imports[prior].source_root
+                && om_string_view_equal(imports[index].metadata_path,
+                                        imports[prior].metadata_path)) {
                 status = OM_STATUS_INVALID_ARGUMENT;
                 break;
             }
@@ -84,10 +83,15 @@ Om_Status om_omi_project_load(
         if (status != OM_STATUS_OK) {
             break;
         }
+        if (imports[index].source_root == NULL
+            || imports[index].source_root->owned_storage == NULL) {
+            status = OM_STATUS_INVALID_ARGUMENT;
+            break;
+        }
         status = om_source_root_load_file(
-            source_root,
+            imports[index].source_root,
             (Om_Source_Id){first_source_id + (uint32_t)index},
-            metadata_paths[index], (Om_String_View){".omi", 4},
+            imports[index].metadata_path, (Om_String_View){".omi", 4},
             maximum_source_byte_length, &storage->sources[index]);
         if (status == OM_STATUS_OK) {
             status = om_omi_parse(&storage->sources[index],
@@ -97,6 +101,33 @@ Om_Status om_omi_project_load(
     if (status != OM_STATUS_OK) {
         om_omi_project_destroy(project);
     }
+    return status;
+}
+
+Om_Status om_omi_project_load(
+    const Om_Source_Root *source_root,
+    const Om_String_View *metadata_paths,
+    size_t metadata_path_count,
+    uint32_t first_source_id,
+    size_t maximum_source_byte_length,
+    Om_Omi_Project *project)
+{
+    if (metadata_path_count != 0 && metadata_paths == NULL) {
+        return OM_STATUS_INVALID_ARGUMENT;
+    }
+    Om_Omi_Project_Import *imports = om_alloc_array(
+        metadata_path_count, sizeof(*imports));
+    if (metadata_path_count != 0 && imports == NULL) {
+        return OM_STATUS_OUT_OF_MEMORY;
+    }
+    for (size_t index = 0; index < metadata_path_count; ++index) {
+        imports[index] = (Om_Omi_Project_Import){source_root,
+                                                 metadata_paths[index]};
+    }
+    const Om_Status status = om_omi_project_load_imports(
+        imports, metadata_path_count, first_source_id,
+        maximum_source_byte_length, project);
+    om_free(imports);
     return status;
 }
 

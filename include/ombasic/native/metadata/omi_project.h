@@ -14,6 +14,11 @@ typedef struct Om_Omi_Project {
     void *owned_storage;
 } Om_Omi_Project;
 
+typedef struct Om_Omi_Project_Import {
+    const Om_Source_Root *source_root;
+    Om_String_View metadata_path;
+} Om_Omi_Project_Import;
+
 /*
  * Loads the exact `.omi` paths listed by the caller, relative to one source
  * root. Assign source IDs from a range that does not overlap `.bas` modules.
@@ -23,6 +28,14 @@ Om_Status om_omi_project_load(
     const Om_Source_Root *source_root,
     const Om_String_View *metadata_paths,
     size_t metadata_path_count,
+    uint32_t first_source_id,
+    size_t maximum_source_byte_length,
+    Om_Omi_Project *project
+);
+/* Loads metadata paths from independently selected Project or SDK roots. */
+Om_Status om_omi_project_load_imports(
+    const Om_Omi_Project_Import *imports,
+    size_t import_count,
     uint32_t first_source_id,
     size_t maximum_source_byte_length,
     Om_Omi_Project *project

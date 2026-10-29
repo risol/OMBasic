@@ -39,6 +39,7 @@ static const char *ast_kind_name(Om_Ast_Kind kind)
     switch (kind) {
     case OM_AST_PROGRAM: return "Program";
     case OM_AST_IMPORT: return "Import";
+    case OM_AST_NATIVE_IMPORT: return "NativeImport";
     case OM_AST_RECORD_DECLARATION: return "RecordDeclaration";
     case OM_AST_MESSAGE_DECLARATION: return "MessageDeclaration";
     case OM_AST_FUNCTION_DECLARATION: return "FunctionDeclaration";
@@ -422,6 +423,52 @@ bool om_test_parser_reexport_import(void)
     om_source_text_destroy(&source);
     PARSER_ASSERT(scan_and_parse(&source, &lexed, &parsed, invalid,
                                  sizeof(invalid) - 1, 105));
+    PARSER_ASSERT(parsed.diagnostic_count != 0);
+    passed = true;
+
+cleanup:
+    om_parser_result_destroy(&parsed);
+    om_lexer_result_destroy(&lexed);
+    om_source_text_destroy(&source);
+    OM_TEST_ASSERT(passed);
+    return true;
+}
+
+bool om_test_parser_native_import(void)
+{
+    static const uint8_t input[] =
+        "IMPORT \"./source.bas\"\n"
+        "NATIVE IMPORT \"./native.omi\"\n"
+        "EXPORT FUNCTION wrapper(value)\n"
+        "    RETURN value\n"
+        "END FUNCTION\n";
+    Om_Source_Text source = {0};
+    Om_Lexer_Result lexed = {0};
+    Om_Parser_Result parsed = {0};
+    bool passed = false;
+    PARSER_ASSERT(scan_and_parse(&source, &lexed, &parsed, input,
+                                 sizeof(input) - 1, 107));
+    PARSER_ASSERT(parsed.diagnostic_count == 0);
+    const Om_Ast_Node *program = om_ast_get_node(&parsed.ast, parsed.ast.root);
+    PARSER_ASSERT(program != NULL && program->child_count == 3);
+    const Om_Ast_Node *native_import = om_ast_get_node(
+        &parsed.ast, om_ast_get_child(&parsed.ast, program, 1));
+    PARSER_ASSERT(native_import != NULL
+                  && native_import->kind == OM_AST_NATIVE_IMPORT
+                  && native_import->name.length == sizeof("\"./native.omi\"") - 1
+                  && memcmp(native_import->name.data, "\"./native.omi\"",
+                            sizeof("\"./native.omi\"") - 1) == 0);
+    om_parser_result_destroy(&parsed);
+    om_lexer_result_destroy(&lexed);
+    om_source_text_destroy(&source);
+
+    static const uint8_t late_import[] =
+        "FUNCTION first()\n"
+        "    RETURN 1\n"
+        "END FUNCTION\n"
+        "NATIVE IMPORT \"./native.omi\"\n";
+    PARSER_ASSERT(scan_and_parse(&source, &lexed, &parsed, late_import,
+                                 sizeof(late_import) - 1, 108));
     PARSER_ASSERT(parsed.diagnostic_count != 0);
     passed = true;
 

@@ -124,13 +124,18 @@ bool om_test_import_path(void)
         const char *importer;
         const char *literal;
         const char *expected;
+        Om_Import_Root_Kind root_kind;
     };
     static const struct Resolve_Case resolve_cases[] = {
-        {"main.bas", "./foo.bas", "foo.bas"},
+        {"main.bas", "./foo.bas", "foo.bas", OM_IMPORT_ROOT_PROJECT},
         {"vendor/json/json.bas", "./internal/parser.bas",
-         "vendor/json/internal/parser.bas"},
+         "vendor/json/internal/parser.bas", OM_IMPORT_ROOT_PROJECT},
         {"vendor/json/json.bas", "vendor/json/internal/parser.bas",
-         "vendor/json/internal/parser.bas"},
+         "vendor/json/internal/parser.bas", OM_IMPORT_ROOT_PROJECT},
+        {"main.bas", "@std/math/math.bas", "@std/math/math.bas",
+         OM_IMPORT_ROOT_STDLIB},
+        {"@std/math/math.bas", "./integer.bas", "@std/math/integer.bas",
+         OM_IMPORT_ROOT_STDLIB},
     };
     for (size_t index = 0;
          index < sizeof(resolve_cases) / sizeof(resolve_cases[0]); ++index) {
@@ -141,13 +146,20 @@ bool om_test_import_path(void)
             (Om_String_View){test_case->literal, strlen(test_case->literal)},
             &resolved) == OM_STATUS_OK);
         OM_TEST_ASSERT(resolved.length == strlen(test_case->expected));
+        OM_TEST_ASSERT(resolved.root_kind == test_case->root_kind);
         OM_TEST_ASSERT(memcmp(resolved.data, test_case->expected,
                               resolved.length) == 0);
         om_resolved_import_path_destroy(&resolved);
         OM_TEST_ASSERT(resolved.data == NULL && resolved.length == 0);
     }
+    OM_TEST_ASSERT(om_import_path_resolve(
+        (Om_String_View){"@std/math/math.bas", sizeof("@std/math/math.bas") - 1},
+        (Om_String_View){"vendor/app/main.bas", sizeof("vendor/app/main.bas") - 1},
+        &(Om_Resolved_Import_Path){0}) == OM_STATUS_INVALID_ARGUMENT);
     static const char *const invalid_literals[] = {
         "./../outside.bas", "././foo.bas", "./", "./internal/../foo.bas",
+        "@unknown/math.bas", "@STD/math/math.bas", "@std/../math.bas",
+        "@std//math.bas", "@std/math/math",
     };
     for (size_t index = 0;
          index < sizeof(invalid_literals) / sizeof(invalid_literals[0]); ++index) {
@@ -162,8 +174,26 @@ bool om_test_import_path(void)
     }
     OM_TEST_ASSERT(om_import_path_validate((Om_String_View){"./foo.bas", 9})
                    == OM_STATUS_INVALID_ARGUMENT);
+    OM_TEST_ASSERT(om_import_path_validate(
+        (Om_String_View){"@std/../math.bas", sizeof("@std/../math.bas") - 1})
+        == OM_STATUS_INVALID_ARGUMENT);
     OM_TEST_ASSERT(om_import_path_validate((Om_String_View){NULL, 0})
                    == OM_STATUS_INVALID_ARGUMENT);
+    Om_Resolved_Import_Path native_path = {0};
+    OM_TEST_ASSERT(om_import_file_path_resolve(
+        (Om_String_View){"@std/text/text.bas", sizeof("@std/text/text.bas") - 1},
+        (Om_String_View){"./text_native.omi", sizeof("./text_native.omi") - 1},
+        (Om_String_View){".omi", 4}, &native_path) == OM_STATUS_OK);
+    OM_TEST_ASSERT(native_path.root_kind == OM_IMPORT_ROOT_STDLIB
+        && native_path.length == sizeof("@std/text/text_native.omi") - 1
+        && memcmp(native_path.data, "@std/text/text_native.omi",
+                  native_path.length) == 0);
+    om_resolved_import_path_destroy(&native_path);
+    OM_TEST_ASSERT(om_import_file_path_resolve(
+        (Om_String_View){"main.bas", sizeof("main.bas") - 1},
+        (Om_String_View){"../escape.omi", sizeof("../escape.omi") - 1},
+        (Om_String_View){".omi", 4}, &native_path)
+        == OM_STATUS_INVALID_ARGUMENT);
     for (size_t iteration = 0; iteration < 4096; ++iteration) {
         random_state ^= random_state << 13;
         random_state ^= random_state >> 17;
