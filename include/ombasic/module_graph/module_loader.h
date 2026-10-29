@@ -1,6 +1,7 @@
 #ifndef OMBASIC_MODULE_GRAPH_MODULE_LOADER_H
 #define OMBASIC_MODULE_GRAPH_MODULE_LOADER_H
 
+#include <stdbool.h>
 #include <stddef.h>
 
 #include "ombasic/module_graph/module_graph.h"
@@ -19,6 +20,7 @@ typedef struct Om_Module_Import_Info {
     Om_Module_Id target_module;
     Om_String_View path;
     Om_Source_Span span;
+    bool reexport;
 } Om_Module_Import_Info;
 
 /* Pass a zero-initialized project. Destroy it after every load attempt. */

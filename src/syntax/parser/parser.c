@@ -650,10 +650,14 @@ static Om_Status parse_postfix(Om_Parser *parser, Om_Ast_Node_Id *value)
         if (at_kind(parser, OM_TOKEN_DOT)) {
             (void)advance(parser);
             Om_Token member = {0};
-            Om_Status status = expect_name(parser, false, &member);
-            if (status != OM_STATUS_OK) {
-                return status;
+            const Om_Token *member_token = peek(parser);
+            if (!is_name_token(member_token)) {
+                return add_diagnostic(parser, OM_PARSE_DIAGNOSTIC_E0202,
+                                      member_token->span, OM_TOKEN_IDENTIFIER,
+                                      OM_KEYWORD_NONE);
             }
+            member = *advance(parser);
+            Om_Status status = OM_STATUS_OK;
             const Om_Ast_Node_Id child = *value;
             status = make_node(parser, OM_AST_MEMBER,
                                span_between(base_span, member.span), member.lexeme,
@@ -801,13 +805,27 @@ static Om_Status parse_prefix(Om_Parser *parser, Om_Ast_Node_Id *out)
     }
     if (at_keyword(parser, OM_KEYWORD_SPAWN)) {
         (void)advance(parser);
-        Om_Token actor = {0};
-        Om_Status status = expect_name(parser, true, &actor);
+        Om_Ast_Node_Id actor = OM_AST_NODE_ID_INVALID;
+        Om_Status status = parse_primary(parser, &actor);
+        if (status == OM_STATUS_OK) {
+            status = parse_postfix(parser, &actor);
+        }
         if (status != OM_STATUS_OK) {
             return status;
         }
+        const Om_Ast_Node *actor_node = node_at(parser, actor);
+        if (actor_node == NULL
+            || (actor_node->kind != OM_AST_NAME
+                && actor_node->kind != OM_AST_MEMBER)) {
+            return add_diagnostic(parser, OM_PARSE_DIAGNOSTIC_E0202,
+                                  actor_node != NULL ? actor_node->span
+                                                     : peek(parser)->span,
+                                  OM_TOKEN_ENTITY_IDENTIFIER,
+                                  OM_KEYWORD_NONE);
+        }
+        const Om_Ast_Node actor_value = *actor_node;
         Om_Ast_Node_Id placement = OM_AST_NODE_ID_INVALID;
-        size_t child_count = 0;
+        size_t child_count = 1;
         if (match_keyword(parser, OM_KEYWORD_AT)) {
             status = parse_primary(parser, &placement);
             if (status == OM_STATUS_OK) {
@@ -816,16 +834,18 @@ static Om_Status parse_prefix(Om_Parser *parser, Om_Ast_Node_Id *out)
             if (status != OM_STATUS_OK) {
                 return status;
             }
-            child_count = 1;
+            child_count = 2;
         }
         const Om_Ast_Node *place_node = child_count != 0
-            ? node_at(parser, placement) : NULL;
+            ? (child_count == 2 ? node_at(parser, placement) : NULL) : NULL;
         const Om_Source_Span span = place_node != NULL
             ? span_between(token->span, place_node->span)
-            : span_between(token->span, actor.span);
-        return make_node(parser, OM_AST_SPAWN, span, actor.lexeme,
-                         actor.kind, OM_KEYWORD_SPAWN, flags_for_name(&actor), 0,
-                         0, 0.0, child_count != 0 ? &placement : NULL,
+            : span_between(token->span, actor_value.span);
+        const Om_Ast_Node_Id children[2] = {actor, placement};
+        return make_node(parser, OM_AST_SPAWN, span, actor_value.name,
+                         actor_value.token_kind, OM_KEYWORD_SPAWN,
+                         actor_value.flags, 0,
+                         0, 0.0, children,
                          child_count, out);
     }
     Om_Status status = parse_primary(parser, out);
@@ -1506,7 +1526,9 @@ static Om_Status parse_statement(Om_Parser *parser, Om_Ast_Node_Id *out)
     return status;
 }
 
-static Om_Status parse_import(Om_Parser *parser, Om_Ast_Node_Id *out)
+static Om_Status parse_import(Om_Parser *parser, bool reexport,
+                              const Om_Token *prefix,
+                              Om_Ast_Node_Id *out)
 {
     const Om_Token *begin = advance(parser);
     const Om_Token *path = peek(parser);
@@ -1520,10 +1542,13 @@ static Om_Status parse_import(Om_Parser *parser, Om_Ast_Node_Id *out)
     }
     return make_node(parser, OM_AST_IMPORT,
                      path->kind == OM_TOKEN_STRING
-                         ? span_between(begin->span, path->span) : begin->span,
+                         ? span_between(prefix != NULL ? prefix->span : begin->span,
+                                        path->span)
+                         : (prefix != NULL ? prefix->span : begin->span),
                      path->kind == OM_TOKEN_STRING ? path->lexeme
                                                    : (Om_String_View){NULL, 0},
-                     OM_TOKEN_STRING, OM_KEYWORD_IMPORT, OM_AST_FLAG_NONE, 0,
+                     OM_TOKEN_STRING, OM_KEYWORD_IMPORT,
+                     reexport ? OM_AST_FLAG_REEXPORT : OM_AST_FLAG_NONE, 0,
                      0, 0.0, NULL, 0, out);
 }
 
@@ -1867,13 +1892,31 @@ Om_Status om_parser_parse(const Om_Lexer_Result *lexed, Om_Parser_Result *result
             }
             Om_Ast_Node_Id import_node = OM_AST_NODE_ID_INVALID;
             if (status == OM_STATUS_OK) {
-                status = parse_import(&parser, &import_node);
+                status = parse_import(&parser, false, NULL, &import_node);
             }
             if (status == OM_STATUS_OK) {
                 status = push_id(&top_level, import_node);
             }
         } else {
+            const Om_Token *export_prefix = at_keyword(&parser, OM_KEYWORD_EXPORT)
+                ? peek(&parser) : NULL;
             bool exported = match_keyword(&parser, OM_KEYWORD_EXPORT);
+            if (exported && at_keyword(&parser, OM_KEYWORD_IMPORT)) {
+                if (!imports_open) {
+                    status = add_diagnostic(&parser, OM_PARSE_DIAGNOSTIC_E0203,
+                                            peek(&parser)->span, OM_TOKEN_ERROR,
+                                            OM_KEYWORD_NONE);
+                }
+                Om_Ast_Node_Id import_node = OM_AST_NODE_ID_INVALID;
+                if (status == OM_STATUS_OK) {
+                    status = parse_import(&parser, true, export_prefix,
+                                         &import_node);
+                }
+                if (status == OM_STATUS_OK) {
+                    status = push_id(&top_level, import_node);
+                }
+                continue;
+            }
             const bool declaration_start = at_keyword(&parser, OM_KEYWORD_RECORD)
                 || at_keyword(&parser, OM_KEYWORD_MESSAGE)
                 || at_keyword(&parser, OM_KEYWORD_FUNCTION)

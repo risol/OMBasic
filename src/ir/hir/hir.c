@@ -344,7 +344,8 @@ static Om_Status lower_node(Om_Hir_Lower_Context *context,
     if (source == NULL || out == NULL
         || context->storage->nodes.length >= UINT32_MAX
         || context->storage->children.length > UINT32_MAX
-        || source->child_count > UINT32_MAX - context->storage->children.length) {
+        || source->child_count > UINT32_MAX - context->storage->children.length
+        || (source->kind == OM_AST_SPAWN && source->child_count == 0)) {
         return OM_STATUS_INVALID_ARGUMENT;
     }
 
@@ -390,7 +391,9 @@ static Om_Status lower_node(Om_Hir_Lower_Context *context,
                                                source_id),
         .flags = flags_for_ast(source),
         .child_start = (uint32_t)context->storage->children.length,
-        .child_count = kind == OM_HIR_NOMINAL_VALUE ? 0 : source->child_count,
+        .child_count = kind == OM_HIR_NOMINAL_VALUE ? 0
+            : kind == OM_HIR_SPAWN ? source->child_count - 1
+                                   : source->child_count,
         .name = source->name,
         .integer_magnitude = source->integer_magnitude,
         .float_value = source->float_value,
@@ -423,7 +426,10 @@ static Om_Status lower_node(Om_Hir_Lower_Context *context,
     }
     for (size_t index = 0; status == OM_STATUS_OK && index < node.child_count;
          ++index) {
-        const Om_Ast_Node_Id source_child = om_ast_get_child(ast, source, index);
+        const size_t source_child_index = index
+            + (kind == OM_HIR_SPAWN ? 1 : 0);
+        const Om_Ast_Node_Id source_child = om_ast_get_child(
+            ast, source, source_child_index);
         const Om_Ast_Node *child_node = om_ast_get_node(ast, source_child);
         if (child_node == NULL) {
             status = OM_STATUS_INVALID_ARGUMENT;

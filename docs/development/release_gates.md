@@ -53,9 +53,10 @@ failed or missing check. Direct pushes are prohibited by this process, though
 GitHub cannot enforce the prohibition until protection is enabled. A repository
 administrator should enable branch protection before the 0.1 release candidate.
 
-The current conformance report has 56 cases covering all 115 normative Rule
-IDs. It does not yet meet the per-area minimums in section 29 of the freeze plan;
-the 0.1 release candidate remains blocked until that matrix is expanded.
+The current conformance manifest has 60 cases covering all 120 normative Rule
+IDs in the checked-in language standard. The separate per-area minimums named
+in the language-freeze plan are not present in this repository, so that RC
+matrix gate still requires maintainer review before release.
 
 The sanitizer workflow also runs weekly and on manual dispatch. Longer fuzzing
 budgets remain a separate scheduled/manual activity, while architecture,

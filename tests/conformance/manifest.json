@@ -1109,6 +1109,109 @@
       }
     },
     {
+      "id": "private-member-is-not-reexported",
+      "rules": [
+        "OM-21.15",
+        "OM-21.16"
+      ],
+      "kind": "multi_file",
+      "project_root": "06_modules/reexport-private",
+      "entry": "main.bas",
+      "tags": [
+        "semantic",
+        "diagnostic"
+      ],
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E0301",
+          "primary_span": {
+            "line": 4,
+            "start_byte_column": 22,
+            "end_byte_column": 28
+          }
+        }
+      }
+    },
+    {
+      "id": "distinct-reexported-symbols-conflict",
+      "rules": [
+        "OM-21.16"
+      ],
+      "kind": "multi_file",
+      "project_root": "06_modules/reexport-conflict",
+      "entry": "main.bas",
+      "tags": [
+        "semantic",
+        "diagnostic"
+      ],
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E0308",
+          "primary_span": {
+            "line": 2,
+            "start_byte_column": 15,
+            "end_byte_column": 35
+          }
+        }
+      }
+    },
+    {
+      "id": "directory-facade-reexports-public-api",
+      "rules": [
+        "OM-21.13",
+        "OM-21.14",
+        "OM-21.15",
+        "OM-21.16",
+        "OM-21.17"
+      ],
+      "kind": "multi_file",
+      "project_root": "06_modules/facade",
+      "entry": "main.bas",
+      "tags": [
+        "semantic",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "action\n42:42:ok:7:7\n"
+        }
+      },
+      "include_interfaces": true,
+      "expected_exports": [
+        "Ping",
+        "answer",
+        "announce",
+        "identity",
+        "Point",
+        "Worker"
+      ]
+    },
+    {
+      "id": "facade-exported-action-typechecks",
+      "rules": [
+        "OM-21.15",
+        "OM-21.16"
+      ],
+      "kind": "multi_file",
+      "project_root": "06_modules/facade",
+      "entry": "action_main.bas",
+      "tags": [
+        "semantic",
+        "effect"
+      ],
+      "expect": {
+        "compiles": true
+      },
+      "include_interfaces": true,
+      "expected_exports": [
+        "announce"
+      ]
+    },
+    {
       "id": "cyclic-import-rejected",
       "rules": [
         "OM-21.11"

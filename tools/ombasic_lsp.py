@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import pathlib
+import re
 import subprocess
 import sys
 from urllib.parse import unquote, urlparse
@@ -55,7 +56,8 @@ def compiler_analysis(compiler: pathlib.Path, root: pathlib.Path,
                       path: pathlib.Path, text: str) -> dict:
     relative = path.resolve().relative_to(root.resolve()).as_posix()
     command = [str(compiler), "check", "--root", str(root.resolve()), relative,
-               "--source-stdin", "--diagnostics=json", "--include-inferred"]
+               "--source-stdin", "--diagnostics=json", "--include-inferred",
+               "--include-interfaces"]
     completed = subprocess.run(command, input=text.encode("utf-8"),
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                cwd=root, check=False)
@@ -185,6 +187,8 @@ class Server:
             self.response(request_id, {
                 "capabilities": {
                     "textDocumentSync": {"openClose": True, "change": 1},
+                    "completionProvider": {"triggerCharacters": ["."]},
+                    "definitionProvider": True,
                     "hoverProvider": True,
                     "inlayHintProvider": True,
                 },
@@ -249,13 +253,115 @@ class Server:
                 matches = [entry for entry in inferred_offsets(analysis.get("inferred", []), text)
                            if entry[0] <= point <= entry[1]]
                 if not matches:
-                    self.response(request_id, None)
+                    prefix = text[:point]
+                    member_match = re.search(
+                        r"([a-z][a-z0-9_]*(?:_[a-z][a-z0-9_]*)*)\.([a-z][a-z0-9_]*)$",
+                        prefix)
+                    symbol = None
+                    if member_match:
+                        alias, member_name = member_match.groups()
+                        for interface in analysis.get("interfaces", []):
+                            if pathlib.PurePosixPath(interface.get("path", "")).stem != alias:
+                                continue
+                            symbol = next((item for item in interface.get("symbols", [])
+                                           if item.get("name") == member_name), None)
+                            if symbol:
+                                break
+                    if symbol is None:
+                        self.response(request_id, None)
+                    else:
+                        value = f"`{symbol.get('name')}: {symbol.get('type', 'Unknown')}`"
+                        value += f"\n\nEffects: {symbol.get('effects', 0)}"
+                        definition = symbol.get("definition", {})
+                        if definition.get("path"):
+                            location = definition.get("range", {}).get("start", {})
+                            value += (f"\n\nDefined at `{definition['path']}:"
+                                      f"{location.get('line', '?')}`")
+                        self.response(request_id, {"contents": {
+                            "kind": "markdown", "value": value}})
                 else:
                     _start, _end, item = min(matches, key=lambda entry: entry[1] - entry[0])
                     value = f"`{item.get('name') + ': ' if item.get('name') else ''}{item.get('type', 'Unknown')}`"
                     self.response(request_id, {"contents": {"kind": "markdown", "value": value}})
             except (OSError, ValueError, KeyError) as error:
                 print(f"ombasic-lsp: hover failed: {error}", file=sys.stderr)
+                self.response(request_id, None)
+            return True
+        if method == "textDocument/completion":
+            uri = params.get("textDocument", {}).get("uri")
+            try:
+                path, text = self.document(uri)
+                analysis = compiler_analysis(self.compiler, self.root, path, text)
+                offset = byte_offset(text, params.get("position", {}))
+                prefix = text[:offset]
+                match = re.search(r"([a-z][a-z0-9_]*(?:_[a-z][a-z0-9_]*)*)\.[a-z0-9_]*$",
+                                  prefix)
+                items = []
+                if match:
+                    alias = match.group(1)
+                    for interface in analysis.get("interfaces", []):
+                        module_path = pathlib.PurePosixPath(interface.get("path", ""))
+                        if module_path.stem != alias:
+                            continue
+                        for symbol in interface.get("symbols", []):
+                            items.append({
+                                "label": symbol.get("name", ""),
+                                "kind": 3 if symbol.get("kind") == "function" else 2,
+                                "detail": symbol.get("type", ""),
+                            })
+                self.response(request_id, {"isIncomplete": False, "items": items})
+            except (OSError, ValueError, KeyError) as error:
+                print(f"ombasic-lsp: completion failed: {error}", file=sys.stderr)
+                self.response(request_id, {"isIncomplete": False, "items": []})
+            return True
+        if method == "textDocument/definition":
+            uri = params.get("textDocument", {}).get("uri")
+            try:
+                path, text = self.document(uri)
+                analysis = compiler_analysis(self.compiler, self.root, path, text)
+                point = byte_offset(text, params.get("position", {}))
+                prefix = text[:point]
+                member_match = re.search(
+                    r"([a-z][a-z0-9_]*(?:_[a-z][a-z0-9_]*)*)\.([a-z][a-z0-9_]*)$",
+                    prefix)
+                location = None
+                if member_match:
+                    alias, member_name = member_match.groups()
+                    for interface in analysis.get("interfaces", []):
+                        if pathlib.PurePosixPath(interface.get("path", "")).stem != alias:
+                            continue
+                        symbol = next((item for item in interface.get("symbols", [])
+                                       if item.get("name") == member_name), None)
+                        definition = symbol.get("definition") if symbol else None
+                        source_range = definition.get("range") if definition else None
+                        if not definition or not source_range:
+                            continue
+                        definition_path = (self.root / definition["path"]).resolve()
+                        definition_path.relative_to(self.root)
+                        definition_text = definition_path.read_text(encoding="utf-8")
+                        start = source_range["start"]
+                        end = source_range["end"]
+                        location = {
+                            "uri": definition_path.as_uri(),
+                            "range": {
+                                "start": {
+                                    "line": int(start["line"]) - 1,
+                                    "character": byte_column_to_utf16(
+                                        definition_text, int(start["line"]),
+                                        int(start["byteColumn"])),
+                                },
+                                "end": {
+                                    "line": int(end["line"]) - 1,
+                                    "character": byte_column_to_utf16(
+                                        definition_text, int(end["line"]),
+                                        int(end["byteColumn"])),
+                                },
+                            },
+                        }
+                        break
+                self.response(request_id, location)
+            except (OSError, ValueError, KeyError) as error:
+                print(f"ombasic-lsp: definition lookup failed: {error}", file=sys.stderr)
                 self.response(request_id, None)
             return True
         if method == "textDocument/inlayHint":

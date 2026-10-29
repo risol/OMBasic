@@ -18,6 +18,7 @@ typedef struct Om_Resolver {
     Om_Vector resolved_nodes;
     Om_Vector node_scopes;
     Om_Vector diagnostics;
+    Om_Vector exports;
     Om_Scope_Id prelude_scope;
     Om_Scope_Id *module_scopes;
 } Om_Resolver;
@@ -223,6 +224,65 @@ static Om_Symbol_Id lookup_module_symbol(const Om_Resolver *resolver,
         return OM_SYMBOL_ID_INVALID;
     }
     return find_in_scope(resolver, resolver->module_scopes[module.value], name, false);
+}
+
+static Om_Symbol_Id lookup_export(const Om_Resolver *resolver,
+                                  Om_Module_Id module, Om_String_View name)
+{
+    for (size_t index = 0; index < resolver->exports.length; ++index) {
+        const Om_Module_Export *entry = om_vector_at_const(&resolver->exports, index);
+        if (entry->module_id.value == module.value
+            && om_string_view_equal(entry->name, name)) return entry->symbol_id;
+    }
+    return OM_SYMBOL_ID_INVALID;
+}
+
+static Om_Status add_module_export(Om_Resolver *resolver, Om_Module_Id module,
+                                   Om_Symbol_Id symbol_id, Om_Source_Span via)
+{
+    const Om_Symbol *symbol = symbol_at(resolver, symbol_id);
+    if (symbol == NULL || !symbol->exported) return OM_STATUS_OK;
+    const Om_Symbol_Id previous_id = lookup_export(resolver, module, symbol->name);
+    if (previous_id.value != UINT32_MAX) {
+        if (previous_id.value == symbol_id.value) return OM_STATUS_OK;
+        const Om_Symbol *previous = symbol_at(resolver, previous_id);
+        return add_diagnostic(resolver, OM_RESOLUTION_DIAGNOSTIC_E0308, module,
+                              via, previous != NULL ? &previous->span : NULL);
+    }
+    const Om_Module_Export entry = {module, symbol->name, symbol_id};
+    return om_vector_push(&resolver->exports, &entry);
+}
+
+static Om_Status build_module_exports(Om_Resolver *resolver)
+{
+    Om_Status status = OM_STATUS_OK;
+    /* Seed every module with its direct public declarations. */
+    for (size_t index = 0; status == OM_STATUS_OK && index < resolver->symbols.length; ++index) {
+        const Om_Symbol *symbol = om_vector_at_const(&resolver->symbols, index);
+        if (symbol->kind != OM_SYMBOL_MODULE_ALIAS && symbol->exported)
+            status = add_module_export(resolver, symbol->module_id, symbol->id, symbol->span);
+    }
+    /* Graph order places dependencies before importers, so one pass composes
+       arbitrarily deep re-export chains without synthetic symbols. */
+    for (size_t order = 0; status == OM_STATUS_OK && order < resolver->project->order.length; ++order) {
+        const Om_Module_Id module = resolver->project->order.items[order];
+        const Om_Ast *ast = module_ast(resolver, module);
+        const Om_Ast_Node *program = om_ast_get_node(ast, ast->root);
+        size_t import_index = 0;
+        for (size_t child_index = 0; status == OM_STATUS_OK && child_index < program->child_count; ++child_index) {
+            const Om_Ast_Node *child = om_ast_get_node(ast, ast_child(resolver, module, program, child_index));
+            if (child == NULL || child->kind != OM_AST_IMPORT) continue;
+            Om_Module_Import_Info info = {0};
+            status = om_module_project_import_at(resolver->project, module, import_index++, &info);
+            if (status != OM_STATUS_OK || !info.reexport) continue;
+            for (size_t e = 0; status == OM_STATUS_OK && e < resolver->exports.length; ++e) {
+                const Om_Module_Export source = *(const Om_Module_Export *)om_vector_at_const(&resolver->exports, e);
+                if (source.module_id.value == info.target_module.value)
+                    status = add_module_export(resolver, module, source.symbol_id, info.span);
+            }
+        }
+    }
+    return status;
 }
 
 static Om_Status create_symbol(Om_Resolver *resolver,
@@ -837,7 +897,9 @@ static Om_Status resolve_module_member(Om_Resolver *resolver,
     if (receiver->kind != OM_SYMBOL_MODULE_ALIAS) {
         return OM_STATUS_OK;
     }
-    const Om_Symbol_Id target = lookup_module_symbol(
+    Om_Symbol_Id target = lookup_export(
+        resolver, receiver->target_module, member->name);
+    if (target.value == UINT32_MAX) target = lookup_module_symbol(
         resolver, receiver->target_module, member->name);
     if (target.value == UINT32_MAX) {
         return report_undefined(resolver, module, member_name_span(member));
@@ -864,15 +926,27 @@ static Om_Status resolve_actor_spawn(Om_Resolver *resolver,
                                      const Om_Ast_Node *node,
                                      Om_Scope_Id scope)
 {
-    const Om_Symbol_Id symbol_id = lookup_visible(resolver, scope, node->name);
-    const Om_Symbol *symbol = symbol_at(resolver, symbol_id);
+    Om_Symbol_Id symbol_id = OM_SYMBOL_ID_INVALID;
+    const size_t placement_start = node->child_count == 0 ? 0 : 1;
     Om_Status status = OM_STATUS_OK;
+    if (node->child_count != 0) {
+        const Om_Ast_Node_Id actor_id = ast_child(resolver, module, node, 0);
+        status = resolve_expression(resolver, module, actor_id, scope);
+        if (status != OM_STATUS_OK) {
+            return status;
+        }
+        symbol_id = resolved_symbol(resolver, module, actor_id);
+    } else {
+        symbol_id = lookup_visible(resolver, scope, node->name);
+    }
+    const Om_Symbol *symbol = symbol_at(resolver, symbol_id);
     if (symbol == NULL || symbol->kind != OM_SYMBOL_ACTOR) {
         status = report_undefined(resolver, module, node->span);
     } else {
         status = set_node_symbol(resolver, module, node_id, symbol_id);
     }
-    for (size_t index = 0; status == OM_STATUS_OK && index < node->child_count; ++index) {
+    for (size_t index = placement_start;
+         status == OM_STATUS_OK && index < node->child_count; ++index) {
         status = resolve_expression(resolver, module,
                                     ast_child(resolver, module, node, index), scope);
     }
@@ -1522,6 +1596,7 @@ void om_resolution_result_destroy(Om_Resolution_Result *result)
     om_free(result->owned_resolved_nodes);
     om_free(result->owned_node_scopes);
     om_free(result->owned_diagnostics);
+    om_free(result->owned_exports);
     *result = (Om_Resolution_Result){0};
 }
 
@@ -1541,6 +1616,7 @@ Om_Status om_name_resolve_project(
         || result->diagnostics != NULL || result->owned_symbols != NULL
         || result->owned_scopes != NULL || result->owned_resolved_nodes != NULL
         || result->owned_node_scopes != NULL || result->owned_diagnostics != NULL
+        || result->exports != NULL || result->owned_exports != NULL
         || (config != NULL && config->prelude_name_count != 0
             && config->prelude_names == NULL)) {
         return OM_STATUS_INVALID_ARGUMENT;
@@ -1578,6 +1654,9 @@ Om_Status om_name_resolve_project(
                                 sizeof(Om_Resolution_Diagnostic));
     }
     if (status == OM_STATUS_OK) {
+        status = om_vector_init(&resolver.exports, sizeof(Om_Module_Export));
+    }
+    if (status == OM_STATUS_OK) {
         resolver.module_scopes = om_alloc_array(resolver.module_count,
                                                 sizeof(*resolver.module_scopes));
         if (resolver.module_scopes == NULL) {
@@ -1604,6 +1683,7 @@ Om_Status om_name_resolve_project(
     for (size_t index = 0; status == OM_STATUS_OK && index < resolver.module_count; ++index) {
         status = predeclare_module(&resolver, (Om_Module_Id){(uint32_t)index});
     }
+    if (status == OM_STATUS_OK) status = build_module_exports(&resolver);
     for (size_t index = 0; status == OM_STATUS_OK && index < resolver.module_count; ++index) {
         status = resolve_module(&resolver, (Om_Module_Id){(uint32_t)index});
     }
@@ -1614,6 +1694,7 @@ Om_Status om_name_resolve_project(
         om_vector_destroy(&resolver.resolved_nodes);
         om_vector_destroy(&resolver.node_scopes);
         om_vector_destroy(&resolver.diagnostics);
+        om_vector_destroy(&resolver.exports);
         return status;
     }
     result->symbols = resolver.symbols.data;
@@ -1626,11 +1707,14 @@ Om_Status om_name_resolve_project(
     result->node_scope_count = resolver.node_scopes.length;
     result->diagnostics = resolver.diagnostics.data;
     result->diagnostic_count = resolver.diagnostics.length;
+    result->exports = resolver.exports.data;
+    result->export_count = resolver.exports.length;
     result->owned_symbols = resolver.symbols.data;
     result->owned_scopes = resolver.scopes.data;
     result->owned_resolved_nodes = resolver.resolved_nodes.data;
     result->owned_node_scopes = resolver.node_scopes.data;
     result->owned_diagnostics = resolver.diagnostics.data;
+    result->owned_exports = resolver.exports.data;
     return OM_STATUS_OK;
 }
 
@@ -1701,6 +1785,31 @@ const Om_Symbol *om_resolution_symbol_by_id(
     return &result->symbols[symbol_id.value];
 }
 
+size_t om_resolution_module_export_count(const Om_Resolution_Result *result,
+                                         Om_Module_Id module_id)
+{
+    size_t count = 0;
+    if (result == NULL) return 0;
+    for (size_t index = 0; index < result->export_count; ++index) {
+        if (result->exports[index].module_id.value == module_id.value) ++count;
+    }
+    return count;
+}
+
+const Om_Module_Export *om_resolution_module_export_at(
+    const Om_Resolution_Result *result, Om_Module_Id module_id, size_t requested)
+{
+    if (result == NULL) return NULL;
+    for (size_t index = 0; index < result->export_count; ++index) {
+        const Om_Module_Export *entry = &result->exports[index];
+        if (entry->module_id.value == module_id.value) {
+            if (requested == 0) return entry;
+            --requested;
+        }
+    }
+    return NULL;
+}
+
 const char *om_resolution_diagnostic_code_name(Om_Resolution_Diagnostic_Code code)
 {
     switch (code) {
@@ -1711,6 +1820,7 @@ const char *om_resolution_diagnostic_code_name(Om_Resolution_Diagnostic_Code cod
     case OM_RESOLUTION_DIAGNOSTIC_E0305: return "E0305";
     case OM_RESOLUTION_DIAGNOSTIC_E0306: return "E0306";
     case OM_RESOLUTION_DIAGNOSTIC_E0307: return "E0307";
+    case OM_RESOLUTION_DIAGNOSTIC_E0308: return "E0308";
     default: return "E0000";
     }
 }

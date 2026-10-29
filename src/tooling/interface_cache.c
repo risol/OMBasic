@@ -215,7 +215,7 @@ Om_Status om_interface_cache_build(
     }
     module_count = om_module_project_module_count(project);
     if (module_count == 0 || module_count > SIZE_MAX / sizeof(*storage->modules)
-        || resolution->symbol_count > SIZE_MAX / sizeof(*storage->symbols)
+        || resolution->export_count > SIZE_MAX / sizeof(*storage->symbols)
         || semantic->actor_protocol_count > SIZE_MAX / sizeof(*storage->protocol)) {
         return OM_STATUS_OVERFLOW;
     }
@@ -225,7 +225,7 @@ Om_Status om_interface_cache_build(
     }
     *storage = (Om_Interface_Cache_Storage){0};
     storage->modules = om_alloc_array(module_count, sizeof(*storage->modules));
-    storage->symbol_capacity = resolution->symbol_count;
+    storage->symbol_capacity = resolution->export_count;
     storage->protocol_capacity = semantic->actor_protocol_count;
     storage->symbols = om_alloc_array(storage->symbol_capacity,
                                       sizeof(*storage->symbols));
@@ -267,18 +267,21 @@ Om_Status om_interface_cache_build(
         }
         module->symbols = first_symbol == NULL ? NULL : first_symbol + symbol_start;
         Om_Interface_Symbol *module_symbols = (Om_Interface_Symbol *)module->symbols;
-        for (size_t symbol_index = 0; symbol_index < resolution->symbol_count; ++symbol_index) {
-            const Om_Symbol *symbol = &resolution->symbols[symbol_index];
-            if (symbol->module_id.value != module_id.value || !symbol->exported) {
-                continue;
-            }
+        for (size_t symbol_index = 0;
+             symbol_index < om_resolution_module_export_count(resolution, module_id);
+             ++symbol_index) {
+            const Om_Module_Export *exported = om_resolution_module_export_at(
+                resolution, module_id, symbol_index);
+            const Om_Symbol *symbol = exported != NULL
+                ? symbol_by_id(resolution, exported->symbol_id) : NULL;
+            if (symbol == NULL) { status = OM_STATUS_INVALID_ARGUMENT; break; }
             if (symbol_start + module->symbol_count >= storage->symbol_capacity) {
                 status = OM_STATUS_OVERFLOW;
                 break;
             }
             Om_Interface_Symbol *entry = &module_symbols[module->symbol_count++];
             entry->symbol_id = symbol->id;
-            entry->name = symbol->name;
+            entry->name = exported->name;
             entry->kind = symbol->kind;
             entry->declaration_span = symbol->span;
             entry->type_scheme = om_type_inference_scheme_for_symbol(inference,

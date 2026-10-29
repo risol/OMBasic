@@ -675,6 +675,7 @@ install(FILES tools/ombasic_bind.py tools/ombasic_lsp.py
         DESTINATION share/ombasic/tools)
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/share/ombasic/target-manifest.json"
         DESTINATION share/ombasic)
+install(DIRECTORY stdlib/ DESTINATION share/ombasic/stdlib)
 if(WIN32)
     install(FILES "${OM_LLVM_C_DLL}" DESTINATION bin)
 endif()

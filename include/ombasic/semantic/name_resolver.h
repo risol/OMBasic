@@ -82,7 +82,8 @@ typedef enum Om_Resolution_Diagnostic_Code {
     OM_RESOLUTION_DIAGNOSTIC_E0304 = 304,
     OM_RESOLUTION_DIAGNOSTIC_E0305 = 305,
     OM_RESOLUTION_DIAGNOSTIC_E0306 = 306,
-    OM_RESOLUTION_DIAGNOSTIC_E0307 = 307
+    OM_RESOLUTION_DIAGNOSTIC_E0307 = 307,
+    OM_RESOLUTION_DIAGNOSTIC_E0308 = 308
 } Om_Resolution_Diagnostic_Code;
 
 typedef struct Om_Symbol {
@@ -134,6 +135,12 @@ typedef struct Om_Resolution_Diagnostic {
     bool has_related_span;
 } Om_Resolution_Diagnostic;
 
+typedef struct Om_Module_Export {
+    Om_Module_Id module_id;
+    Om_String_View name;
+    Om_Symbol_Id symbol_id;
+} Om_Module_Export;
+
 typedef struct Om_Resolver_Config {
     /* Additional prelude names, for example the standard library functions. */
     const Om_String_View *prelude_names;
@@ -156,11 +163,14 @@ typedef struct Om_Resolution_Result {
     size_t node_scope_count;
     const Om_Resolution_Diagnostic *diagnostics;
     size_t diagnostic_count;
+    const Om_Module_Export *exports;
+    size_t export_count;
     void *owned_symbols;
     void *owned_scopes;
     void *owned_resolved_nodes;
     void *owned_node_scopes;
     void *owned_diagnostics;
+    void *owned_exports;
 } Om_Resolution_Result;
 
 /*
@@ -194,6 +204,15 @@ Om_Scope_Id om_resolution_scope_for_node(
 const Om_Symbol *om_resolution_symbol_by_id(
     const Om_Resolution_Result *result,
     Om_Symbol_Id symbol_id
+);
+size_t om_resolution_module_export_count(
+    const Om_Resolution_Result *result,
+    Om_Module_Id module_id
+);
+const Om_Module_Export *om_resolution_module_export_at(
+    const Om_Resolution_Result *result,
+    Om_Module_Id module_id,
+    size_t index
 );
 const char *om_resolution_diagnostic_code_name(Om_Resolution_Diagnostic_Code code);
 

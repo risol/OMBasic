@@ -2,6 +2,7 @@
 
 bool om_test_parser_ast_golden(void);
 bool om_test_parser_language_grammar(void);
+bool om_test_parser_reexport_import(void);
 bool om_test_parser_errors_and_recovery(void);
 bool om_test_parser_malformed_fuzz(void);
 bool om_test_parser_depth_limit(void);
@@ -13,6 +14,7 @@ int main(void)
     const Om_Test_Case tests[] = {
         {"parser_ast_golden", om_test_parser_ast_golden},
         {"parser_language_grammar", om_test_parser_language_grammar},
+        {"parser_reexport_import", om_test_parser_reexport_import},
         {"parser_errors_and_recovery", om_test_parser_errors_and_recovery},
         {"parser_malformed_fuzz", om_test_parser_malformed_fuzz},
         {"parser_depth_limit", om_test_parser_depth_limit},

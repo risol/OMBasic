@@ -12,6 +12,7 @@ typedef struct Om_Import_Declaration {
     char *path;
     size_t path_length;
     Om_Source_Span span;
+    bool reexport;
 } Om_Import_Declaration;
 
 typedef enum Om_Module_Load_State {
@@ -260,6 +261,7 @@ static Om_Status append_import(
     Om_Vector *imports,
     size_t statement_start,
     size_t *cursor,
+    bool reexport,
     Om_Source_Span *error_span
 )
 {
@@ -304,11 +306,38 @@ static Om_Status append_import(
         set_error_span(source, quoted_start, raw_end + 1, error_span);
         return status;
     }
-    status = om_import_path_validate((Om_String_View){path, path_length});
+    Om_String_View decoded_path = {path, path_length};
+    const bool importer_relative = path_length >= 2 && path[0] == '.'
+                                   && path[1] == '/';
+    if (importer_relative) {
+        decoded_path.data += 2;
+        decoded_path.length -= 2;
+    }
+    status = om_import_path_validate(decoded_path);
     if (status != OM_STATUS_OK) {
         om_free(path);
         set_error_span(source, quoted_start, raw_end + 1, error_span);
         return status;
+    }
+    if (importer_relative) {
+        size_t directory_length = source->canonical_path.length;
+        while (directory_length > 0
+               && source->canonical_path.data[directory_length - 1] != '/') {
+            --directory_length;
+        }
+        const size_t resolved_length = directory_length + decoded_path.length;
+        char *resolved = om_alloc(resolved_length + 1);
+        if (resolved == NULL) {
+            om_free(path);
+            return OM_STATUS_OUT_OF_MEMORY;
+        }
+        if (directory_length != 0)
+            memcpy(resolved, source->canonical_path.data, directory_length);
+        memcpy(resolved + directory_length, decoded_path.data, decoded_path.length);
+        resolved[resolved_length] = '\0';
+        om_free(path);
+        path = resolved;
+        path_length = resolved_length;
     }
     *cursor = raw_end + 1;
     while (*cursor < length && is_horizontal_space(source->bytes.data[*cursor])) {
@@ -327,6 +356,7 @@ static Om_Status append_import(
     Om_Import_Declaration declaration = {
         .path = path,
         .path_length = path_length,
+        .reexport = reexport,
         .span = {
             .source = source->id,
             .start = (uint32_t)quoted_start,
@@ -371,11 +401,23 @@ static Om_Status extract_imports(
                && is_identifier_continue(source->bytes.data[cursor])) {
             ++cursor;
         }
-        if (cursor - token_start != 6
-            || memcmp(source->bytes.data + token_start, "IMPORT", 6) != 0) {
+        bool reexport = false;
+        if (cursor - token_start == 6
+            && memcmp(source->bytes.data + token_start, "EXPORT", 6) == 0) {
+            while (cursor < source->bytes.length
+                   && is_horizontal_space(source->bytes.data[cursor])) ++cursor;
+            token_start = cursor;
+            while (cursor < source->bytes.length
+                   && is_identifier_continue(source->bytes.data[cursor])) ++cursor;
+            if (cursor - token_start != 6
+                || memcmp(source->bytes.data + token_start, "IMPORT", 6) != 0)
+                return OM_STATUS_OK;
+            reexport = true;
+        } else if (cursor - token_start != 6
+                   || memcmp(source->bytes.data + token_start, "IMPORT", 6) != 0) {
             return OM_STATUS_OK;
         }
-        status = append_import(source, imports, token_start, &cursor, error_span);
+        status = append_import(source, imports, token_start, &cursor, reexport, error_span);
         if (status != OM_STATUS_OK) {
             return status;
         }
@@ -492,6 +534,7 @@ Om_Status om_module_project_import_at(
             import_info->target_module = candidate;
             import_info->path = path;
             import_info->span = declaration->span;
+            import_info->reexport = declaration->reexport;
             return OM_STATUS_OK;
         }
     }

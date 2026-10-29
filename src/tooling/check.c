@@ -701,6 +701,8 @@ static const char *resolution_message(Om_Resolution_Diagnostic_Code code)
         return "Module alias is invalid or conflicts with another declaration.";
     case OM_RESOLUTION_DIAGNOSTIC_E0307:
         return "Assignment targets an immutable binding.";
+    case OM_RESOLUTION_DIAGNOSTIC_E0308:
+        return "Module export conflicts with another declaration of the same name.";
     default:
         return "Name resolution error.";
     }
@@ -1107,9 +1109,32 @@ static void print_analysis_json(const Om_Cli_Diagnostic_List *list,
                 } else {
                     (void)fputs(",\"type\":null", stdout);
                 }
-                (void)fprintf(stdout, ",\"hasSerializableType\":%s,\"serializable\":%s}",
+                (void)fprintf(stdout, ",\"hasSerializableType\":%s,\"serializable\":%s",
                     symbol->has_serializability ? "true" : "false",
                     symbol->serializable ? "true" : "false");
+                const Om_Symbol *definition = om_resolution_symbol_by_id(
+                    resolution, symbol->symbol_id);
+                const Om_Source_Text *definition_source = definition != NULL
+                    ? om_module_project_source(project, definition->module_id) : NULL;
+                Om_Source_Location start = {0};
+                Om_Source_Location end = {0};
+                if (definition_source != NULL
+                    && om_source_text_location(definition_source,
+                                               symbol->declaration_span.start,
+                                               &start) == OM_STATUS_OK
+                    && om_source_text_location(definition_source,
+                                               symbol->declaration_span.end,
+                                               &end) == OM_STATUS_OK) {
+                    const Om_String_View definition_path = om_module_graph_path(
+                        &project->graph, definition->module_id);
+                    (void)fputs(",\"definition\":{\"path\":", stdout);
+                    (void)print_json_string(definition_path);
+                    (void)fprintf(stdout,
+                        ",\"range\":{\"start\":{\"line\":%u,\"byteColumn\":%u},"
+                        "\"end\":{\"line\":%u,\"byteColumn\":%u}}}",
+                        start.line, start.byte_column, end.line, end.byte_column);
+                }
+                (void)fputc('}', stdout);
             }
             (void)fputs("],\"actorProtocol\":[", stdout);
             for (size_t protocol_index = 0;

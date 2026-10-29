@@ -18,6 +18,10 @@ It does not embed build-tree archive paths.
 │   └── ombasic_foundation[.lib|.a]
 └── share/ombasic/
     ├── target-manifest.json
+    ├── stdlib/
+    │   └── math/
+    │       ├── math.bas
+    │       └── integer.bas
     ├── release-provenance.json (in CI SDK archives)
     └── tools/
         ├── ombasic_bind.py
@@ -27,6 +31,20 @@ It does not embed build-tree archive paths.
 The manifest stores relative resource paths and the target triple used to build
 this SDK. Installed static archives have debug records stripped so they do not
 retain paths from the machine that built the SDK.
+
+## Standard-library source
+
+The SDK ships OMBasic standard-library source under `share/ombasic/stdlib/`.
+The compiler does not search that directory as an additional import root. To
+use a library, copy or vendor the needed subtree into the project's Source Root
+and import its `.bas` Facade like any other source file. For example, copy
+`stdlib/math/` to `src/math/`, then write `IMPORT "math/math.bas"`. The project
+should pin the copied source with its own Git commit; SDK releases identify the
+version of the source they provide.
+
+Third-party libraries can be pinned the same way: use a Git submodule, subtree,
+vendor the selected source files, or unpack a source archive at a reviewed
+commit or tag. OMBasic does not resolve versions or update dependencies.
 
 ## Resource root selection
 

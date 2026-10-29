@@ -873,9 +873,11 @@ Om_Status emit_instruction(Om_Llvm_Backend_Context *backend,
             arguments[index + 1] = value_at(backend, operands[index]);
         }
         const LLVMTypeRef callee_type = LLVMGlobalGetValueType(callee);
+        const bool returns_void = LLVMGetTypeKind(
+            LLVMGetReturnType(callee_type)) == LLVMVoidTypeKind;
         LLVMValueRef call = LLVMBuildCall2(backend->builder, callee_type,
             callee, arguments, (unsigned)instruction->operand_count + 1,
-            "direct_call");
+            returns_void ? "" : "direct_call");
         om_free(arguments);
         if (call == NULL) {
             status = OM_STATUS_OUT_OF_MEMORY;
@@ -923,8 +925,11 @@ Om_Status emit_instruction(Om_Llvm_Backend_Context *backend,
         for (size_t index = 1; index < instruction->operand_count; ++index) {
             arguments[index] = value_at(backend, operands[index]);
         }
+        const bool returns_void = LLVMGetTypeKind(
+            LLVMGetReturnType(signature)) == LLVMVoidTypeKind;
         LLVMValueRef call = LLVMBuildCall2(backend->builder, signature, left,
-            arguments, (unsigned)argument_count, "indirect_call");
+            arguments, (unsigned)argument_count,
+            returns_void ? "" : "indirect_call");
         om_free(arguments);
         if (call == NULL) {
             status = OM_STATUS_OUT_OF_MEMORY;

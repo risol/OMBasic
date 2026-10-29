@@ -1,0 +1,16 @@
+EXPORT FUNCTION answer()
+    RETURN 42
+END FUNCTION
+EXPORT FUNCTION identity(value)
+    RETURN value
+END FUNCTION
+EXPORT RECORD Point(value)
+EXPORT MESSAGE Ping(value)
+EXPORT ACTOR Worker
+    RECEIVE Ping(value)
+        STOP
+    END RECEIVE
+END ACTOR
+EXPORT ACTION announce()
+    print("action")
+END ACTION

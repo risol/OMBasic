@@ -30,3 +30,9 @@ platform. Slow cases require the runner's `--include-slow` option.
 Standard, rejects unknown references, requires 100% Rule coverage, and writes
 the coverage report. `runner/conformance_runner.py` invokes `ombasic check`
 and `ombasic run` for compiler-facing cases.
+
+Module fixtures cover file-based imports, directory Facade conventions,
+current-Module-relative `./` paths, public re-exports, private-member hiding,
+name conflicts, and dependency cycles. Re-export cases also check that
+interface metadata exposes the Facade surface while preserving the original
+declaration location.

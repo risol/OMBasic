@@ -260,6 +260,14 @@ def main() -> int:
         if str(repository) in manifest_text or str(build_root) in manifest_text:
             raise AssertionError("SDK manifest contains a development-machine path")
 
+        stdlib = moved_sdk / "share" / "ombasic" / "stdlib" / "math"
+        facade = stdlib / "math.bas"
+        implementation = stdlib / "integer.bas"
+        if (not facade.is_file()
+                or 'EXPORT IMPORT "./integer.bas"' not in facade.read_text(encoding="utf-8")
+                or not implementation.is_file()):
+            raise AssertionError("SDK standard-library source is missing or incomplete")
+
     print("PASS relocated SDK install, Hello World, Actor, and Native FFI")
     return 0
 

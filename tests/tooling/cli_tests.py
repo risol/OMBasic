@@ -1580,7 +1580,110 @@ def main() -> int:
     require(hints is not None and hints["result"]
             and any(": String" in item["label"] for item in hints["result"]),
             "LSP inlay hints did not refresh from the edited semantic model")
-    print("PASS tooling CLI, native run/build, formatter, diagnostics JSON, bind, LSP hover/inlay")
+
+    with tempfile.TemporaryDirectory(prefix="ombasic-lsp-facade-") as temporary:
+        facade_root = pathlib.Path(temporary)
+        (facade_root / "math").mkdir()
+        (facade_root / "math" / "math.bas").write_text(
+            'EXPORT IMPORT "./integer.bas"\n', encoding="utf-8")
+        (facade_root / "math" / "integer.bas").write_text(
+            'EXPORT FUNCTION answer()\n    RETURN 42\nEND FUNCTION\n'
+            'EXPORT ACTION announce()\n    print("action")\nEND ACTION\n',
+            encoding="utf-8")
+        facade_source = ('IMPORT "math/math.bas"\nACTION main()\n'
+                         '    value = math.answer()\nEND ACTION\n')
+        facade_analysis = subprocess.run([
+            str(compiler), "check", "--root", str(facade_root), "main.bas",
+            "--source-stdin", "--diagnostics=json", "--include-interfaces",
+        ], input=facade_source, capture_output=True, text=True, cwd=repository,
+            check=False)
+        require(facade_analysis.returncode == 0,
+                f"Facade interface analysis failed: {facade_analysis.stderr}")
+        facade_interfaces = json.loads(facade_analysis.stdout)["interfaces"]
+        public_facade = next(item for item in facade_interfaces
+                             if item["path"] == "math/math.bas")
+        public_answer = next(item for item in public_facade["symbols"]
+                             if item["name"] == "answer")
+        public_action = next(item for item in public_facade["symbols"]
+                             if item["name"] == "announce")
+        require(public_answer["definition"]["path"] == "math/integer.bas",
+                "Facade metadata lost the original definition location")
+        require(public_action["kind"] == "action" and public_action["effects"] != 0,
+                "Facade metadata lost the original Action kind or effects")
+        private_source = facade_root / "math" / "integer.bas"
+        original_interface_hash = public_facade["interfaceHash"]
+        private_source.write_text(
+            'EXPORT FUNCTION answer()\n    RETURN 43\nEND FUNCTION\n'
+            'EXPORT ACTION announce()\n    print("action")\nEND ACTION\n',
+            encoding="utf-8")
+        changed_analysis = subprocess.run([
+            str(compiler), "check", "--root", str(facade_root), "main.bas",
+            "--source-stdin", "--diagnostics=json", "--include-interfaces",
+        ], input=facade_source, capture_output=True, text=True, cwd=repository,
+            check=False)
+        changed_facade = next(item for item in json.loads(changed_analysis.stdout)["interfaces"]
+                              if item["path"] == "math/math.bas")
+        require(changed_facade["interfaceHash"] == original_interface_hash,
+                "private implementation change altered the Facade interface fingerprint")
+        private_source.write_text(
+            'EXPORT FUNCTION answer()\n    RETURN "forty-two"\nEND FUNCTION\n'
+            'EXPORT ACTION announce()\n    print("action")\nEND ACTION\n',
+            encoding="utf-8")
+        public_change = subprocess.run([
+            str(compiler), "check", "--root", str(facade_root), "main.bas",
+            "--source-stdin", "--diagnostics=json", "--include-interfaces",
+        ], input=facade_source, capture_output=True, text=True, cwd=repository,
+            check=False)
+        require(public_change.returncode == 0,
+                f"Facade public contract analysis failed: {public_change.stderr}")
+        changed_contract = next(item for item in json.loads(public_change.stdout)["interfaces"]
+                                if item["path"] == "math/math.bas")
+        require(changed_contract["interfaceHash"] != original_interface_hash,
+                "public type change did not alter the Facade interface fingerprint")
+        private_source.write_text(
+            'EXPORT FUNCTION answer()\n    RETURN 42\nEND FUNCTION\n'
+            'EXPORT ACTION announce()\n    print("action")\nEND ACTION\n',
+            encoding="utf-8")
+        facade_document = (facade_root / "main.bas").as_uri()
+        facade_requests = [
+            {"jsonrpc": "2.0", "id": 10, "method": "initialize", "params": {}},
+            {"jsonrpc": "2.0", "method": "textDocument/didOpen", "params": {
+                "textDocument": {"uri": facade_document, "languageId": "ombasic",
+                                 "version": 1, "text": facade_source}}},
+            {"jsonrpc": "2.0", "id": 11, "method": "textDocument/completion", "params": {
+                "textDocument": {"uri": facade_document},
+                "position": {"line": 2, "character": 18}}},
+            {"jsonrpc": "2.0", "id": 12, "method": "textDocument/hover", "params": {
+                "textDocument": {"uri": facade_document},
+                "position": {"line": 2, "character": 23}}},
+            {"jsonrpc": "2.0", "id": 14, "method": "textDocument/definition", "params": {
+                "textDocument": {"uri": facade_document},
+                "position": {"line": 2, "character": 23}}},
+            {"jsonrpc": "2.0", "id": 13, "method": "shutdown", "params": None},
+            {"jsonrpc": "2.0", "method": "exit", "params": None},
+        ]
+        facade_server = subprocess.run(
+            [str(compiler), "lsp", "--root", str(facade_root)],
+            input=b"".join(lsp_message(item) for item in facade_requests),
+            capture_output=True, cwd=repository, timeout=45, check=False)
+        require(facade_server.returncode == 0,
+                "LSP facade server failed: " + facade_server.stderr.decode(
+                    "utf-8", errors="replace"))
+        facade_responses = read_lsp_messages(facade_server.stdout)
+        completion = next((item for item in facade_responses if item.get("id") == 11), None)
+        require(completion is not None and any(
+            item.get("label") == "answer" for item in completion["result"]["items"]),
+            "LSP completion omitted a Facade re-export")
+        facade_hover = next((item for item in facade_responses if item.get("id") == 12), None)
+        require(facade_hover is not None and facade_hover["result"] is not None
+                and "Int" in facade_hover["result"]["contents"]["value"],
+                "LSP hover omitted Facade member type information")
+        definition = next((item for item in facade_responses if item.get("id") == 14), None)
+        require(definition is not None and definition["result"] is not None
+                and definition["result"]["uri"].endswith("/math/integer.bas")
+                and definition["result"]["range"]["start"]["line"] == 0,
+                "LSP go-to-definition did not reach the original declaration")
+    print("PASS tooling CLI, native run/build, formatter, diagnostics JSON, bind, LSP hover/inlay/completion")
     return 0
 
 

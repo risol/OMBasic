@@ -1,0 +1,3 @@
+FUNCTION hidden()
+    RETURN 42
+END FUNCTION

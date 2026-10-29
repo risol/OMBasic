@@ -2274,13 +2274,13 @@ static Om_Status infer_expression(Om_Infer_Context *context,
             }
             break;
         }
-        if (node->child_count > 1) {
+        if (node->child_count < 1 || node->child_count > 2) {
             return OM_STATUS_INVALID_ARGUMENT;
         }
-        if (node->child_count == 1) {
+        if (node->child_count == 2) {
             Om_Type_Id placement = OM_TYPE_ID_INVALID;
             status = infer_expression(context, module,
-                                      infer_child(context, module, node, 0),
+                                      infer_child(context, module, node, 1),
                                       level, &placement);
             if (status == OM_STATUS_OK) {
                 status = unify_at(context, module, node->span,

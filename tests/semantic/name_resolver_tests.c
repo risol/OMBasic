@@ -651,6 +651,35 @@ cleanup:
     return true;
 }
 
+bool om_test_name_resolution_reexport_surface(void)
+{
+    Om_Semantic_Test_Project test_project = {0};
+    bool passed = false;
+    SEMANTIC_ASSERT(load_and_resolve("reexport/main.bas", &test_project));
+    SEMANTIC_ASSERT(test_project.resolution.diagnostic_count == 0);
+    const Om_Module_Id facade = find_module(&test_project,
+                                             "reexport/api/api.bas");
+    const Om_Module_Id core = find_module(&test_project,
+                                           "reexport/api/core.bas");
+    SEMANTIC_ASSERT(facade.value != UINT32_MAX && core.value != UINT32_MAX);
+    SEMANTIC_ASSERT(om_resolution_module_export_count(
+                        &test_project.resolution, facade) == 1);
+    const Om_Module_Export *entry = om_resolution_module_export_at(
+        &test_project.resolution, facade, 0);
+    SEMANTIC_ASSERT(entry != NULL && entry->name.length == 6
+                    && memcmp(entry->name.data, "answer", 6) == 0);
+    const Om_Symbol *symbol = om_resolution_symbol_by_id(
+        &test_project.resolution, entry->symbol_id);
+    SEMANTIC_ASSERT(symbol != NULL && symbol->module_id.value == core.value
+                    && symbol->exported);
+    passed = true;
+
+cleanup:
+    destroy_test_project(&test_project);
+    OM_TEST_ASSERT(passed);
+    return true;
+}
+
 bool om_test_name_resolution_private_member(void)
 {
     Om_Semantic_Test_Project test_project = {0};

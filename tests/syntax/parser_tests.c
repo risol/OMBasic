@@ -392,6 +392,47 @@ cleanup:
     return passed;
 }
 
+bool om_test_parser_reexport_import(void)
+{
+    static const uint8_t input[] =
+        "EXPORT IMPORT \"./core.bas\"\n"
+        "EXPORT FUNCTION answer()\n    RETURN 42\nEND FUNCTION\n";
+    static const uint8_t invalid[] =
+        "FUNCTION first()\n    RETURN 1\nEND FUNCTION\n"
+        "EXPORT IMPORT \"./core.bas\"\n";
+    Om_Source_Text source = {0};
+    Om_Lexer_Result lexed = {0};
+    Om_Parser_Result parsed = {0};
+    bool passed = false;
+    PARSER_ASSERT(scan_and_parse(&source, &lexed, &parsed, input,
+                                 sizeof(input) - 1, 104));
+    PARSER_ASSERT(parsed.diagnostic_count == 0);
+    const Om_Ast_Node *program = om_ast_get_node(&parsed.ast, parsed.ast.root);
+    PARSER_ASSERT(program != NULL && program->child_count == 2);
+    const Om_Ast_Node *import = om_ast_get_node(
+        &parsed.ast, om_ast_get_child(&parsed.ast, program, 0));
+    PARSER_ASSERT(import != NULL && import->kind == OM_AST_IMPORT
+                  && (import->flags & OM_AST_FLAG_REEXPORT) != 0
+                  && import->name.length == sizeof("\"./core.bas\"") - 1
+                  && memcmp(import->name.data, "\"./core.bas\"",
+                            sizeof("\"./core.bas\"") - 1) == 0
+                  && import->span.start == 0);
+    om_parser_result_destroy(&parsed);
+    om_lexer_result_destroy(&lexed);
+    om_source_text_destroy(&source);
+    PARSER_ASSERT(scan_and_parse(&source, &lexed, &parsed, invalid,
+                                 sizeof(invalid) - 1, 105));
+    PARSER_ASSERT(parsed.diagnostic_count != 0);
+    passed = true;
+
+cleanup:
+    om_parser_result_destroy(&parsed);
+    om_lexer_result_destroy(&lexed);
+    om_source_text_destroy(&source);
+    OM_TEST_ASSERT(passed);
+    return true;
+}
+
 bool om_test_parser_errors_and_recovery(void)
 {
     static const uint8_t input[] =

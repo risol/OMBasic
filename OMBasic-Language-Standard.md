@@ -1765,6 +1765,31 @@ a.bas -> b.bas -> c.bas -> a.bas
 
 编译器和 LSP 可以读取该 metadata 进行增量编译、补全和静态分析，但 metadata 不得改变源码中可见的 Import 语义。
 
+### 21.13 Directory Facade 约定
+**OM-21.13 — Directory Facade 约定**
+
+目录不是 Module，也不因包含 `.bas` 文件而自动导出内容。源码库可以约定目录 `json/` 中的 `json/json.bas` 是其公共 Facade；调用方仍必须使用普通 `IMPORT` 显式导入该文件。编译器不得扫描目录、推断 Facade 或自动导出目录成员。
+
+### 21.14 当前 Module 相对 Import
+**OM-21.14 — 当前 Module 相对 Import**
+
+`./` 开头的 Import 路径相对于包含该 Import 的 `.bas` 文件所在目录解析。解析结果仍须位于固定 Source Root 内，并遵守本节规定的路径大小写、扩展名和符号链接安全规则。其他 Import 路径仍相对于 Source Root 解析。路径解析不得搜索目录或隐式回退。
+
+### 21.15 显式 Re-export
+**OM-21.15 — 显式 Re-export**
+
+模块可在 Import 前缀中写 `EXPORT IMPORT "./parser.bas"`。该语句导入目标 Module，并把目标 Module 的公开声明按原符号名平铺加入当前 Module 的公开 API；它不导出目标 Module 的 Alias，不创建合成声明，也不改变原始符号身份和定义位置。只有目标 Module 自身公开的声明可被重导出。重导出可传递组合。Re-export Import 参与普通 Module 依赖图，所有循环仍须在编译期拒绝。
+
+### 21.16 Re-export 可见性与冲突
+**OM-21.16 — Re-export 可见性与冲突**
+
+私有声明不得经由 Re-export 公开。相同原始符号通过多条路径到达时按一个符号处理；当前 Module 对同一名称公开不同原始符号时，编译器必须报告冲突并标注冲突来源。普通 `IMPORT` 仍只建立 Module Alias，不改变导入方的无限定名称查找。
+
+### 21.17 Facade 公开面与 canonical identity
+**OM-21.17 — Facade 公开面与 canonical identity**
+
+Module 的公开面由其 `EXPORT` 声明和有效的 `EXPORT IMPORT` 共同确定。导入别名仍由目标文件名 stem 决定；Facade 不会改变 Module identity。公开接口 metadata 应反映 Facade 可见名称并保留原始声明位置，公开 API fingerprint 不应因私有实现内容变化而变化。
+
 ---
 
 ## 22. Effect 与工具可见性

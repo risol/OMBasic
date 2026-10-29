@@ -67,7 +67,8 @@ typedef enum Om_Ast_Flag {
     OM_AST_FLAG_FOR_EACH = 1u << 5,
     OM_AST_FLAG_CASE_ELSE = 1u << 6,
     OM_AST_FLAG_MIN_INTEGER = 1u << 7,
-    OM_AST_FLAG_EXPORTED = 1u << 8
+    OM_AST_FLAG_EXPORTED = 1u << 8,
+    OM_AST_FLAG_REEXPORT = 1u << 9
 } Om_Ast_Flag;
 
 /*

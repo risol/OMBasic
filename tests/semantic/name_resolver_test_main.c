@@ -1,6 +1,7 @@
 #include "test.h"
 
 bool om_test_name_resolution_visibility(void);
+bool om_test_name_resolution_reexport_surface(void);
 bool om_test_name_resolution_private_member(void);
 bool om_test_name_resolution_alias_collision(void);
 bool om_test_name_resolution_declaration_diagnostics(void);
@@ -21,6 +22,7 @@ int main(void)
 {
     const Om_Test_Case tests[] = {
         {"name_resolution_visibility", om_test_name_resolution_visibility},
+        {"name_resolution_reexport_surface", om_test_name_resolution_reexport_surface},
         {"name_resolution_private_member", om_test_name_resolution_private_member},
         {"name_resolution_alias_collision", om_test_name_resolution_alias_collision},
         {"name_resolution_declaration_diagnostics",
