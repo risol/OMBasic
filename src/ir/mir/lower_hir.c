@@ -1,4 +1,5 @@
 #include "ombasic/ir/mir.h"
+#include "ombasic/ir/query_ir.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -3411,6 +3412,12 @@ static Om_Status lower_query(Om_Mir_Lowering_Context *context,
                              const Om_Hir_Node *node,
                              Om_Mir_Value_Id *out_value)
 {
+    Om_Query_Plan query_plan = {0};
+    Om_Status status = om_query_plan_build(context->hir, node->id,
+                                            &query_plan);
+    if (status != OM_STATUS_OK) {
+        return status;
+    }
     const Om_Hir_Node *source_node = node->child_count > 0
         ? hir_child(context->hir, node, 0) : NULL;
     const Om_Hir_Node *select_clause = NULL;
@@ -3434,8 +3441,7 @@ static Om_Status lower_query(Om_Mir_Lowering_Context *context,
     }
     Om_Mir_Env_Entry *outer_environment = NULL;
     size_t outer_count = 0;
-    Om_Status status = environment_snapshot(context, &outer_environment,
-                                            &outer_count);
+    status = environment_snapshot(context, &outer_environment, &outer_count);
     Om_Mir_Value_Id source_value = OM_MIR_VALUE_ID_INVALID;
     if (status == OM_STATUS_OK) {
         status = lower_expression(context, source_node->id, &source_value);
@@ -3566,6 +3572,7 @@ static Om_Status lower_query(Om_Mir_Lowering_Context *context,
         om_free(initial_key_lists);
         om_free(key_expressions);
         om_free(outer_environment);
+        om_query_plan_destroy(&query_plan);
         return status != OM_STATUS_OK ? status
             : outer_count > SIZE_MAX - 5 - key_count
                 ? OM_STATUS_OVERFLOW : OM_STATUS_OK;
@@ -3904,6 +3911,7 @@ static Om_Status lower_query(Om_Mir_Lowering_Context *context,
     om_free(initial_key_lists);
     om_free(key_expressions);
     om_free(outer_environment);
+    om_query_plan_destroy(&query_plan);
     return status;
 }
 
