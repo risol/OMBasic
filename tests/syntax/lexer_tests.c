@@ -127,12 +127,37 @@ cleanup:
     return passed;
 }
 
+bool om_test_lexer_list_take_name_compatibility(void)
+{
+    static const uint8_t input[] = "take TAKE order ORDER query QUERY";
+    Om_Source_Text source = {0};
+    Om_Lexer_Result result = {0};
+    bool passed = false;
+    LEX_ASSERT(scan_text(&source, &result, input, sizeof(input) - 1));
+    LEX_ASSERT(result.diagnostic_count == 0);
+    LEX_ASSERT(result.tokens[0].kind == OM_TOKEN_IDENTIFIER);
+    LEX_ASSERT(result.tokens[1].kind == OM_TOKEN_KEYWORD
+               && result.tokens[1].keyword == OM_KEYWORD_TAKE);
+    LEX_ASSERT(result.tokens[2].kind == OM_TOKEN_IDENTIFIER);
+    LEX_ASSERT(result.tokens[3].kind == OM_TOKEN_KEYWORD
+               && result.tokens[3].keyword == OM_KEYWORD_ORDER);
+    LEX_ASSERT(result.tokens[4].kind == OM_TOKEN_IDENTIFIER);
+    LEX_ASSERT(result.tokens[5].kind == OM_TOKEN_KEYWORD
+               && result.tokens[5].keyword == OM_KEYWORD_QUERY);
+    passed = true;
+cleanup:
+    om_lexer_result_destroy(&result);
+    om_source_text_destroy(&source);
+    return passed;
+}
+
 bool om_test_lexer_all_keywords(void)
 {
     static const uint8_t input[] =
-        "ACTION ACTOR AND AT BREAK CASE CONTINUE ELSE END EXPORT FALSE FOR FROM "
-        "FUNCTION IF IMPORT IN MESSAGE NATIVE NOT NULL OR RECORD "
-        "RECEIVE RETURN SELECT SELF SEND SPAWN STOP STEP THEN TO TRUE TRY VAR WATCH WHILE WITH";
+        "ACTION ACTOR AND AT BREAK CASE CONTINUE DESCENDING ELSE END EXPORT FALSE "
+        "FOR FROM FUNCTION IF IMPORT IN MESSAGE NATIVE NOT NULL OR QUERY ORDER BY "
+        "RECORD RECEIVE RETURN SELECT TAKE ASCENDING WHERE SELF SEND SPAWN STOP "
+        "STEP THEN TO TRUE TRY VAR WATCH WHILE WITH";
     Om_Source_Text source = {0};
     Om_Lexer_Result result = {0};
     bool passed = false;

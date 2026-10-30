@@ -9,6 +9,7 @@ bool om_test_parser_malformed_fuzz(void);
 bool om_test_parser_depth_limit(void);
 bool om_test_parser_block_depth_limit(void);
 bool om_test_parser_conformance_fixture(void);
+bool om_test_parser_query_expression(void);
 
 int main(void)
 {
@@ -22,6 +23,7 @@ int main(void)
         {"parser_depth_limit", om_test_parser_depth_limit},
         {"parser_block_depth_limit", om_test_parser_block_depth_limit},
         {"parser_conformance_fixture", om_test_parser_conformance_fixture},
+        {"parser_query_expression", om_test_parser_query_expression},
     };
     const size_t test_count = sizeof(tests) / sizeof(tests[0]);
     size_t failures = 0;

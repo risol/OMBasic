@@ -347,6 +347,16 @@ Om_Status initialize_types(Om_Llvm_Backend_Context *backend)
         list_length_parameters, 3, 0);
     backend->runtime_list_length = LLVMAddFunction(backend->module,
         "om_runtime_list_length", list_length_type);
+    LLVMTypeRef stable_order_parameters[7] = {
+        backend->byte_pointer_type, backend->byte_pointer_type,
+        LLVMPointerType(backend->byte_pointer_type, 0), backend->i64_type,
+        backend->i64_type, backend->i64_type,
+        LLVMPointerType(backend->byte_pointer_type, 0),
+    };
+    LLVMTypeRef stable_order_type = LLVMFunctionType(backend->i32_type,
+        stable_order_parameters, 7, 0);
+    backend->runtime_list_stable_order = LLVMAddFunction(backend->module,
+        "om_runtime_list_stable_order", stable_order_type);
     LLVMTypeRef map_set_parameters[4] = {
         backend->byte_pointer_type, backend->byte_pointer_type,
         value_pointer_type, value_pointer_type,
@@ -531,6 +541,7 @@ Om_Status initialize_types(Om_Llvm_Backend_Context *backend)
         || backend->runtime_list_create == NULL
         || backend->runtime_list_concat == NULL
         || backend->runtime_list_append == NULL
+        || backend->runtime_list_stable_order == NULL
         || backend->runtime_list_get == NULL
         || backend->runtime_list_length == NULL
         || backend->runtime_map_create == NULL

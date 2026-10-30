@@ -24,6 +24,8 @@ static Om_Status parse_expression_impl(Om_Parser *parser, unsigned minimum_prece
 static Om_Status parse_block(Om_Parser *parser, Om_Ast_Node_Id *out);
 static Om_Status parse_block_impl(Om_Parser *parser, Om_Ast_Node_Id *out);
 static Om_Status parse_statement(Om_Parser *parser, Om_Ast_Node_Id *out);
+static Om_Status parse_query_expression(Om_Parser *parser,
+                                        Om_Ast_Node_Id *out);
 
 static const Om_Token *peek(const Om_Parser *parser)
 {
@@ -339,6 +341,9 @@ static Om_Status parse_integer_node(Om_Parser *parser, bool allow_minimum,
 static Om_Status parse_primary(Om_Parser *parser, Om_Ast_Node_Id *out)
 {
     const Om_Token *token = peek(parser);
+    if (at_keyword(parser, OM_KEYWORD_QUERY)) {
+        return parse_query_expression(parser, out);
+    }
     if (token->kind == OM_TOKEN_INTEGER) {
         return parse_integer_node(parser, false, out);
     }
@@ -918,6 +923,260 @@ static Om_Status parse_expression(Om_Parser *parser, unsigned minimum_precedence
     ++parser->expression_depth;
     const Om_Status status = parse_expression_impl(parser, minimum_precedence, out);
     --parser->expression_depth;
+    return status;
+}
+
+static Om_Status parse_query_expression(Om_Parser *parser,
+                                        Om_Ast_Node_Id *out)
+{
+    const Om_Token *begin = advance(parser);
+    Om_Token range_name = {0};
+    Om_Status status = expect_name(parser, false, &range_name);
+    if (status == OM_STATUS_OK) {
+        status = expect_keyword(parser, OM_KEYWORD_IN);
+    }
+
+    Om_Vector children = {0};
+    status = status == OM_STATUS_OK ? init_id_list(&children) : status;
+    Om_Ast_Node_Id source = OM_AST_NODE_ID_INVALID;
+    if (status == OM_STATUS_OK) {
+        status = parse_expression(parser, 1, &source);
+    }
+    if (status == OM_STATUS_OK) {
+        status = push_id(&children, source);
+    }
+    if (status == OM_STATUS_OK) {
+        status = consume_line_end(parser);
+    }
+
+    bool saw_order = false;
+    bool saw_take = false;
+    bool saw_select = false;
+    unsigned phase = 0;
+    const Om_Token *end = begin;
+    bool saw_end = false;
+    while (status == OM_STATUS_OK && !at_kind(parser, OM_TOKEN_EOF)) {
+        skip_newlines_and_docs(parser);
+        if (at_kind(parser, OM_TOKEN_EOF)) {
+            break;
+        }
+        if (at_keyword(parser, OM_KEYWORD_END)) {
+            (void)advance(parser);
+            end = peek(parser);
+            status = expect_keyword(parser, OM_KEYWORD_QUERY);
+            if (status == OM_STATUS_OK && !saw_select) {
+                status = add_diagnostic(parser, OM_PARSE_DIAGNOSTIC_E0202,
+                    end->span, OM_TOKEN_KEYWORD, OM_KEYWORD_SELECT);
+            }
+            if (status == OM_STATUS_OK) {
+                saw_end = true;
+            }
+            break;
+        }
+        if (at_keyword(parser, OM_KEYWORD_WHERE)) {
+            const Om_Token *clause = advance(parser);
+            if (phase > 0 || saw_select) {
+                status = add_diagnostic(parser, OM_PARSE_DIAGNOSTIC_E0202,
+                    clause->span, OM_TOKEN_KEYWORD, OM_KEYWORD_ORDER);
+            }
+            Om_Ast_Node_Id expression = OM_AST_NODE_ID_INVALID;
+            if (status == OM_STATUS_OK) {
+                status = parse_expression(parser, 1, &expression);
+            }
+            if (status == OM_STATUS_OK) {
+                const Om_Ast_Node_Id clause_children[] = {expression};
+                Om_Ast_Node_Id clause_id = OM_AST_NODE_ID_INVALID;
+                const Om_Ast_Node *expression_node = node_at(parser, expression);
+                status = make_node(parser, OM_AST_QUERY_WHERE,
+                    expression_node != NULL
+                        ? span_between(clause->span, expression_node->span)
+                        : clause->span,
+                    (Om_String_View){NULL, 0}, OM_TOKEN_KEYWORD,
+                    OM_KEYWORD_WHERE, OM_AST_FLAG_NONE, 0, 0, 0.0,
+                    clause_children, 1, &clause_id);
+                if (status == OM_STATUS_OK) {
+                    status = push_id(&children, clause_id);
+                }
+            }
+            if (status == OM_STATUS_OK) {
+                status = consume_line_end(parser);
+            }
+            continue;
+        }
+        if (at_keyword(parser, OM_KEYWORD_ORDER)) {
+            const Om_Token *clause = advance(parser);
+            if (phase > 1 || saw_order || saw_select) {
+                status = add_diagnostic(parser, OM_PARSE_DIAGNOSTIC_E0202,
+                    clause->span, OM_TOKEN_KEYWORD, OM_KEYWORD_TAKE);
+            }
+            if (status == OM_STATUS_OK) {
+                status = expect_keyword(parser, OM_KEYWORD_BY);
+            }
+            if (status == OM_STATUS_OK) {
+                phase = 1;
+                saw_order = true;
+            }
+            skip_newlines_and_docs(parser);
+            Om_Vector keys = {0};
+            if (status == OM_STATUS_OK) {
+                status = init_id_list(&keys);
+            }
+            while (status == OM_STATUS_OK
+                   && !at_kind(parser, OM_TOKEN_EOF)
+                   && !at_kind(parser, OM_TOKEN_NEWLINE)
+                   && !at_keyword(parser, OM_KEYWORD_END)) {
+                Om_Ast_Node_Id key_expression = OM_AST_NODE_ID_INVALID;
+                status = parse_expression(parser, 1, &key_expression);
+                if (status != OM_STATUS_OK) {
+                    break;
+                }
+                uint32_t key_flags = OM_AST_FLAG_NONE;
+                if (match_keyword(parser, OM_KEYWORD_ASCENDING)) {
+                    /* Ascending is the default; the explicit token is retained
+                       by the source span and is not otherwise semantically used. */
+                } else if (match_keyword(parser, OM_KEYWORD_DESCENDING)) {
+                    key_flags |= OM_AST_FLAG_QUERY_DESCENDING;
+                } else {
+                    status = add_diagnostic(parser, OM_PARSE_DIAGNOSTIC_E0202,
+                        peek(parser)->span, OM_TOKEN_KEYWORD,
+                        OM_KEYWORD_ASCENDING);
+                }
+                const Om_Ast_Node *key_node = node_at(parser, key_expression);
+                Om_Ast_Node_Id key_id = OM_AST_NODE_ID_INVALID;
+                if (status == OM_STATUS_OK) {
+                    status = make_node(parser, OM_AST_QUERY_ORDER_KEY,
+                        key_node != NULL ? key_node->span : clause->span,
+                        (Om_String_View){NULL, 0}, OM_TOKEN_KEYWORD,
+                        OM_KEYWORD_ORDER, key_flags, 0, 0, 0.0,
+                        &key_expression, 1, &key_id);
+                }
+                if (status == OM_STATUS_OK) {
+                    status = push_id(&keys, key_id);
+                }
+                if (status != OM_STATUS_OK || !at_kind(parser, OM_TOKEN_COMMA)) {
+                    break;
+                }
+                (void)advance(parser);
+                skip_newlines_and_docs(parser);
+            }
+            if (status == OM_STATUS_OK && keys.length == 0) {
+                status = add_diagnostic(parser, OM_PARSE_DIAGNOSTIC_E0202,
+                    peek(parser)->span, OM_TOKEN_IDENTIFIER, OM_KEYWORD_NONE);
+            }
+            if (status == OM_STATUS_OK) {
+                const Om_Ast_Node_Id *key_ids = keys.data;
+                const Om_Ast_Node *last_key = keys.length != 0
+                    ? node_at(parser, key_ids[keys.length - 1]) : NULL;
+                Om_Ast_Node_Id order_id = OM_AST_NODE_ID_INVALID;
+                status = make_node(parser, OM_AST_QUERY_ORDER,
+                    last_key != NULL
+                        ? span_between(clause->span, last_key->span)
+                        : clause->span,
+                    (Om_String_View){NULL, 0}, OM_TOKEN_KEYWORD,
+                    OM_KEYWORD_ORDER, OM_AST_FLAG_NONE, 0, 0, 0.0,
+                    key_ids, keys.length, &order_id);
+                if (status == OM_STATUS_OK) {
+                    status = push_id(&children, order_id);
+                }
+            }
+            om_vector_destroy(&keys);
+            if (status == OM_STATUS_OK) {
+                status = consume_line_end(parser);
+            }
+            continue;
+        }
+        if (at_keyword(parser, OM_KEYWORD_TAKE)) {
+            const Om_Token *clause = advance(parser);
+            if (phase > 2 || saw_take || saw_select) {
+                status = add_diagnostic(parser, OM_PARSE_DIAGNOSTIC_E0202,
+                    clause->span, OM_TOKEN_KEYWORD, OM_KEYWORD_SELECT);
+            }
+            if (status == OM_STATUS_OK) {
+                phase = 2;
+                saw_take = true;
+            }
+            Om_Ast_Node_Id expression = OM_AST_NODE_ID_INVALID;
+            if (status == OM_STATUS_OK) {
+                status = parse_expression(parser, 1, &expression);
+            }
+            if (status == OM_STATUS_OK) {
+                const Om_Ast_Node_Id clause_children[] = {expression};
+                const Om_Ast_Node *expression_node = node_at(parser, expression);
+                Om_Ast_Node_Id clause_id = OM_AST_NODE_ID_INVALID;
+                status = make_node(parser, OM_AST_QUERY_TAKE,
+                    expression_node != NULL
+                        ? span_between(clause->span, expression_node->span)
+                        : clause->span,
+                    (Om_String_View){NULL, 0}, OM_TOKEN_KEYWORD,
+                    OM_KEYWORD_TAKE, OM_AST_FLAG_NONE, 0, 0, 0.0,
+                    clause_children, 1, &clause_id);
+                if (status == OM_STATUS_OK) {
+                    status = push_id(&children, clause_id);
+                }
+            }
+            if (status == OM_STATUS_OK) {
+                status = consume_line_end(parser);
+            }
+            continue;
+        }
+        if (at_keyword(parser, OM_KEYWORD_SELECT)) {
+            const Om_Token *clause = advance(parser);
+            if (phase > 3 || saw_select) {
+                status = add_diagnostic(parser, OM_PARSE_DIAGNOSTIC_E0202,
+                    clause->span, OM_TOKEN_KEYWORD, OM_KEYWORD_END);
+            }
+            phase = 3;
+            saw_select = true;
+            Om_Ast_Node_Id expression = OM_AST_NODE_ID_INVALID;
+            if (status == OM_STATUS_OK) {
+                status = parse_expression(parser, 1, &expression);
+            }
+            if (status == OM_STATUS_OK) {
+                const Om_Ast_Node_Id clause_children[] = {expression};
+                const Om_Ast_Node *expression_node = node_at(parser, expression);
+                Om_Ast_Node_Id clause_id = OM_AST_NODE_ID_INVALID;
+                status = make_node(parser, OM_AST_QUERY_SELECT,
+                    expression_node != NULL
+                        ? span_between(clause->span, expression_node->span)
+                        : clause->span,
+                    (Om_String_View){NULL, 0}, OM_TOKEN_KEYWORD,
+                    OM_KEYWORD_SELECT, OM_AST_FLAG_NONE, 0, 0, 0.0,
+                    clause_children, 1, &clause_id);
+                if (status == OM_STATUS_OK) {
+                    status = push_id(&children, clause_id);
+                }
+            }
+            if (status == OM_STATUS_OK) {
+                status = consume_line_end(parser);
+            }
+            continue;
+        }
+
+        status = add_diagnostic(parser, OM_PARSE_DIAGNOSTIC_E0202,
+            peek(parser)->span, OM_TOKEN_KEYWORD, OM_KEYWORD_END);
+        if (status == OM_STATUS_OK) {
+            while (!at_kind(parser, OM_TOKEN_NEWLINE)
+                   && !at_kind(parser, OM_TOKEN_EOF)
+                   && !at_keyword(parser, OM_KEYWORD_END)) {
+                (void)advance(parser);
+            }
+            if (at_kind(parser, OM_TOKEN_NEWLINE)) {
+                (void)advance(parser);
+            }
+        }
+    }
+    if (status == OM_STATUS_OK && !saw_end) {
+        status = add_diagnostic(parser, OM_PARSE_DIAGNOSTIC_E0202,
+            peek(parser)->span, OM_TOKEN_KEYWORD, OM_KEYWORD_END);
+    }
+    if (status == OM_STATUS_OK) {
+        const Om_Ast_Node_Id *query_children = children.data;
+        status = make_node(parser, OM_AST_QUERY,
+            span_between(begin->span, end->span), range_name.lexeme,
+            OM_TOKEN_KEYWORD, OM_KEYWORD_QUERY, OM_AST_FLAG_NONE, 0, 0, 0.0,
+            query_children, children.length, out);
+    }
+    om_vector_destroy(&children);
     return status;
 }
 

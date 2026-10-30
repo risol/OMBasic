@@ -82,6 +82,16 @@ Om_Status om_runtime_list_get(const Om_Execution_Context *context,
 Om_Status om_runtime_list_length(const Om_Execution_Context *context,
                                  const void *list,
                                  size_t *result);
+/* Stable multi-key ordering; descending_mask bit i selects descending order
+   for key list i. Negative take counts produce an empty list. */
+Om_Status om_runtime_list_stable_order(
+    Om_Execution_Context *context,
+    const void *values,
+    const void *const *key_lists,
+    size_t key_count,
+    uint64_t descending_mask,
+    int64_t take_count,
+    void **result);
 
 Om_Status om_runtime_map_create(Om_Execution_Context *context,
                                 const Om_Runtime_Type_Descriptor *type,

@@ -667,6 +667,78 @@ Om_Status emit_instruction(Om_Llvm_Backend_Context *backend,
         }
         break;
     }
+    case OM_MIR_LIST_APPEND: {
+        if (instruction->operand_count != 2) {
+            status = OM_STATUS_INVALID_ARGUMENT;
+            break;
+        }
+        LLVMValueRef storage = NULL;
+        status = get_mir_value_storage(backend, operands[1], &storage, NULL);
+        if (status == OM_STATUS_OK) {
+            LLVMValueRef arguments[3] = {
+                context_for_function(backend, function), left, storage,
+            };
+            status = emit_runtime_status_call(backend, block_id,
+                backend->runtime_list_append, arguments, 3);
+        }
+        if (status == OM_STATUS_OK) {
+            result = left;
+        }
+        break;
+    }
+    case OM_MIR_LIST_STABLE_ORDER: {
+        if (instruction->operand_count < 3
+            || instruction->operand_count > 66) {
+            status = OM_STATUS_INVALID_ARGUMENT;
+            break;
+        }
+        const size_t key_count = instruction->operand_count - 2;
+        LLVMTypeRef key_array_type = LLVMArrayType(backend->byte_pointer_type,
+                                                   (unsigned)key_count);
+        LLVMValueRef key_array = entry_alloca(backend, function,
+            key_array_type, "query_order_keys");
+        LLVMValueRef result_slot = entry_alloca(backend, function,
+            backend->byte_pointer_type, "query_order_result");
+        if (key_array == NULL || result_slot == NULL) {
+            status = OM_STATUS_OUT_OF_MEMORY;
+            break;
+        }
+        LLVMBuildStore(backend->builder,
+            LLVMConstNull(backend->byte_pointer_type), result_slot);
+        for (size_t index = 0; status == OM_STATUS_OK && index < key_count;
+             ++index) {
+            LLVMValueRef indices[2] = {
+                LLVMConstInt(backend->i32_type, 0, 0),
+                LLVMConstInt(backend->i32_type, index, 0),
+            };
+            LLVMValueRef address = LLVMBuildGEP2(backend->builder,
+                key_array_type, key_array, indices, 2, "query_key_slot");
+            LLVMBuildStore(backend->builder, value_at(backend,
+                operands[index + 1]), address);
+        }
+        LLVMValueRef array_indices[2] = {
+            LLVMConstInt(backend->i32_type, 0, 0),
+            LLVMConstInt(backend->i32_type, 0, 0),
+        };
+        LLVMValueRef key_array_data = LLVMBuildGEP2(backend->builder,
+            key_array_type, key_array, array_indices, 2, "query_key_array");
+        LLVMValueRef arguments[7] = {
+            context_for_function(backend, function), left,
+            key_array_data,
+            LLVMConstInt(backend->i64_type, key_count, 0),
+            LLVMConstInt(backend->i64_type, instruction->integer_value, 0),
+            value_at(backend, operands[instruction->operand_count - 1]),
+            result_slot,
+        };
+        status = emit_runtime_status_call(backend, block_id,
+            backend->runtime_list_stable_order, arguments, 7);
+        if (status == OM_STATUS_OK) {
+            result = LLVMBuildLoad2(backend->builder,
+                backend->byte_pointer_type, result_slot, "query_ordered_list");
+            if (result == NULL) status = OM_STATUS_OUT_OF_MEMORY;
+        }
+        break;
+    }
     case OM_MIR_LIST_LENGTH:
     case OM_MIR_MAP_LENGTH: {
         if (instruction->operand_count != 1) {

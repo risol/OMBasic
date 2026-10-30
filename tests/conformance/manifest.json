@@ -3095,6 +3095,26 @@
       }
     },
     {
+      "id": "query-fused-scan-filter-take",
+      "rules": [
+        "OM-12.01",
+        "OM-12.03"
+      ],
+      "kind": "run",
+      "source": "24_query/fused_scan_take.bas",
+      "tags": [
+        "type",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "selected=4|empty=0|order=4,2,2,3|count=4\n"
+        }
+      }
+    },
+    {
       "id": "buffer-record-actor-message-clone",
       "rules": [
         "OM-18.01",

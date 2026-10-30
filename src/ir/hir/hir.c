@@ -309,6 +309,12 @@ static Om_Hir_Kind kind_for_ast(const Om_Hir_Lower_Context *context,
     case OM_AST_LIST: return OM_HIR_LIST;
     case OM_AST_MAP: return OM_HIR_MAP;
     case OM_AST_MAP_ENTRY: return OM_HIR_MAP_ENTRY;
+    case OM_AST_QUERY: return OM_HIR_QUERY;
+    case OM_AST_QUERY_WHERE: return OM_HIR_QUERY_WHERE;
+    case OM_AST_QUERY_ORDER: return OM_HIR_QUERY_ORDER;
+    case OM_AST_QUERY_ORDER_KEY: return OM_HIR_QUERY_ORDER_KEY;
+    case OM_AST_QUERY_TAKE: return OM_HIR_QUERY_TAKE;
+    case OM_AST_QUERY_SELECT: return OM_HIR_QUERY_SELECT;
     }
     return OM_HIR_PROGRAM;
 }
@@ -330,6 +336,9 @@ static uint32_t flags_for_ast(const Om_Ast_Node *node)
     }
     if ((node->flags & OM_AST_FLAG_MIN_INTEGER) != 0) {
         flags |= OM_HIR_FLAG_MIN_INTEGER;
+    }
+    if ((node->flags & OM_AST_FLAG_QUERY_DESCENDING) != 0) {
+        flags |= OM_HIR_FLAG_QUERY_DESCENDING;
     }
     return flags;
 }
@@ -788,6 +797,10 @@ static bool kind_requires_value_type(Om_Hir_Kind kind)
     case OM_HIR_GROUP:
     case OM_HIR_LIST:
     case OM_HIR_MAP:
+    case OM_HIR_QUERY:
+    case OM_HIR_QUERY_WHERE:
+    case OM_HIR_QUERY_TAKE:
+    case OM_HIR_QUERY_SELECT:
         return true;
     default:
         return false;
@@ -819,6 +832,7 @@ static bool kind_requires_symbol(Om_Hir_Kind kind)
     case OM_HIR_RESULT_ERROR:
     case OM_HIR_RECORD_CONSTRUCT:
     case OM_HIR_MESSAGE_CONSTRUCT:
+    case OM_HIR_QUERY:
         return true;
     default:
         return false;
@@ -830,6 +844,120 @@ static bool hir_symbol_exists(const Om_Hir_Project *project,
 {
     return symbol_id.value != UINT32_MAX
         && om_resolution_symbol_by_id(project->resolution, symbol_id) != NULL;
+}
+
+static Om_Status resolved_type_view(const Om_Hir_Project *project,
+                                    Om_Type_Id type_id,
+                                    Om_Type_Id *resolved,
+                                    Om_Type_View *view);
+
+static bool query_structure_valid(const Om_Hir_Project *project,
+                                  const Om_Hir_Node *query)
+{
+    if (query->child_count < 2) {
+        return false;
+    }
+    const Om_Hir_Node *source = om_hir_child_at(project, query, 0);
+    Om_Type_Id source_type = OM_TYPE_ID_INVALID;
+    Om_Type_View source_view = {0};
+    if (source == NULL
+        || resolved_type_view(project, source->type_id, &source_type,
+                              &source_view) != OM_STATUS_OK
+        || source_view.kind != OM_TYPE_LIST) {
+        return false;
+    }
+    unsigned phase = 0;
+    const uint32_t forbidden_query_effects =
+        (uint32_t)OM_EFFECT_MUTATES_LOCAL
+        | (uint32_t)OM_EFFECT_MUTATES_ACTOR_STATE
+        | (uint32_t)OM_EFFECT_SEND_MESSAGE
+        | (uint32_t)OM_EFFECT_SPAWN_ACTOR
+        | (uint32_t)OM_EFFECT_NATIVE
+        | (uint32_t)OM_EFFECT_FILE_IO
+        | (uint32_t)OM_EFFECT_NETWORK_IO
+        | (uint32_t)OM_EFFECT_CLOCK
+        | (uint32_t)OM_EFFECT_WATCH
+        | (uint32_t)OM_EFFECT_STOP
+        | (uint32_t)OM_EFFECT_CALL_ACTION;
+    if ((query->effects & forbidden_query_effects) != 0) {
+        return false;
+    }
+    bool saw_order = false;
+    bool saw_take = false;
+    bool saw_select = false;
+    for (size_t index = 1; index < query->child_count; ++index) {
+        const Om_Hir_Node *clause = om_hir_child_at(project, query, index);
+        if (clause == NULL) {
+            return false;
+        }
+        if (clause->kind == OM_HIR_QUERY_WHERE) {
+            if (phase != 0 || clause->child_count != 1) {
+                return false;
+            }
+        } else if (clause->kind == OM_HIR_QUERY_ORDER) {
+            if (phase > 1 || saw_order || clause->child_count == 0) {
+                return false;
+            }
+            phase = 1;
+            saw_order = true;
+            for (size_t key_index = 0; key_index < clause->child_count;
+                 ++key_index) {
+                const Om_Hir_Node *key = om_hir_child_at(project, clause,
+                                                        key_index);
+                if (key == NULL || key->kind != OM_HIR_QUERY_ORDER_KEY
+                    || key->child_count != 1) {
+                    return false;
+                }
+                const Om_Hir_Node *key_expression = om_hir_child_at(project,
+                                                                   key, 0);
+                Om_Type_Id key_type = OM_TYPE_ID_INVALID;
+                Om_Type_View key_view = {0};
+                if (key_expression == NULL
+                    || resolved_type_view(project, key_expression->type_id,
+                        &key_type, &key_view) != OM_STATUS_OK
+                    || (key_view.kind != OM_TYPE_INT
+                        && key_view.kind != OM_TYPE_STRING)) {
+                    return false;
+                }
+            }
+        } else if (clause->kind == OM_HIR_QUERY_TAKE) {
+            if (phase > 2 || saw_take || clause->child_count != 1) {
+                return false;
+            }
+            phase = 2;
+            saw_take = true;
+        } else if (clause->kind == OM_HIR_QUERY_SELECT) {
+            if (phase > 3 || saw_select || clause->child_count != 1) {
+                return false;
+            }
+            phase = 3;
+            saw_select = true;
+        } else {
+            return false;
+        }
+        if (clause->kind == OM_HIR_QUERY_WHERE) {
+            const Om_Hir_Node *expression = om_hir_child_at(project, clause, 0);
+            Om_Type_Id expression_type = OM_TYPE_ID_INVALID;
+            Om_Type_View expression_view = {0};
+            if (expression == NULL
+                || resolved_type_view(project, expression->type_id,
+                    &expression_type, &expression_view) != OM_STATUS_OK
+                || expression_view.kind != OM_TYPE_BOOL) {
+                return false;
+            }
+        } else if (clause->kind == OM_HIR_QUERY_TAKE) {
+            const Om_Hir_Node *expression = om_hir_child_at(project, clause, 0);
+            Om_Type_Id expression_type = OM_TYPE_ID_INVALID;
+            Om_Type_View expression_view = {0};
+            if (expression == NULL
+                || resolved_type_view(project, expression->type_id,
+                    &expression_type, &expression_view) != OM_STATUS_OK
+                || expression_view.kind != OM_TYPE_INT) {
+                return false;
+            }
+        }
+    }
+    return saw_select;
 }
 
 static Om_Status resolved_type_view(const Om_Hir_Project *project,
@@ -1015,10 +1143,21 @@ Om_Status om_hir_verify_project(const Om_Hir_Project *project,
                        || (node->kind == OM_HIR_MESSAGE_CONSTRUCT
                            && view.kind != OM_TYPE_MESSAGE)
                        || (node->kind == OM_HIR_SYSTEM_ACTOR_REF
-                           && view.kind != OM_TYPE_ACTOR_REF)) {
+                           && view.kind != OM_TYPE_ACTOR_REF)
+                       || (node->kind == OM_HIR_QUERY
+                           && view.kind != OM_TYPE_LIST)
+                       || (node->kind == OM_HIR_QUERY_WHERE
+                           && view.kind != OM_TYPE_BOOL)
+                       || (node->kind == OM_HIR_QUERY_TAKE
+                           && view.kind != OM_TYPE_INT)) {
                 status = push_diagnostic(&diagnostics,
                                          OM_HIR_DIAGNOSTIC_E0904, node);
             }
+        }
+        if (status == OM_STATUS_OK && node->kind == OM_HIR_QUERY
+            && !query_structure_valid(project, node)) {
+            status = push_diagnostic(&diagnostics,
+                                     OM_HIR_DIAGNOSTIC_E0901, node);
         }
         if (status == OM_STATUS_OK && node->kind == OM_HIR_FUNCTION
             && (node->effects & forbidden_function_effects) != 0) {
@@ -1310,7 +1449,8 @@ const char *om_hir_kind_name(Om_Hir_Kind kind)
         "result-ok", "result-error", "record-construct", "message-construct",
         "field-read", "symbol-ref", "system-actor-ref", "index",
         "record-with", "field-update", "spawn", "group", "list", "map",
-        "map-entry",
+        "map-entry", "query", "query-where", "query-order",
+        "query-order-key", "query-take", "query-select",
     };
     return (size_t)kind < sizeof(names) / sizeof(names[0])
         ? names[kind] : "invalid-hir-kind";

@@ -280,6 +280,7 @@ target_link_libraries(ombasic_specialization
 add_library(ombasic_mir STATIC
     src/ir/mir/lower_hir.c
     src/ir/mir/mir.c
+    src/ir/query/query_ir.c
 )
 add_library(ombasic::mir ALIAS ombasic_mir)
 target_include_directories(ombasic_mir PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")

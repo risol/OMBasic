@@ -83,8 +83,22 @@ static const char *ast_kind_name(Om_Ast_Kind kind)
     case OM_AST_LIST: return "List";
     case OM_AST_MAP: return "Map";
     case OM_AST_MAP_ENTRY: return "MapEntry";
+    case OM_AST_QUERY: return "Query";
+    case OM_AST_QUERY_WHERE: return "QueryWhere";
+    case OM_AST_QUERY_ORDER: return "QueryOrder";
+    case OM_AST_QUERY_ORDER_KEY: return "QueryOrderKey";
+    case OM_AST_QUERY_TAKE: return "QueryTake";
+    case OM_AST_QUERY_SELECT: return "QuerySelect";
     default: return "Unknown";
     }
+}
+
+static const Om_Ast_Node *ast_child_node(const Om_Ast *ast,
+                                         const Om_Ast_Node *node,
+                                         size_t index)
+{
+    return node != NULL
+        ? om_ast_get_node(ast, om_ast_get_child(ast, node, index)) : NULL;
 }
 
 static bool append_bytes(char *output, size_t capacity, size_t *length,
@@ -676,5 +690,55 @@ cleanup:
     om_lexer_result_destroy(&lexed);
     om_source_text_destroy(&source);
     om_free(source_bytes);
+    return passed;
+}
+
+bool om_test_parser_query_expression(void)
+{
+    static const uint8_t input[] =
+        "ACTION main()\n"
+        "    VAR result = QUERY item IN items\n"
+        "        WHERE item > 0\n"
+        "        WHERE item < 100\n"
+        "        ORDER BY item DESCENDING, item ASCENDING\n"
+        "        TAKE 10\n"
+        "        SELECT item\n"
+        "    END QUERY\n"
+        "END ACTION\n";
+    Om_Source_Text source = {0};
+    Om_Lexer_Result lexed = {0};
+    Om_Parser_Result parsed = {0};
+    bool passed = false;
+    PARSER_ASSERT(scan_and_parse(&source, &lexed, &parsed, input,
+                                 sizeof(input) - 1, 41));
+    PARSER_ASSERT(lexed.diagnostic_count == 0);
+    PARSER_ASSERT(parsed.diagnostic_count == 0);
+    const Om_Ast_Node *query = NULL;
+    for (size_t index = 0; index < parsed.ast.node_count; ++index) {
+        if (parsed.ast.nodes[index].kind == OM_AST_QUERY) {
+            query = &parsed.ast.nodes[index];
+            break;
+        }
+    }
+    PARSER_ASSERT(query != NULL && query->child_count == 6);
+    PARSER_ASSERT(ast_child_node(&parsed.ast, query, 0)->kind == OM_AST_NAME);
+    PARSER_ASSERT(ast_child_node(&parsed.ast, query, 1)->kind == OM_AST_QUERY_WHERE);
+    PARSER_ASSERT(ast_child_node(&parsed.ast, query, 2)->kind == OM_AST_QUERY_WHERE);
+    const Om_Ast_Node *order = ast_child_node(&parsed.ast, query, 3);
+    PARSER_ASSERT(order != NULL && order->kind == OM_AST_QUERY_ORDER
+                  && order->child_count == 2);
+    const Om_Ast_Node *descending = ast_child_node(&parsed.ast, order, 0);
+    const Om_Ast_Node *ascending = ast_child_node(&parsed.ast, order, 1);
+    PARSER_ASSERT(descending != NULL
+                  && (descending->flags & OM_AST_FLAG_QUERY_DESCENDING) != 0);
+    PARSER_ASSERT(ascending != NULL
+                  && (ascending->flags & OM_AST_FLAG_QUERY_DESCENDING) == 0);
+    PARSER_ASSERT(ast_child_node(&parsed.ast, query, 4)->kind == OM_AST_QUERY_TAKE);
+    PARSER_ASSERT(ast_child_node(&parsed.ast, query, 5)->kind == OM_AST_QUERY_SELECT);
+    passed = true;
+cleanup:
+    om_parser_result_destroy(&parsed);
+    om_lexer_result_destroy(&lexed);
+    om_source_text_destroy(&source);
     return passed;
 }

@@ -993,6 +993,11 @@ static Om_Status resolve_statement(Om_Resolver *resolver,
                                   Om_Module_Id module,
                                   Om_Ast_Node_Id statement_id,
                                   Om_Scope_Id scope);
+static Om_Status resolve_query(Om_Resolver *resolver,
+                               Om_Module_Id module,
+                               Om_Ast_Node_Id node_id,
+                               const Om_Ast_Node *node,
+                               Om_Scope_Id scope);
 
 static Om_Status report_undefined(Om_Resolver *resolver, Om_Module_Id module,
                                   Om_Source_Span span)
@@ -1128,6 +1133,8 @@ static Om_Status resolve_expression(Om_Resolver *resolver,
         return status;
     }
     switch (node->kind) {
+    case OM_AST_QUERY:
+        return resolve_query(resolver, module, node_id, node, scope);
     case OM_AST_NAME:
         return resolve_name(resolver, module, node_id, scope);
     case OM_AST_MEMBER:
@@ -1181,6 +1188,11 @@ static Om_Status resolve_expression(Om_Resolver *resolver,
     case OM_AST_FOR:
     case OM_AST_SELECT:
     case OM_AST_CASE_ARM:
+    case OM_AST_QUERY_WHERE:
+    case OM_AST_QUERY_ORDER:
+    case OM_AST_QUERY_ORDER_KEY:
+    case OM_AST_QUERY_TAKE:
+    case OM_AST_QUERY_SELECT:
         return OM_STATUS_INVALID_ARGUMENT;
     default:
         break;
@@ -1330,6 +1342,79 @@ static Om_Status resolve_for(Om_Resolver *resolver,
         status = resolve_block(resolver, module,
                                ast_child(resolver, module, node, node->child_count - 1),
                                loop_scope);
+    }
+    return status;
+}
+
+static Om_Status resolve_query(Om_Resolver *resolver,
+                               Om_Module_Id module,
+                               Om_Ast_Node_Id node_id,
+                               const Om_Ast_Node *node,
+                               Om_Scope_Id scope)
+{
+    if (node->child_count < 2 || node->name.data == NULL
+        || node->name.length == 0) {
+        return OM_STATUS_INVALID_ARGUMENT;
+    }
+    Om_Status status = resolve_expression(resolver, module,
+        ast_child(resolver, module, node, 0), scope);
+    Om_Scope_Id query_scope = OM_SCOPE_ID_INVALID;
+    if (status == OM_STATUS_OK) {
+        status = add_scope(resolver, scope, OM_SCOPE_LOOP, module, node_id,
+                           &query_scope);
+    }
+    if (status == OM_STATUS_OK) {
+        status = set_node_scope(resolver, module, node_id, query_scope);
+    }
+    if (status == OM_STATUS_OK) {
+        Om_Symbol_Id range_symbol = OM_SYMBOL_ID_INVALID;
+        status = declare_symbol(resolver, module, query_scope, node->name,
+            OM_SYMBOL_LOOP_VARIABLE, node->span, node_id, false, false,
+            OM_MODULE_ID_INVALID, &range_symbol);
+    }
+    for (size_t index = 1; status == OM_STATUS_OK
+         && index < node->child_count; ++index) {
+        const Om_Ast_Node_Id clause_id = ast_child(resolver, module, node, index);
+        const Om_Ast_Node *clause = ast_node(resolver, module, clause_id);
+        if (clause == NULL) {
+            return OM_STATUS_INVALID_ARGUMENT;
+        }
+        const Om_Scope_Id clause_scope = clause->kind == OM_AST_QUERY_TAKE
+            ? scope : query_scope;
+        status = set_node_scope(resolver, module, clause_id, clause_scope);
+        if (status != OM_STATUS_OK) {
+            break;
+        }
+        if (clause->kind == OM_AST_QUERY_WHERE
+            || clause->kind == OM_AST_QUERY_TAKE
+            || clause->kind == OM_AST_QUERY_SELECT) {
+            if (clause->child_count != 1) {
+                return OM_STATUS_INVALID_ARGUMENT;
+            }
+            status = resolve_expression(resolver, module,
+                ast_child(resolver, module, clause, 0), clause_scope);
+        } else if (clause->kind == OM_AST_QUERY_ORDER) {
+            if (clause->child_count == 0) {
+                return OM_STATUS_INVALID_ARGUMENT;
+            }
+            for (size_t key_index = 0; status == OM_STATUS_OK
+                 && key_index < clause->child_count; ++key_index) {
+                const Om_Ast_Node_Id key_id = ast_child(resolver, module,
+                                                        clause, key_index);
+                const Om_Ast_Node *key = ast_node(resolver, module, key_id);
+                if (key == NULL || key->kind != OM_AST_QUERY_ORDER_KEY
+                    || key->child_count != 1) {
+                    return OM_STATUS_INVALID_ARGUMENT;
+                }
+                status = set_node_scope(resolver, module, key_id, query_scope);
+                if (status == OM_STATUS_OK) {
+                    status = resolve_expression(resolver, module,
+                        ast_child(resolver, module, key, 0), query_scope);
+                }
+            }
+        } else {
+            return OM_STATUS_INVALID_ARGUMENT;
+        }
     }
     return status;
 }

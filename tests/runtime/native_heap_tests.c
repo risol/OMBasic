@@ -797,11 +797,11 @@ bool om_runtime_test_lists(void)
 {
     Om_Execution_Context *context = om_runtime_context_create(0);
     Om_Runtime_Root_Frame *frame = NULL;
-    void *roots[6] = {NULL, NULL, NULL, NULL, NULL, NULL};
+    void *roots[10] = {NULL};
     bool passed = false;
     static const uint8_t item[] = "list item";
     RUNTIME_ASSERT(context != NULL);
-    frame = om_runtime_roots_push(context, roots, 6);
+    frame = om_runtime_roots_push(context, roots, 10);
     RUNTIME_ASSERT(frame != NULL);
     RUNTIME_ASSERT(om_runtime_string_create_utf8_default(context, item,
         sizeof(item) - 1, &roots[1]) == OM_STATUS_OK);
@@ -862,6 +862,64 @@ bool om_runtime_test_lists(void)
     roots[5] = NULL;
     RUNTIME_ASSERT(om_runtime_collect(context) == OM_STATUS_OK);
     RUNTIME_ASSERT(om_runtime_live_object_count(context) == 0);
+#ifdef OM_RUNTIME_TEST_SUPPORT_ONLY
+    RUNTIME_ASSERT(om_runtime_list_create(context, &TEST_INT_LIST_TYPE,
+        &roots[0]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_create(context, &TEST_INT_LIST_TYPE,
+        &roots[1]) == OM_STATUS_OK);
+    const int64_t payloads[] = {4, 2, 3, 2, 2};
+    const int64_t keys[] = {1, 0, 0, 0, 0};
+    for (size_t index = 0; index < 5; ++index) {
+        RUNTIME_ASSERT(om_runtime_list_append(context, roots[0],
+            (Om_Runtime_Value){.integer = payloads[index]}) == OM_STATUS_OK);
+        RUNTIME_ASSERT(om_runtime_list_append(context, roots[1],
+            (Om_Runtime_Value){.integer = keys[index]}) == OM_STATUS_OK);
+    }
+    const void *integer_keys[] = {roots[1]};
+    RUNTIME_ASSERT(om_runtime_list_stable_order(context, roots[0],
+        integer_keys, 1, 0, 3, &roots[2]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_length(context, roots[2], &length)
+                   == OM_STATUS_OK && length == 3);
+    const int64_t expected_top[] = {2, 3, 2};
+    for (size_t index = 0; index < 3; ++index) {
+        RUNTIME_ASSERT(om_runtime_list_get(context, roots[2], index, &value)
+                       == OM_STATUS_OK);
+        RUNTIME_ASSERT(value.integer == expected_top[index]);
+    }
+    RUNTIME_ASSERT(om_runtime_list_stable_order(context, roots[0],
+        integer_keys, 1, UINT64_C(1), INT64_MAX, &roots[3]) == OM_STATUS_OK);
+    const int64_t expected_descending[] = {4, 2, 3, 2, 2};
+    for (size_t index = 0; index < 5; ++index) {
+        RUNTIME_ASSERT(om_runtime_list_get(context, roots[3], index, &value)
+                       == OM_STATUS_OK);
+        RUNTIME_ASSERT(value.integer == expected_descending[index]);
+    }
+    RUNTIME_ASSERT(om_runtime_list_create(context, &TEST_STRING_LIST_TYPE,
+        &roots[4]) == OM_STATUS_OK);
+    static const uint8_t key_a[] = "a";
+    static const uint8_t key_b[] = "b";
+    RUNTIME_ASSERT(om_runtime_string_create_utf8_default(context, key_b, 1,
+        &roots[5]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_string_create_utf8_default(context, key_a, 1,
+        &roots[6]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_append(context, roots[4],
+        (Om_Runtime_Value){.managed = roots[5]}) == OM_STATUS_OK);
+    for (size_t index = 0; index < 3; ++index) {
+        RUNTIME_ASSERT(om_runtime_list_append(context, roots[4],
+            (Om_Runtime_Value){.managed = roots[6]}) == OM_STATUS_OK);
+    }
+    RUNTIME_ASSERT(om_runtime_list_append(context, roots[4],
+        (Om_Runtime_Value){.managed = roots[5]}) == OM_STATUS_OK);
+    const void *string_keys[] = {roots[4]};
+    RUNTIME_ASSERT(om_runtime_list_stable_order(context, roots[0],
+        string_keys, 1, 0, INT64_MAX, &roots[7]) == OM_STATUS_OK);
+    const int64_t expected_strings[] = {2, 3, 2, 4, 2};
+    for (size_t index = 0; index < 5; ++index) {
+        RUNTIME_ASSERT(om_runtime_list_get(context, roots[7], index, &value)
+                       == OM_STATUS_OK);
+        RUNTIME_ASSERT(value.integer == expected_strings[index]);
+    }
+#endif
     passed = true;
 
 cleanup:

@@ -44,6 +44,7 @@ static const Om_Keyword_Entry KEYWORDS[] = {
     {"BREAK", 5, OM_KEYWORD_BREAK},
     {"CASE", 4, OM_KEYWORD_CASE},
     {"CONTINUE", 8, OM_KEYWORD_CONTINUE},
+    {"DESCENDING", 10, OM_KEYWORD_DESCENDING},
     {"ELSE", 4, OM_KEYWORD_ELSE},
     {"END", 3, OM_KEYWORD_END},
     {"EXPORT", 6, OM_KEYWORD_EXPORT},
@@ -58,11 +59,15 @@ static const Om_Keyword_Entry KEYWORDS[] = {
     {"NATIVE", 6, OM_KEYWORD_NATIVE},
     {"NOT", 3, OM_KEYWORD_NOT},
     {"NULL", 4, OM_KEYWORD_NULL},
+    {"ORDER", 5, OM_KEYWORD_ORDER},
+    {"BY", 2, OM_KEYWORD_BY},
     {"OR", 2, OM_KEYWORD_OR},
     {"RECORD", 6, OM_KEYWORD_RECORD},
     {"RECEIVE", 7, OM_KEYWORD_RECEIVE},
     {"RETURN", 6, OM_KEYWORD_RETURN},
+    {"QUERY", 5, OM_KEYWORD_QUERY},
     {"SELECT", 6, OM_KEYWORD_SELECT},
+    {"ASCENDING", 9, OM_KEYWORD_ASCENDING},
     {"SELF", 4, OM_KEYWORD_SELF},
     {"SEND", 4, OM_KEYWORD_SEND},
     {"SPAWN", 5, OM_KEYWORD_SPAWN},
@@ -70,10 +75,12 @@ static const Om_Keyword_Entry KEYWORDS[] = {
     {"STEP", 4, OM_KEYWORD_STEP},
     {"THEN", 4, OM_KEYWORD_THEN},
     {"TO", 2, OM_KEYWORD_TO},
+    {"TAKE", 4, OM_KEYWORD_TAKE},
     {"TRUE", 4, OM_KEYWORD_TRUE},
     {"TRY", 3, OM_KEYWORD_TRY},
     {"VAR", 3, OM_KEYWORD_VAR},
     {"WATCH", 5, OM_KEYWORD_WATCH},
+    {"WHERE", 5, OM_KEYWORD_WHERE},
     {"WHILE", 5, OM_KEYWORD_WHILE},
     {"WITH", 4, OM_KEYWORD_WITH}
 };
@@ -214,6 +221,23 @@ static Om_Keyword find_keyword(const uint8_t *bytes, size_t length, bool *wrong_
             }
         }
         if (equal_ignore_case) {
+            /* Preserve existing list.take and URI order identifiers while the
+               Query clause spellings remain uppercase reserved words. */
+            const bool lowercase_take = entry->keyword == OM_KEYWORD_TAKE
+                && length == 4 && bytes[0] == (uint8_t)'t'
+                && bytes[1] == (uint8_t)'a' && bytes[2] == (uint8_t)'k'
+                && bytes[3] == (uint8_t)'e';
+            const bool lowercase_order = entry->keyword == OM_KEYWORD_ORDER
+                && length == 5 && bytes[0] == (uint8_t)'o'
+                && bytes[1] == (uint8_t)'r' && bytes[2] == (uint8_t)'d'
+                && bytes[3] == (uint8_t)'e' && bytes[4] == (uint8_t)'r';
+            const bool lowercase_query = entry->keyword == OM_KEYWORD_QUERY
+                && length == 5 && bytes[0] == (uint8_t)'q'
+                && bytes[1] == (uint8_t)'u' && bytes[2] == (uint8_t)'e'
+                && bytes[3] == (uint8_t)'r' && bytes[4] == (uint8_t)'y';
+            if (lowercase_take || lowercase_order || lowercase_query) {
+                return OM_KEYWORD_NONE;
+            }
             if (wrong_case != NULL) {
                 *wrong_case = !equal_exact;
             }

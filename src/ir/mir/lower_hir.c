@@ -70,6 +70,9 @@ typedef struct Om_Mir_Lowering_Context {
 static Om_Status lower_expression(Om_Mir_Lowering_Context *context,
                                   Om_Hir_Node_Id node_id,
                                   Om_Mir_Value_Id *out_value);
+static Om_Status lower_query(Om_Mir_Lowering_Context *context,
+                             const Om_Hir_Node *node,
+                             Om_Mir_Value_Id *out_value);
 static bool types_match(const Om_Type_Store *store,
                         Om_Type_Id left,
                         Om_Type_Id right);
@@ -1721,6 +1724,8 @@ static Om_Status lower_expression(Om_Mir_Lowering_Context *context,
         return lower_list_literal(context, node, type_id, out_value);
     case OM_HIR_MAP:
         return lower_map_literal(context, node, type_id, out_value);
+    case OM_HIR_QUERY:
+        return lower_query(context, node, out_value);
     case OM_HIR_INDEX:
         return lower_index(context, node, type_id, out_value);
     case OM_HIR_NULL:
@@ -3398,6 +3403,506 @@ static Om_Status lower_for_each(Om_Mir_Lowering_Context *context,
     om_free(header_parameters);
     om_free(initial_values);
     om_free(transfer_environment);
+    om_free(outer_environment);
+    return status;
+}
+
+static Om_Status lower_query(Om_Mir_Lowering_Context *context,
+                             const Om_Hir_Node *node,
+                             Om_Mir_Value_Id *out_value)
+{
+    const Om_Hir_Node *source_node = node->child_count > 0
+        ? hir_child(context->hir, node, 0) : NULL;
+    const Om_Hir_Node *select_clause = NULL;
+    const Om_Hir_Node *take_clause = NULL;
+    const Om_Hir_Node *order_clause = NULL;
+    size_t where_count = 0;
+    for (size_t index = 1; index < node->child_count; ++index) {
+        const Om_Hir_Node *clause = hir_child(context->hir, node, index);
+        if (clause == NULL) return OM_STATUS_INVALID_ARGUMENT;
+        if (clause->kind == OM_HIR_QUERY_WHERE) ++where_count;
+        else if (clause->kind == OM_HIR_QUERY_SELECT) select_clause = clause;
+        else if (clause->kind == OM_HIR_QUERY_TAKE) take_clause = clause;
+        else if (clause->kind == OM_HIR_QUERY_ORDER) order_clause = clause;
+    }
+    const size_t key_count = order_clause == NULL ? 0
+        : order_clause->child_count;
+    if (source_node == NULL || select_clause == NULL
+        || select_clause->child_count != 1
+        || node->symbol_id.value == UINT32_MAX || key_count > 64) {
+        return OM_STATUS_INVALID_ARGUMENT;
+    }
+    Om_Mir_Env_Entry *outer_environment = NULL;
+    size_t outer_count = 0;
+    Om_Status status = environment_snapshot(context, &outer_environment,
+                                            &outer_count);
+    Om_Mir_Value_Id source_value = OM_MIR_VALUE_ID_INVALID;
+    if (status == OM_STATUS_OK) {
+        status = lower_expression(context, source_node->id, &source_value);
+    }
+    Om_Type_Id int_type = OM_TYPE_ID_INVALID;
+    Om_Type_Id bool_type = OM_TYPE_ID_INVALID;
+    Om_Type_Id result_list_type = OM_TYPE_ID_INVALID;
+    Om_Type_Id source_type = OM_TYPE_ID_INVALID;
+    Om_Type_Id source_element_type = OM_TYPE_ID_INVALID;
+    if (status == OM_STATUS_OK) {
+        status = om_type_store_primitive(context->mir->type_store, OM_TYPE_INT,
+                                         &int_type);
+    }
+    if (status == OM_STATUS_OK) {
+        status = om_type_store_primitive(context->mir->type_store, OM_TYPE_BOOL,
+                                         &bool_type);
+    }
+    if (status == OM_STATUS_OK) {
+        status = specialized_type(context, node->type_id, &result_list_type);
+    }
+    if (status == OM_STATUS_OK) {
+        status = mir_value_type(context->mir, source_value, &source_type);
+    }
+    if (status == OM_STATUS_OK) {
+        status = om_type_store_resolve(context->mir->type_store, source_type,
+                                       &source_type);
+    }
+    Om_Type_View source_view = {0};
+    if (status == OM_STATUS_OK) {
+        status = om_type_store_get(context->mir->type_store, source_type,
+                                   &source_view);
+    }
+    if (status == OM_STATUS_OK && source_view.kind == OM_TYPE_LIST) {
+        status = om_type_store_child_at(context->mir->type_store, source_type,
+                                        0, &source_element_type);
+    } else if (status == OM_STATUS_OK) {
+        status = add_lowering_diagnostic(context, source_node->span);
+    }
+    Om_Mir_Value_Id limit_value = OM_MIR_VALUE_ID_INVALID;
+    if (status == OM_STATUS_OK && take_clause != NULL) {
+        if (take_clause->child_count != 1) {
+            status = OM_STATUS_INVALID_ARGUMENT;
+        } else {
+            const Om_Hir_Node *take_expression = hir_child(context->hir,
+                                                            take_clause, 0);
+            status = take_expression == NULL ? OM_STATUS_INVALID_ARGUMENT
+                : lower_expression(context, take_expression->id, &limit_value);
+        }
+    } else if (status == OM_STATUS_OK) {
+        status = emit_instruction(context, node, OM_MIR_CONST_INT, int_type,
+            OM_HIR_OPERATOR_NONE, OM_FUNCTION_INSTANCE_ID_INVALID, NULL, 0,
+            (uint64_t)INT64_MAX, 0.0, &limit_value);
+    }
+    const Om_Hir_Node **key_expressions = key_count == 0 ? NULL
+        : om_alloc_array(key_count, sizeof(*key_expressions));
+    Om_Mir_Value_Id *initial_key_lists = key_count == 0 ? NULL
+        : om_alloc_array(key_count, sizeof(*initial_key_lists));
+    uint64_t descending_mask = 0;
+    if (key_count != 0
+        && (key_expressions == NULL || initial_key_lists == NULL)) {
+        status = OM_STATUS_OUT_OF_MEMORY;
+    }
+    for (size_t index = 0; status == OM_STATUS_OK && index < key_count; ++index) {
+        const Om_Hir_Node *key = hir_child(context->hir, order_clause, index);
+        if (key == NULL || key->kind != OM_HIR_QUERY_ORDER_KEY
+            || key->child_count != 1) {
+            status = OM_STATUS_INVALID_ARGUMENT;
+            break;
+        }
+        key_expressions[index] = hir_child(context->hir, key, 0);
+        if (key_expressions[index] == NULL) {
+            status = OM_STATUS_INVALID_ARGUMENT;
+        } else if ((key->flags & OM_HIR_FLAG_QUERY_DESCENDING) != 0) {
+            descending_mask |= UINT64_C(1) << index;
+        }
+    }
+    Om_Mir_Value_Id scan_limit = limit_value;
+    if (status == OM_STATUS_OK && order_clause != NULL) {
+        status = emit_instruction(context, node, OM_MIR_CONST_INT, int_type,
+            OM_HIR_OPERATOR_NONE, OM_FUNCTION_INSTANCE_ID_INVALID, NULL, 0,
+            (uint64_t)INT64_MAX, 0.0, &scan_limit);
+    }
+    Om_Mir_Value_Id empty_result = OM_MIR_VALUE_ID_INVALID;
+    if (status == OM_STATUS_OK) {
+        status = emit_instruction(context, node, OM_MIR_LIST_CREATE,
+            result_list_type, OM_HIR_OPERATOR_NONE,
+            OM_FUNCTION_INSTANCE_ID_INVALID, NULL, 0, 0, 0.0, &empty_result);
+    }
+    for (size_t index = 0; status == OM_STATUS_OK && index < key_count; ++index) {
+        Om_Type_Id list_type = OM_TYPE_ID_INVALID;
+        const Om_Hir_Node *key_node = hir_child(context->hir, order_clause,
+                                                index);
+        status = key_node == NULL ? OM_STATUS_INVALID_ARGUMENT
+            : specialized_type(context, key_node->type_id, &list_type);
+        if (status == OM_STATUS_OK) {
+            Om_Type_Id resolved_list_type = OM_TYPE_ID_INVALID;
+            status = om_type_store_resolve(context->mir->type_store,
+                list_type, &resolved_list_type);
+            list_type = resolved_list_type;
+        }
+        if (status == OM_STATUS_OK) {
+            status = emit_instruction(context, order_clause,
+                OM_MIR_LIST_CREATE, list_type, OM_HIR_OPERATOR_NONE,
+                OM_FUNCTION_INSTANCE_ID_INVALID, NULL, 0, 0, 0.0,
+                &initial_key_lists[index]);
+        }
+    }
+    Om_Mir_Value_Id source_length = OM_MIR_VALUE_ID_INVALID;
+    if (status == OM_STATUS_OK) {
+        status = emit_instruction(context, node, OM_MIR_LIST_LENGTH, int_type,
+            OM_HIR_OPERATOR_NONE, OM_FUNCTION_INSTANCE_ID_INVALID,
+            &source_value, 1, 0, 0.0, &source_length);
+    }
+    Om_Mir_Value_Id zero_value = OM_MIR_VALUE_ID_INVALID;
+    if (status == OM_STATUS_OK) {
+        status = emit_instruction(context, node, OM_MIR_CONST_INT, int_type,
+            OM_HIR_OPERATOR_NONE, OM_FUNCTION_INSTANCE_ID_INVALID, NULL, 0,
+            0, 0.0, &zero_value);
+    }
+    Om_Mir_Value_Id one_value = OM_MIR_VALUE_ID_INVALID;
+    if (status == OM_STATUS_OK) {
+        status = emit_instruction(context, node, OM_MIR_CONST_INT, int_type,
+            OM_HIR_OPERATOR_NONE, OM_FUNCTION_INSTANCE_ID_INVALID, NULL, 0,
+            1, 0.0, &one_value);
+    }
+    if (status != OM_STATUS_OK || context->unsupported
+        || outer_count > SIZE_MAX - 5 - key_count) {
+        om_free(initial_key_lists);
+        om_free(key_expressions);
+        om_free(outer_environment);
+        return status != OM_STATUS_OK ? status
+            : outer_count > SIZE_MAX - 5 - key_count
+                ? OM_STATUS_OVERFLOW : OM_STATUS_OK;
+    }
+    const size_t transfer_count = outer_count + 5 + key_count;
+    Om_Mir_Env_Entry *transfer_environment = om_alloc_array(transfer_count,
+        sizeof(*transfer_environment));
+    Om_Mir_Value_Id *initial_values = om_alloc_array(transfer_count,
+        sizeof(*initial_values));
+    Om_Mir_Value_Id *header_parameters = om_alloc_array(transfer_count,
+        sizeof(*header_parameters));
+    const size_t exit_value_count = outer_count + 1 + key_count;
+    Om_Mir_Env_Entry *exit_environment = om_alloc_array(exit_value_count,
+        sizeof(*exit_environment));
+    Om_Mir_Value_Id *exit_parameters = om_alloc_array(exit_value_count,
+        sizeof(*exit_parameters));
+    if (transfer_environment == NULL || initial_values == NULL
+        || header_parameters == NULL || exit_environment == NULL
+        || exit_parameters == NULL) {
+        status = OM_STATUS_OUT_OF_MEMORY;
+    }
+    const size_t internal_count = 5 + key_count;
+    Om_Symbol_Id *internal_symbols = om_alloc_array(internal_count,
+                                                     sizeof(*internal_symbols));
+    Om_Mir_Value_Id *internal_values = om_alloc_array(internal_count,
+                                                       sizeof(*internal_values));
+    if (status == OM_STATUS_OK
+        && (internal_symbols == NULL || internal_values == NULL)) {
+        status = OM_STATUS_OUT_OF_MEMORY;
+    }
+    for (size_t index = 0; status == OM_STATUS_OK
+         && index < internal_count; ++index) {
+        status = synthetic_symbol_id(context, &internal_symbols[index]);
+    }
+    for (size_t index = 0; status == OM_STATUS_OK && index < outer_count; ++index) {
+        transfer_environment[index] = outer_environment[index];
+        initial_values[index] = outer_environment[index].value_id;
+        exit_environment[index] = outer_environment[index];
+    }
+    if (status == OM_STATUS_OK) {
+        internal_values[0] = source_value;
+        internal_values[1] = empty_result;
+        internal_values[2] = zero_value;
+        internal_values[3] = scan_limit;
+        internal_values[4] = source_length;
+        for (size_t index = 0; index < key_count; ++index) {
+            internal_values[5 + index] = initial_key_lists[index];
+        }
+    }
+    for (size_t index = 0; status == OM_STATUS_OK
+         && index < internal_count; ++index) {
+        transfer_environment[outer_count + index] = (Om_Mir_Env_Entry){
+            internal_symbols[index], internal_values[index],
+        };
+        initial_values[outer_count + index] = internal_values[index];
+    }
+    if (status == OM_STATUS_OK) {
+        exit_environment[outer_count] =
+            transfer_environment[outer_count + 1];
+        for (size_t index = 0; index < key_count; ++index) {
+            exit_environment[outer_count + 1 + index] =
+                transfer_environment[outer_count + 5 + index];
+        }
+    }
+    Om_Mir_Block_Id header_block = OM_MIR_BLOCK_ID_INVALID;
+    Om_Mir_Block_Id body_block = OM_MIR_BLOCK_ID_INVALID;
+    Om_Mir_Block_Id skip_block = OM_MIR_BLOCK_ID_INVALID;
+    Om_Mir_Block_Id exit_block = OM_MIR_BLOCK_ID_INVALID;
+    if (status == OM_STATUS_OK) {
+        status = om_mir_add_block(context->mir, context->function_id,
+                                  &header_block);
+    }
+    if (status == OM_STATUS_OK) {
+        status = add_block_parameters_for_environment(context, header_block,
+            transfer_environment, transfer_count, header_parameters);
+    }
+    if (status == OM_STATUS_OK) {
+        status = set_branch(context, context->block_id, header_block,
+                            initial_values, transfer_count);
+    }
+    if (status == OM_STATUS_OK) {
+        status = environment_from_block_parameters(context,
+            transfer_environment, header_parameters, transfer_count);
+    }
+    context->block_id = header_block;
+    context->terminated = false;
+    Om_Mir_Value_Id output_length = OM_MIR_VALUE_ID_INVALID;
+    Om_Mir_Value_Id index_in_range = OM_MIR_VALUE_ID_INVALID;
+    Om_Mir_Value_Id output_below_limit = OM_MIR_VALUE_ID_INVALID;
+    Om_Mir_Value_Id scan_condition = OM_MIR_VALUE_ID_INVALID;
+    const Om_Mir_Value_Id output_operand = header_parameters[outer_count + 1];
+    if (status == OM_STATUS_OK) {
+        status = emit_instruction(context, node, OM_MIR_LIST_LENGTH, int_type,
+            OM_HIR_OPERATOR_NONE, OM_FUNCTION_INSTANCE_ID_INVALID,
+            &output_operand, 1, 0, 0.0, &output_length);
+    }
+    if (status == OM_STATUS_OK) {
+        const Om_Mir_Value_Id operands[] = {
+            header_parameters[outer_count + 2],
+            header_parameters[outer_count + 4],
+        };
+        status = emit_instruction(context, node, OM_MIR_COMPARE, bool_type,
+            OM_HIR_OPERATOR_LESS, OM_FUNCTION_INSTANCE_ID_INVALID,
+            operands, 2, 0, 0.0, &index_in_range);
+    }
+    if (status == OM_STATUS_OK) {
+        const Om_Mir_Value_Id operands[] = {
+            output_length, header_parameters[outer_count + 3],
+        };
+        status = emit_instruction(context, node, OM_MIR_COMPARE, bool_type,
+            OM_HIR_OPERATOR_LESS, OM_FUNCTION_INSTANCE_ID_INVALID,
+            operands, 2, 0, 0.0, &output_below_limit);
+    }
+    if (status == OM_STATUS_OK) {
+        const Om_Mir_Value_Id operands[] = {index_in_range, output_below_limit};
+        status = emit_instruction(context, node, OM_MIR_BOOL_AND, bool_type,
+            OM_HIR_OPERATOR_AND, OM_FUNCTION_INSTANCE_ID_INVALID,
+            operands, 2, 0, 0.0, &scan_condition);
+    }
+    if (status == OM_STATUS_OK && where_count != 0) {
+        status = om_mir_add_block(context->mir, context->function_id,
+                                  &skip_block);
+    }
+    Om_Mir_Value_Id *backedge_values = om_alloc_array(transfer_count,
+                                                       sizeof(*backedge_values));
+    if (status == OM_STATUS_OK && backedge_values == NULL) {
+        status = OM_STATUS_OUT_OF_MEMORY;
+    }
+    if (status == OM_STATUS_OK && where_count != 0) {
+        context->block_id = skip_block;
+        context->terminated = false;
+        const Om_Mir_Value_Id skip_operands[] = {
+            header_parameters[outer_count + 2], one_value,
+        };
+        Om_Mir_Value_Id skip_index = OM_MIR_VALUE_ID_INVALID;
+        status = emit_instruction(context, node, OM_MIR_INT_ADD_CHECKED,
+            int_type, OM_HIR_OPERATOR_ADD, OM_FUNCTION_INSTANCE_ID_INVALID,
+            skip_operands, 2, 0, 0.0, &skip_index);
+        if (status == OM_STATUS_OK) {
+            (void)memcpy(backedge_values, header_parameters,
+                         transfer_count * sizeof(*backedge_values));
+            backedge_values[outer_count + 2] = skip_index;
+            status = set_branch(context, skip_block, header_block,
+                                backedge_values, transfer_count);
+        }
+    }
+    if (status == OM_STATUS_OK) {
+        status = om_mir_add_block(context->mir, context->function_id,
+                                  &body_block);
+    }
+    context->block_id = body_block;
+    context->terminated = false;
+    if (status == OM_STATUS_OK) {
+        status = environment_from_block_parameters(context,
+            transfer_environment, header_parameters, transfer_count);
+    }
+    Om_Mir_Value_Id item_value = OM_MIR_VALUE_ID_INVALID;
+    if (status == OM_STATUS_OK) {
+        const Om_Mir_Value_Id operands[] = {
+            header_parameters[outer_count], header_parameters[outer_count + 2],
+        };
+        status = emit_instruction(context, node, OM_MIR_LIST_GET,
+            source_element_type, OM_HIR_OPERATOR_NONE,
+            OM_FUNCTION_INSTANCE_ID_INVALID, operands, 2, 0, 0.0, &item_value);
+    }
+    if (status == OM_STATUS_OK) {
+        status = environment_set(context, node->symbol_id, item_value, true);
+    }
+    Om_Mir_Block_Id predicate_block = body_block;
+    for (size_t index = 1; status == OM_STATUS_OK && index < node->child_count;
+         ++index) {
+        const Om_Hir_Node *clause = hir_child(context->hir, node, index);
+        if (clause == NULL || clause->kind != OM_HIR_QUERY_WHERE) continue;
+        const Om_Hir_Node *predicate = clause->child_count == 1
+            ? hir_child(context->hir, clause, 0) : NULL;
+        if (predicate == NULL) {
+            status = OM_STATUS_INVALID_ARGUMENT;
+            break;
+        }
+        context->block_id = predicate_block;
+        context->terminated = false;
+        Om_Mir_Value_Id predicate_value = OM_MIR_VALUE_ID_INVALID;
+        status = lower_expression(context, predicate->id, &predicate_value);
+        Om_Mir_Block_Id next_block = OM_MIR_BLOCK_ID_INVALID;
+        if (status == OM_STATUS_OK && !context->unsupported) {
+            status = om_mir_add_block(context->mir, context->function_id,
+                                      &next_block);
+        }
+        if (status == OM_STATUS_OK && !context->unsupported) {
+            status = set_conditional_branch(context, context->block_id,
+                predicate_value, next_block, skip_block);
+        }
+        predicate_block = next_block;
+    }
+    context->block_id = predicate_block;
+    context->terminated = false;
+    const Om_Hir_Node *projection = select_clause->child_count == 1
+        ? hir_child(context->hir, select_clause, 0) : NULL;
+    Om_Mir_Value_Id projection_value = OM_MIR_VALUE_ID_INVALID;
+    if (status == OM_STATUS_OK && !context->unsupported) {
+        status = projection == NULL ? OM_STATUS_INVALID_ARGUMENT
+            : lower_expression(context, projection->id, &projection_value);
+    }
+    Om_Mir_Value_Id appended_output = OM_MIR_VALUE_ID_INVALID;
+    if (status == OM_STATUS_OK && !context->unsupported) {
+        const Om_Mir_Value_Id operands[] = {
+            header_parameters[outer_count + 1], projection_value,
+        };
+        status = emit_instruction(context, node, OM_MIR_LIST_APPEND,
+            result_list_type, OM_HIR_OPERATOR_NONE,
+            OM_FUNCTION_INSTANCE_ID_INVALID, operands, 2, 0, 0.0,
+            &appended_output);
+    }
+    Om_Mir_Value_Id *appended_keys = key_count == 0 ? NULL
+        : om_alloc_array(key_count, sizeof(*appended_keys));
+    if (status == OM_STATUS_OK && !context->unsupported
+        && key_count != 0 && appended_keys == NULL) {
+        status = OM_STATUS_OUT_OF_MEMORY;
+    }
+    for (size_t index = 0; status == OM_STATUS_OK && !context->unsupported
+         && index < key_count; ++index) {
+        Om_Mir_Value_Id key_value = OM_MIR_VALUE_ID_INVALID;
+        status = lower_expression(context, key_expressions[index]->id,
+                                  &key_value);
+        Om_Type_Id key_list_type = OM_TYPE_ID_INVALID;
+        if (status == OM_STATUS_OK) {
+            status = mir_value_type(context->mir,
+                header_parameters[outer_count + 5 + index], &key_list_type);
+        }
+        if (status == OM_STATUS_OK) {
+            const Om_Mir_Value_Id operands[] = {
+                header_parameters[outer_count + 5 + index], key_value,
+            };
+            status = emit_instruction(context, order_clause, OM_MIR_LIST_APPEND,
+                key_list_type, OM_HIR_OPERATOR_NONE,
+                OM_FUNCTION_INSTANCE_ID_INVALID, operands, 2, 0, 0.0,
+                &appended_keys[index]);
+        }
+    }
+    Om_Mir_Value_Id next_index = OM_MIR_VALUE_ID_INVALID;
+    if (status == OM_STATUS_OK && !context->unsupported) {
+        const Om_Mir_Value_Id operands[] = {
+            header_parameters[outer_count + 2], one_value,
+        };
+        status = emit_instruction(context, node, OM_MIR_INT_ADD_CHECKED,
+            int_type, OM_HIR_OPERATOR_ADD, OM_FUNCTION_INSTANCE_ID_INVALID,
+            operands, 2, 0, 0.0, &next_index);
+    }
+    if (status == OM_STATUS_OK && !context->unsupported
+        && backedge_values == NULL) status = OM_STATUS_OUT_OF_MEMORY;
+    if (status == OM_STATUS_OK && !context->unsupported) {
+        (void)memcpy(backedge_values, header_parameters,
+                     transfer_count * sizeof(*backedge_values));
+        backedge_values[outer_count + 1] = appended_output;
+        backedge_values[outer_count + 2] = next_index;
+        for (size_t index = 0; index < key_count; ++index) {
+            backedge_values[outer_count + 5 + index] = appended_keys[index];
+        }
+        status = set_branch(context, context->block_id, header_block,
+                            backedge_values, transfer_count);
+    }
+    if (status == OM_STATUS_OK && !context->unsupported) {
+        status = om_mir_add_block(context->mir, context->function_id,
+                                  &exit_block);
+    }
+    if (status == OM_STATUS_OK && !context->unsupported) {
+        status = add_block_parameters_for_environment(context, exit_block,
+            exit_environment, exit_value_count, exit_parameters);
+    }
+    if (status == OM_STATUS_OK && !context->unsupported) {
+        Om_Mir_Value_Id *exit_arguments = om_alloc_array(exit_value_count,
+            sizeof(*exit_arguments));
+        if (exit_arguments == NULL) {
+            status = OM_STATUS_OUT_OF_MEMORY;
+        }
+        for (size_t index = 0; status == OM_STATUS_OK
+             && index < outer_count; ++index) {
+            exit_arguments[index] = header_parameters[index];
+        }
+        if (status == OM_STATUS_OK) {
+            exit_arguments[outer_count] = header_parameters[outer_count + 1];
+            for (size_t index = 0; index < key_count; ++index) {
+                exit_arguments[outer_count + 1 + index] =
+                    header_parameters[outer_count + 5 + index];
+            }
+        }
+        const Om_Mir_Edge_Input edges[] = {
+            {.target_block_id = body_block},
+            {.target_block_id = exit_block,
+             .arguments = exit_arguments,
+             .argument_count = exit_value_count},
+        };
+        if (status == OM_STATUS_OK) {
+            status = om_mir_set_terminator(context->mir, header_block,
+                OM_MIR_COND_BR, scan_condition, edges, 2);
+        }
+        om_free(exit_arguments);
+    }
+    if (status == OM_STATUS_OK && !context->unsupported) {
+        context->block_id = exit_block;
+        context->terminated = false;
+        status = environment_from_block_parameters(context, outer_environment,
+            exit_parameters, outer_count);
+        *out_value = exit_parameters[outer_count];
+        if (key_count != 0) {
+            size_t stable_operand_count = key_count + 2;
+            Om_Mir_Value_Id *stable_operands = om_alloc_array(
+                stable_operand_count, sizeof(*stable_operands));
+            if (stable_operands == NULL) {
+                status = OM_STATUS_OUT_OF_MEMORY;
+            } else {
+                stable_operands[0] = exit_parameters[outer_count];
+                for (size_t index = 0; index < key_count; ++index) {
+                    stable_operands[index + 1] =
+                        exit_parameters[outer_count + 1 + index];
+                }
+                stable_operands[stable_operand_count - 1] = limit_value;
+                status = emit_instruction(context, order_clause,
+                    OM_MIR_LIST_STABLE_ORDER, result_list_type,
+                    OM_HIR_OPERATOR_NONE, OM_FUNCTION_INSTANCE_ID_INVALID,
+                    stable_operands, stable_operand_count, descending_mask,
+                    0.0, out_value);
+                om_free(stable_operands);
+            }
+        }
+    }
+    om_free(backedge_values);
+    om_free(appended_keys);
+    om_free(exit_parameters);
+    om_free(exit_environment);
+    om_free(header_parameters);
+    om_free(initial_values);
+    om_free(transfer_environment);
+    om_free(internal_values);
+    om_free(internal_symbols);
+    om_free(initial_key_lists);
+    om_free(key_expressions);
     om_free(outer_environment);
     return status;
 }

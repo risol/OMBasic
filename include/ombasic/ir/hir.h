@@ -73,7 +73,13 @@ typedef enum Om_Hir_Kind {
     OM_HIR_GROUP,
     OM_HIR_LIST,
     OM_HIR_MAP,
-    OM_HIR_MAP_ENTRY
+    OM_HIR_MAP_ENTRY,
+    OM_HIR_QUERY,
+    OM_HIR_QUERY_WHERE,
+    OM_HIR_QUERY_ORDER,
+    OM_HIR_QUERY_ORDER_KEY,
+    OM_HIR_QUERY_TAKE,
+    OM_HIR_QUERY_SELECT
 } Om_Hir_Kind;
 
 typedef enum Om_Hir_Operator {
@@ -110,7 +116,8 @@ typedef enum Om_Hir_Flag {
     OM_HIR_FLAG_HAS_ELSE = 1u << 1,
     OM_HIR_FLAG_CASE_ELSE = 1u << 2,
     OM_HIR_FLAG_MUTABLE = 1u << 3,
-    OM_HIR_FLAG_MIN_INTEGER = 1u << 4
+    OM_HIR_FLAG_MIN_INTEGER = 1u << 4,
+    OM_HIR_FLAG_QUERY_DESCENDING = 1u << 5
 } Om_Hir_Flag;
 
 typedef enum Om_Hir_Diagnostic_Code {

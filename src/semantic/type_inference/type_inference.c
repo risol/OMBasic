@@ -52,6 +52,223 @@ static Om_Status infer_expression(Om_Infer_Context *context,
                                   Om_Ast_Node_Id node_id,
                                   uint32_t level,
                                   Om_Type_Id *type_id);
+static const Om_Ast_Node *infer_node(const Om_Infer_Context *context,
+                                    Om_Module_Id module,
+                                    Om_Ast_Node_Id node_id);
+static Om_Ast_Node_Id infer_child(const Om_Infer_Context *context,
+                                  Om_Module_Id module,
+                                  const Om_Ast_Node *node,
+                                  size_t index);
+static Om_Symbol_Id resolved_symbol_for_node(const Om_Infer_Context *context,
+                                             Om_Module_Id module,
+                                             Om_Ast_Node_Id node);
+static Om_Status set_symbol_monotype(Om_Infer_Context *context,
+                                     Om_Symbol_Id symbol_id,
+                                     Om_Type_Id type_id);
+static Om_Status set_node_type(Om_Infer_Context *context,
+                               Om_Module_Id module,
+                               Om_Ast_Node_Id node,
+                               Om_Type_Id type);
+static Om_Status unify_at(Om_Infer_Context *context,
+                          Om_Module_Id module,
+                          Om_Source_Span span,
+                          Om_Type_Id expected,
+                          Om_Type_Id actual);
+static Om_Status add_type_diagnostic(Om_Infer_Context *context,
+                                     Om_Type_Inference_Diagnostic_Code code,
+                                     Om_Module_Id module,
+                                     Om_Source_Span span,
+                                     Om_Type_Id expected,
+                                     Om_Type_Id actual);
+
+static Om_Status infer_query(Om_Infer_Context *context,
+                             Om_Module_Id module,
+                             Om_Ast_Node_Id node_id,
+                             const Om_Ast_Node *node,
+                             uint32_t level,
+                             Om_Type_Id *type_id)
+{
+    if (node->child_count < 2) {
+        return OM_STATUS_INVALID_ARGUMENT;
+    }
+    const Om_Ast_Node_Id source_id = infer_child(context, module, node, 0);
+    const Om_Ast_Node *source_node = infer_node(context, module, source_id);
+    Om_Type_Id source_type = OM_TYPE_ID_INVALID;
+    Om_Status status = infer_expression(context, module, source_id, level,
+                                        &source_type);
+    Om_Type_Id resolved_source = OM_TYPE_ID_INVALID;
+    Om_Type_View source_view = {0};
+    if (status == OM_STATUS_OK) {
+        status = om_type_store_resolve(&context->type_store, source_type,
+                                       &resolved_source);
+    }
+    if (status == OM_STATUS_OK) {
+        status = om_type_store_get(&context->type_store, resolved_source,
+                                   &source_view);
+    }
+
+    Om_Type_Id element_type = OM_TYPE_ID_INVALID;
+    if (status == OM_STATUS_OK && source_view.kind == OM_TYPE_LIST) {
+        status = om_type_store_child_at(&context->type_store, resolved_source,
+                                        0, &element_type);
+    } else if (status == OM_STATUS_OK && source_view.kind == OM_TYPE_VARIABLE) {
+        status = om_type_store_variable(&context->type_store, level + 1,
+                                        &element_type);
+        Om_Type_Id list_type = OM_TYPE_ID_INVALID;
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_list(&context->type_store, element_type,
+                                        &list_type);
+        }
+        if (status == OM_STATUS_OK) {
+            status = unify_at(context, module,
+                source_node != NULL ? source_node->span : node->span,
+                list_type, source_type);
+        }
+    } else if (status == OM_STATUS_OK) {
+        status = add_type_diagnostic(context,
+            OM_TYPE_INFERENCE_DIAGNOSTIC_E0401, module,
+            source_node != NULL ? source_node->span : node->span,
+            OM_TYPE_ID_INVALID, source_type);
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_variable(&context->type_store, level + 1,
+                                            &element_type);
+        }
+    }
+    const Om_Symbol_Id range_symbol = resolved_symbol_for_node(context,
+                                                                 module, node_id);
+    if (status == OM_STATUS_OK) {
+        status = set_symbol_monotype(context, range_symbol, element_type);
+    }
+
+    bool saw_select = false;
+    Om_Type_Id projection_type = OM_TYPE_ID_INVALID;
+    for (size_t index = 1; status == OM_STATUS_OK
+         && index < node->child_count; ++index) {
+        const Om_Ast_Node_Id clause_id = infer_child(context, module, node, index);
+        const Om_Ast_Node *clause = infer_node(context, module, clause_id);
+        if (clause == NULL) {
+            return OM_STATUS_INVALID_ARGUMENT;
+        }
+        if (clause->kind == OM_AST_QUERY_WHERE
+            || clause->kind == OM_AST_QUERY_TAKE
+            || clause->kind == OM_AST_QUERY_SELECT) {
+            if (clause->child_count != 1) {
+                return OM_STATUS_INVALID_ARGUMENT;
+            }
+            const Om_Ast_Node_Id expression_id = infer_child(context, module,
+                                                              clause, 0);
+            const Om_Ast_Node *expression = infer_node(context, module,
+                                                        expression_id);
+            Om_Type_Id expression_type = OM_TYPE_ID_INVALID;
+            status = infer_expression(context, module, expression_id, level,
+                                      &expression_type);
+            if (status == OM_STATUS_OK
+                && clause->kind == OM_AST_QUERY_WHERE) {
+                status = unify_at(context, module,
+                    expression != NULL ? expression->span : clause->span,
+                    context->type_store.primitive_types[OM_TYPE_BOOL],
+                    expression_type);
+                if (status == OM_STATUS_OK) {
+                    status = set_node_type(context, module, clause_id,
+                        context->type_store.primitive_types[OM_TYPE_BOOL]);
+                }
+            } else if (status == OM_STATUS_OK
+                       && clause->kind == OM_AST_QUERY_TAKE) {
+                status = unify_at(context, module,
+                    expression != NULL ? expression->span : clause->span,
+                    context->type_store.primitive_types[OM_TYPE_INT],
+                    expression_type);
+                if (status == OM_STATUS_OK) {
+                    status = set_node_type(context, module, clause_id,
+                        context->type_store.primitive_types[OM_TYPE_INT]);
+                }
+            } else if (status == OM_STATUS_OK) {
+                if (saw_select) {
+                    return OM_STATUS_INVALID_ARGUMENT;
+                }
+                saw_select = true;
+                projection_type = expression_type;
+                status = set_node_type(context, module, clause_id,
+                                       projection_type);
+            }
+        } else if (clause->kind == OM_AST_QUERY_ORDER) {
+            if (clause->child_count == 0) {
+                return OM_STATUS_INVALID_ARGUMENT;
+            }
+            Om_Type_Id first_key_type = OM_TYPE_ID_INVALID;
+            for (size_t key_index = 0; status == OM_STATUS_OK
+                 && key_index < clause->child_count; ++key_index) {
+                const Om_Ast_Node_Id key_id = infer_child(context, module,
+                                                          clause, key_index);
+                const Om_Ast_Node *key = infer_node(context, module, key_id);
+                if (key == NULL || key->kind != OM_AST_QUERY_ORDER_KEY
+                    || key->child_count != 1) {
+                    return OM_STATUS_INVALID_ARGUMENT;
+                }
+                const Om_Ast_Node_Id expression_id = infer_child(context,
+                                                                  module, key, 0);
+                const Om_Ast_Node *expression = infer_node(context, module,
+                                                            expression_id);
+                Om_Type_Id key_type = OM_TYPE_ID_INVALID;
+                status = infer_expression(context, module, expression_id,
+                                          level, &key_type);
+                Om_Type_Id resolved_key = OM_TYPE_ID_INVALID;
+                Om_Type_View key_view = {0};
+                if (status == OM_STATUS_OK) {
+                    status = om_type_store_resolve(&context->type_store,
+                                                   key_type, &resolved_key);
+                }
+                if (status == OM_STATUS_OK) {
+                    status = om_type_store_get(&context->type_store,
+                                               resolved_key, &key_view);
+                }
+                if (status == OM_STATUS_OK
+                    && key_view.kind != OM_TYPE_INT
+                    && key_view.kind != OM_TYPE_STRING) {
+                    status = add_type_diagnostic(context,
+                        OM_TYPE_INFERENCE_DIAGNOSTIC_E0401, module,
+                        expression != NULL ? expression->span : key->span,
+                        OM_TYPE_ID_INVALID, key_type);
+                }
+                if (status == OM_STATUS_OK) {
+                    Om_Type_Id key_list_type = OM_TYPE_ID_INVALID;
+                    status = om_type_store_list(&context->type_store,
+                                                key_type, &key_list_type);
+                    if (status == OM_STATUS_OK) {
+                        status = set_node_type(context, module, key_id,
+                                               key_list_type);
+                    }
+                }
+                if (key_index == 0) {
+                    first_key_type = key_type;
+                }
+            }
+            if (status == OM_STATUS_OK) {
+                status = set_node_type(context, module, clause_id,
+                                       first_key_type);
+            }
+        } else {
+            return OM_STATUS_INVALID_ARGUMENT;
+        }
+    }
+    if (status == OM_STATUS_OK && !saw_select) {
+        return OM_STATUS_INVALID_ARGUMENT;
+    }
+    if (status == OM_STATUS_OK) {
+        status = om_type_store_list(&context->type_store, projection_type,
+                                    type_id);
+    }
+    if (status == OM_STATUS_OK) {
+        status = set_node_type(context, module, node_id, *type_id);
+    }
+    return status;
+}
+
+static Om_Status infer_expression(Om_Infer_Context *context,
+                                  Om_Module_Id module,
+                                  Om_Ast_Node_Id node_id,
+                                  uint32_t level,
+                                  Om_Type_Id *type_id);
 static Om_Status infer_statement(Om_Infer_Context *context,
                                  Om_Module_Id module,
                                  Om_Ast_Node_Id statement_id,
@@ -2321,6 +2538,8 @@ static Om_Status infer_expression(Om_Infer_Context *context,
     Om_Type_Id inferred = OM_TYPE_ID_INVALID;
     Om_Status status = OM_STATUS_OK;
     switch (node->kind) {
+    case OM_AST_QUERY:
+        return infer_query(context, module, node_id, node, level, type_id);
     case OM_AST_NAME: {
         const Om_Symbol_Id symbol = resolved_symbol_for_node(context, module, node_id);
         if (symbol.value == UINT32_MAX) {
@@ -2680,6 +2899,11 @@ static Om_Status infer_expression(Om_Infer_Context *context,
                                   level, &inferred);
         break;
     case OM_AST_MAP_ENTRY:
+    case OM_AST_QUERY_WHERE:
+    case OM_AST_QUERY_ORDER:
+    case OM_AST_QUERY_ORDER_KEY:
+    case OM_AST_QUERY_TAKE:
+    case OM_AST_QUERY_SELECT:
         return OM_STATUS_INVALID_ARGUMENT;
     case OM_AST_PROGRAM:
     case OM_AST_IMPORT:

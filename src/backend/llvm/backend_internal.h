@@ -129,6 +129,7 @@ typedef struct Om_Llvm_Backend_Context {
     LLVMValueRef runtime_list_create;
     LLVMValueRef runtime_list_concat;
     LLVMValueRef runtime_list_append;
+    LLVMValueRef runtime_list_stable_order;
     LLVMValueRef runtime_list_get;
     LLVMValueRef runtime_list_length;
     LLVMValueRef runtime_map_create;

@@ -168,3 +168,243 @@ Om_Status om_runtime_list_length(const Om_Execution_Context *context,
     return OM_STATUS_OK;
 }
 
+typedef struct Om_List_Order_Context {
+    Om_Execution_Context *execution;
+    const void *const *keys;
+    size_t key_count;
+    uint64_t descending_mask;
+} Om_List_Order_Context;
+
+static Om_Status compare_list_order_indices(const Om_List_Order_Context *order,
+                                            size_t left,
+                                            size_t right,
+                                            int *result)
+{
+    for (size_t key_index = 0; key_index < order->key_count; ++key_index) {
+        Om_Runtime_Value left_value = {0};
+        Om_Runtime_Value right_value = {0};
+        Om_Status status = om_runtime_list_get(order->execution,
+            order->keys[key_index], left, &left_value);
+        if (status == OM_STATUS_OK) {
+            status = om_runtime_list_get(order->execution,
+                order->keys[key_index], right, &right_value);
+        }
+        if (status != OM_STATUS_OK) return status;
+        const Om_Runtime_Object_Header *key_list = find_object(
+            order->execution, order->keys[key_index]);
+        const Om_Runtime_Type_Kind key_kind =
+            key_list->fields.type->element_type->kind;
+        int comparison = 0;
+        if (key_kind == OM_RUNTIME_TYPE_INT) {
+            comparison = left_value.integer < right_value.integer ? -1
+                : left_value.integer > right_value.integer ? 1 : 0;
+        } else if (key_kind == OM_RUNTIME_TYPE_STRING) {
+            int32_t string_comparison = 0;
+            status = om_runtime_string_compare(order->execution,
+                left_value.managed, right_value.managed, &string_comparison);
+            if (status != OM_STATUS_OK) return status;
+            comparison = string_comparison < 0 ? -1
+                : string_comparison > 0 ? 1 : 0;
+        } else {
+            return OM_STATUS_INVALID_ARGUMENT;
+        }
+        if (comparison != 0) {
+            const bool descending = (order->descending_mask
+                & (UINT64_C(1) << key_index)) != 0;
+            *result = descending ? -comparison : comparison;
+            return OM_STATUS_OK;
+        }
+    }
+    *result = left < right ? -1 : left > right ? 1 : 0;
+    return OM_STATUS_OK;
+}
+
+static Om_Status stable_merge_indices(const Om_List_Order_Context *order,
+                                      size_t *indices,
+                                      size_t *scratch,
+                                      size_t count)
+{
+    Om_Status status = OM_STATUS_OK;
+    for (size_t width = 1; status == OM_STATUS_OK && width < count;) {
+        size_t start = 0;
+        while (status == OM_STATUS_OK && start < count) {
+            const size_t middle = start + (count - start < width
+                ? count - start : width);
+            const size_t remaining = count - middle;
+            const size_t end = middle + (remaining < width ? remaining : width);
+            size_t left = start;
+            size_t right = middle;
+            size_t output = start;
+            while (status == OM_STATUS_OK && left < middle && right < end) {
+                int comparison = 0;
+                status = compare_list_order_indices(order, indices[left],
+                    indices[right], &comparison);
+                if (status == OM_STATUS_OK) {
+                    scratch[output++] = comparison <= 0
+                        ? indices[left++] : indices[right++];
+                }
+            }
+            while (status == OM_STATUS_OK && left < middle) {
+                scratch[output++] = indices[left++];
+            }
+            while (status == OM_STATUS_OK && right < end) {
+                scratch[output++] = indices[right++];
+            }
+            start = end;
+        }
+        if (status == OM_STATUS_OK) {
+            (void)memcpy(indices, scratch, count * sizeof(*indices));
+            width = width > count / 2 ? count : width * 2;
+        }
+    }
+    return status;
+}
+
+static Om_Status top_k_indices(const Om_List_Order_Context *order,
+                               size_t *heap,
+                               size_t *count,
+                               size_t capacity,
+                               size_t candidate)
+{
+    if (*count < capacity) {
+        size_t child = (*count)++;
+        heap[child] = candidate;
+        while (child != 0) {
+            const size_t parent = (child - 1) / 2;
+            int comparison = 0;
+            Om_Status status = compare_list_order_indices(order,
+                heap[parent], heap[child], &comparison);
+            if (status != OM_STATUS_OK) return status;
+            if (comparison >= 0) break;
+            const size_t temporary = heap[parent];
+            heap[parent] = heap[child];
+            heap[child] = temporary;
+            child = parent;
+        }
+        return OM_STATUS_OK;
+    }
+    int comparison = 0;
+    Om_Status status = compare_list_order_indices(order, candidate, heap[0],
+                                                  &comparison);
+    if (status != OM_STATUS_OK || comparison >= 0) return status;
+    heap[0] = candidate;
+    size_t parent = 0;
+    for (;;) {
+        const size_t left = parent * 2 + 1;
+        if (left >= *count) break;
+        const size_t right = left + 1;
+        size_t worse = left;
+        if (right < *count) {
+            status = compare_list_order_indices(order, heap[left], heap[right],
+                                                &comparison);
+            if (status != OM_STATUS_OK) return status;
+            if (comparison < 0) worse = right;
+        }
+        status = compare_list_order_indices(order, heap[parent], heap[worse],
+                                            &comparison);
+        if (status != OM_STATUS_OK || comparison >= 0) return status;
+        const size_t temporary = heap[parent];
+        heap[parent] = heap[worse];
+        heap[worse] = temporary;
+        parent = worse;
+    }
+    return OM_STATUS_OK;
+}
+
+Om_Status om_runtime_list_stable_order(
+    Om_Execution_Context *context,
+    const void *values_pointer,
+    const void *const *key_lists,
+    size_t key_count,
+    uint64_t descending_mask,
+    int64_t take_count,
+    void **result)
+{
+    Om_Runtime_Object_Header *values_object = find_object(context,
+                                                          values_pointer);
+    if (context == NULL || values_object == NULL || result == NULL
+        || values_object->fields.type->kind != OM_RUNTIME_TYPE_LIST
+        || key_count == 0 || key_count > 64 || key_lists == NULL
+        || (key_count < 64
+            && (descending_mask >> key_count) != 0)) {
+        return OM_STATUS_INVALID_ARGUMENT;
+    }
+    const Om_Runtime_List_Body *values = object_payload_const(values_object);
+    if (key_count > SIZE_MAX - 2) return OM_STATUS_OUT_OF_RANGE;
+    void **roots = om_alloc_array(key_count + 2, sizeof(*roots));
+    if (roots == NULL) return OM_STATUS_OUT_OF_MEMORY;
+    roots[0] = (void *)values_pointer;
+    roots[1] = NULL;
+    Om_Status status = OM_STATUS_OK;
+    for (size_t index = 0; status == OM_STATUS_OK && index < key_count; ++index) {
+        Om_Runtime_Object_Header *key_list = find_object(context,
+                                                         key_lists[index]);
+        if (key_list == NULL || key_list->fields.type->kind != OM_RUNTIME_TYPE_LIST
+            || (key_list->fields.type->element_type->kind != OM_RUNTIME_TYPE_INT
+                && key_list->fields.type->element_type->kind
+                    != OM_RUNTIME_TYPE_STRING)) {
+            status = OM_STATUS_INVALID_ARGUMENT;
+        } else {
+            const Om_Runtime_List_Body *keys = object_payload_const(key_list);
+            if (keys->length != values->length) {
+                status = OM_STATUS_INVALID_ARGUMENT;
+            }
+            roots[index + 2] = (void *)key_lists[index];
+        }
+    }
+    if (status != OM_STATUS_OK) {
+        om_free(roots);
+        return status;
+    }
+    Om_Runtime_Root_Frame *frame = om_runtime_roots_push(context, roots,
+                                                          key_count + 2);
+    if (frame == NULL) {
+        om_free(roots);
+        return OM_STATUS_OUT_OF_MEMORY;
+    }
+    const Om_List_Order_Context order = {
+        context, (const void *const *)(roots + 2), key_count, descending_mask,
+    };
+    const size_t count = values->length;
+    const size_t requested = take_count <= 0 ? 0
+        : (uint64_t)take_count < (uint64_t)count ? (size_t)take_count : count;
+    size_t *indices = count == 0 ? NULL
+        : om_alloc_array(count, sizeof(*indices));
+    size_t *scratch = count == 0 ? NULL
+        : om_alloc_array(count, sizeof(*scratch));
+    if (count != 0 && (indices == NULL || scratch == NULL)) {
+        status = OM_STATUS_OUT_OF_MEMORY;
+    }
+    for (size_t index = 0; status == OM_STATUS_OK && index < count; ++index) {
+        indices[index] = index;
+    }
+    if (status == OM_STATUS_OK && requested != 0 && requested < count) {
+        size_t heap_count = 0;
+        for (size_t index = 0; status == OM_STATUS_OK && index < count; ++index) {
+            status = top_k_indices(&order, indices, &heap_count, requested, index);
+        }
+        if (status == OM_STATUS_OK) {
+            status = stable_merge_indices(&order, indices, scratch, heap_count);
+        }
+    } else if (status == OM_STATUS_OK && requested > 1) {
+        status = stable_merge_indices(&order, indices, scratch, count);
+    }
+    if (status == OM_STATUS_OK) {
+        status = om_runtime_list_create(context, values_object->fields.type,
+                                        &roots[1]);
+    }
+    for (size_t index = 0; status == OM_STATUS_OK && index < requested; ++index) {
+        Om_Runtime_Value value = {0};
+        status = om_runtime_list_get(context, roots[0], indices[index], &value);
+        if (status == OM_STATUS_OK) {
+            status = om_runtime_list_append(context, roots[1], value);
+        }
+    }
+    if (status == OM_STATUS_OK) *result = roots[1];
+    const Om_Status pop_status = om_runtime_roots_pop(context, frame);
+    om_free(scratch);
+    om_free(indices);
+    om_free(roots);
+    return status == OM_STATUS_OK ? pop_status : status;
+}
+

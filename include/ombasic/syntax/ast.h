@@ -55,7 +55,13 @@ typedef enum Om_Ast_Kind {
     OM_AST_GROUP,
     OM_AST_LIST,
     OM_AST_MAP,
-    OM_AST_MAP_ENTRY
+    OM_AST_MAP_ENTRY,
+    OM_AST_QUERY,
+    OM_AST_QUERY_WHERE,
+    OM_AST_QUERY_ORDER,
+    OM_AST_QUERY_ORDER_KEY,
+    OM_AST_QUERY_TAKE,
+    OM_AST_QUERY_SELECT
 } Om_Ast_Kind;
 
 typedef enum Om_Ast_Flag {
@@ -69,7 +75,8 @@ typedef enum Om_Ast_Flag {
     OM_AST_FLAG_CASE_ELSE = 1u << 6,
     OM_AST_FLAG_MIN_INTEGER = 1u << 7,
     OM_AST_FLAG_EXPORTED = 1u << 8,
-    OM_AST_FLAG_REEXPORT = 1u << 9
+    OM_AST_FLAG_REEXPORT = 1u << 9,
+    OM_AST_FLAG_QUERY_DESCENDING = 1u << 10
 } Om_Ast_Flag;
 
 /*
@@ -78,7 +85,9 @@ typedef enum Om_Ast_Flag {
  * Function/action children are parameters followed by a block; RECEIVE uses the
  * same layout. IF children are arms then an optional ELSE block. FOR children
  * are start/end/optional step/body or iterable/body. SELECT children are the
- * scrutinee followed by CASE arms. Calls contain callee then arguments.
+ * scrutinee followed by CASE arms. Query children are the source followed by
+ * ordered WHERE/ORDER/TAKE/SELECT clause nodes. Calls contain callee then
+ * arguments.
  */
 typedef struct Om_Ast_Node {
     Om_Ast_Kind kind;

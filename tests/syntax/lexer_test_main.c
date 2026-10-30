@@ -2,6 +2,7 @@
 
 bool om_test_lexer_keywords_and_names(void);
 bool om_test_lexer_all_keywords(void);
+bool om_test_lexer_list_take_name_compatibility(void);
 bool om_test_lexer_down_reason_names_are_identifiers(void);
 bool om_test_lexer_numbers(void);
 bool om_test_lexer_strings(void);
@@ -18,6 +19,8 @@ int main(void)
     const Om_Test_Case tests[] = {
         {"lexer_keywords_and_names", om_test_lexer_keywords_and_names},
         {"lexer_all_keywords", om_test_lexer_all_keywords},
+        {"lexer_list_take_name_compatibility",
+         om_test_lexer_list_take_name_compatibility},
         {"lexer_down_reason_names_are_identifiers",
          om_test_lexer_down_reason_names_are_identifiers},
         {"lexer_numbers", om_test_lexer_numbers},
