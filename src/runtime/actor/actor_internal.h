@@ -36,6 +36,7 @@ typedef struct Om_Runtime_Ready_Actor {
 } Om_Runtime_Ready_Actor;
 
 struct Om_Runtime_Network_Resource;
+struct Om_Tls_Session;
 struct Om_Runtime_Process_Resource;
 
 typedef struct Om_Runtime_Actor_Thread {
@@ -142,6 +143,7 @@ typedef struct Om_Runtime_System_Task {
     void *payload_object;
     struct Om_Runtime_Network_Resource *network_resource;
     struct Om_Runtime_Network_Resource *network_listener;
+    struct Om_Tls_Session *tls_session;
     struct Om_Runtime_Process_Resource *process_resource;
     char **process_arguments;
     size_t process_argument_count;
@@ -204,6 +206,11 @@ Om_Status actor_send_clock_locked(
     const Om_Runtime_Type_Descriptor *message_type,
     const void *message_object);
 Om_Status actor_send_secure_random_locked(
+    Om_Runtime_Actor_System *system,
+    Om_Execution_Context *source_context,
+    const Om_Runtime_Type_Descriptor *message_type,
+    const void *message_object);
+Om_Status actor_send_environment_locked(
     Om_Runtime_Actor_System *system,
     Om_Execution_Context *source_context,
     const Om_Runtime_Type_Descriptor *message_type,

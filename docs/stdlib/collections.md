@@ -16,20 +16,20 @@ The current facade provides:
 - `index_of(values, sought)`, returning the first zero-based index or `-1`
 - `concat(left, right)`, returning the concatenated List
 - `reverse(values)`
+- `take(values, count)`, returning at most the first `count` elements
+- `drop(values, count)`, skipping the first `count` positions
+- `slice(values, start_index, count)`, clipping the requested range to the List
+- `map(values, transform)` and `filter(values, predicate)`, preserving order
 - Map `map_length(values)`, `map_is_empty(values)`, and
   `contains_key(values, key)`
 - Map `keys(values)`, returning String keys in the Map's insertion order
 - Map `get_or(values, key, fallback)`, returning the value or the fallback
 
-The current Map helpers are constrained to `Map<String, V>` because the source
-language does not yet expose a stable way to declare a generic Map key type.
-The underlying language Map still supports its documented key types.
+`take` treats negative counts as zero. `drop` treats negative counts as zero,
+so it returns the full List. `slice` returns an empty List for a negative start
+or non-positive count and clips ranges that extend beyond the List. Empty
+results retain their inferred element type when the call context provides one.
+Untyped local empty collections still require an expected type.
 
-Map helpers beyond length, emptiness, key presence, ordered keys, and `get_or`
-are not yet part of this facade. Operations that must create a generic empty List, including `take`,
-`drop`, and `slice`, await a language-level way to infer the element type of
-that empty result. Generic function values and specialization are supported:
-the conformance suite passes a polymorphic function to a generic higher-order
-function and specializes it as both `Int -> Int` and `String -> Bool`. The
-collection facade still defers `map` and `filter` because it cannot yet
-construct a correctly typed empty output List when the input is empty.
+The Map helpers are constrained to `Map<String, V>` because the source language
+does not yet expose a stable way to declare a generic Map key type.

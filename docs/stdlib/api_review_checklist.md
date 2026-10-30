@@ -26,6 +26,20 @@ symbol.
 - [ ] Is CString/CPointer ownership Borrowed or Owned and mechanically released?
 - [ ] Are invalid input and OS failures mapped to stable errors?
 
+## Errors, offsets, and limits
+
+- [ ] Are public error codes stable lower_snake_case ASCII identifiers?
+- [ ] Are ordinary input and operating-system failures returned as Results or
+  completion payloads instead of Runtime Faults?
+- [ ] Does every reported parse offset specify whether it counts UTF-8 bytes or
+  Unicode scalar values?
+- [ ] Are size calculations checked before allocation and bounded by a
+  documented resource limit?
+- [ ] Does exceeding a limit return `resource_exhausted` without assertions or
+  integer wraparound?
+- [ ] Are Runtime Faults reserved for violated invariants and unrecoverable
+  Runtime conditions?
+
 ## Compatibility and evidence
 
 - [ ] Is the symbol exported through the intended Facade only?
@@ -33,3 +47,6 @@ symbol.
 - [ ] Is there a conformance case for the public source API?
 - [ ] Are Native and Runtime tests added when the implementation crosses those layers?
 - [ ] Are SDK manifest, installation, and relocation checks still valid?
+- [ ] Does every asynchronous system service document queue rejection,
+  requester shutdown, Runtime shutdown, and completion delivery behavior?
+- [ ] Are binary values represented by `Buffer`, never by `String`?

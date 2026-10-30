@@ -288,6 +288,30 @@ Om_Status om_runtime_string_create_from_owned_cstring(
     return status;
 }
 
+Om_Status om_runtime_string_create_from_owned_utf8_slice(
+    Om_Execution_Context *context,
+    Om_String_View *slice,
+    Om_Runtime_CString_Release release,
+    void **result)
+{
+    if (release == NULL) {
+        return OM_STATUS_INVALID_ARGUMENT;
+    }
+    if (slice == NULL) {
+        if (result != NULL) *result = NULL;
+        return OM_STATUS_INVALID_ARGUMENT;
+    }
+    if (result == NULL) {
+        release(slice);
+        return OM_STATUS_INVALID_ARGUMENT;
+    }
+    *result = NULL;
+    const Om_Status status = om_runtime_string_create_utf8_default(
+        context, (const uint8_t *)slice->data, slice->length, result);
+    release(slice);
+    return status;
+}
+
 Om_Status om_runtime_print(Om_Execution_Context *context,
                            const void *string)
 {

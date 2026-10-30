@@ -1,0 +1,35 @@
+NATIVE "ombasic_runtime"
+FUNCTION sqlite_native_open(path: CString BORROWED): CString
+    SYMBOL "om_runtime_database_open"
+    EFFECT NATIVE
+    NONBLOCKING
+    RETURNS OWNED WITH release_value
+END FUNCTION
+
+FUNCTION sqlite_native_execute(connection_id: CInt64, sql: CString BORROWED): CString
+    SYMBOL "om_runtime_database_execute"
+    EFFECT NATIVE
+    NONBLOCKING
+    RETURNS OWNED WITH release_value
+END FUNCTION
+
+FUNCTION sqlite_native_query(connection_id: CInt64, sql: CString BORROWED): CString
+    SYMBOL "om_runtime_database_query"
+    EFFECT NATIVE
+    NONBLOCKING
+    RETURNS OWNED WITH release_value
+END FUNCTION
+
+FUNCTION sqlite_native_close(connection_id: CInt64): CString
+    SYMBOL "om_runtime_database_close"
+    EFFECT NATIVE
+    NONBLOCKING
+    RETURNS OWNED WITH release_value
+END FUNCTION
+
+FUNCTION release_value(value: CPointer OWNED): CVoid
+    SYMBOL "om_runtime_database_release"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+END NATIVE

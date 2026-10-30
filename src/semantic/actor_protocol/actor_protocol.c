@@ -83,6 +83,12 @@ static Om_Status collect_actor_protocols(
         {OM_BUILTIN_SYSTEM_ACTOR_FILE_SYSTEM,
          OM_BUILTIN_SYSTEM_MESSAGE_FILE_APPEND},
         {OM_BUILTIN_SYSTEM_ACTOR_FILE_SYSTEM,
+         OM_BUILTIN_SYSTEM_MESSAGE_FILE_READ_BYTES},
+        {OM_BUILTIN_SYSTEM_ACTOR_FILE_SYSTEM,
+         OM_BUILTIN_SYSTEM_MESSAGE_FILE_WRITE_BYTES},
+        {OM_BUILTIN_SYSTEM_ACTOR_FILE_SYSTEM,
+         OM_BUILTIN_SYSTEM_MESSAGE_FILE_APPEND_BYTES},
+        {OM_BUILTIN_SYSTEM_ACTOR_FILE_SYSTEM,
          OM_BUILTIN_SYSTEM_MESSAGE_FILE_EXISTS},
         {OM_BUILTIN_SYSTEM_ACTOR_FILE_SYSTEM,
          OM_BUILTIN_SYSTEM_MESSAGE_FILE_DELETE},
@@ -122,6 +128,16 @@ static Om_Status collect_actor_protocols(
          OM_BUILTIN_SYSTEM_MESSAGE_UDP_RECEIVE},
         {OM_BUILTIN_SYSTEM_ACTOR_NETWORK,
          OM_BUILTIN_SYSTEM_MESSAGE_UDP_CLOSE},
+        {OM_BUILTIN_SYSTEM_ACTOR_NETWORK,
+         OM_BUILTIN_SYSTEM_MESSAGE_DNS_RESOLVE},
+        {OM_BUILTIN_SYSTEM_ACTOR_NETWORK,
+         OM_BUILTIN_SYSTEM_MESSAGE_TLS_CLIENT_START},
+        {OM_BUILTIN_SYSTEM_ACTOR_NETWORK,
+         OM_BUILTIN_SYSTEM_MESSAGE_TLS_SEND},
+        {OM_BUILTIN_SYSTEM_ACTOR_NETWORK,
+         OM_BUILTIN_SYSTEM_MESSAGE_TLS_RECEIVE},
+        {OM_BUILTIN_SYSTEM_ACTOR_NETWORK,
+         OM_BUILTIN_SYSTEM_MESSAGE_TLS_CLOSE},
         {OM_BUILTIN_SYSTEM_ACTOR_PROCESS,
          OM_BUILTIN_SYSTEM_MESSAGE_PROCESS_SPAWN},
         {OM_BUILTIN_SYSTEM_ACTOR_PROCESS,
@@ -135,7 +151,15 @@ static Om_Status collect_actor_protocols(
         {OM_BUILTIN_SYSTEM_ACTOR_PROCESS,
          OM_BUILTIN_SYSTEM_MESSAGE_PROCESS_TERMINATE},
         {OM_BUILTIN_SYSTEM_ACTOR_PROCESS,
-         OM_BUILTIN_SYSTEM_MESSAGE_PROCESS_WAIT}
+         OM_BUILTIN_SYSTEM_MESSAGE_PROCESS_WAIT},
+        {OM_BUILTIN_SYSTEM_ACTOR_ENVIRONMENT,
+         OM_BUILTIN_SYSTEM_MESSAGE_ENVIRONMENT_ARGUMENTS},
+        {OM_BUILTIN_SYSTEM_ACTOR_ENVIRONMENT,
+         OM_BUILTIN_SYSTEM_MESSAGE_ENVIRONMENT_GET},
+        {OM_BUILTIN_SYSTEM_ACTOR_ENVIRONMENT,
+         OM_BUILTIN_SYSTEM_MESSAGE_ENVIRONMENT_CURRENT_DIRECTORY},
+        {OM_BUILTIN_SYSTEM_ACTOR_ENVIRONMENT,
+         OM_BUILTIN_SYSTEM_MESSAGE_ENVIRONMENT_EXECUTABLE_PATH}
     };
     for (size_t index = 0;
          index < sizeof(system_protocols) / sizeof(system_protocols[0]);
@@ -309,6 +333,28 @@ static bool context_actor_accepts(
     return false;
 }
 
+static Om_Status actor_identity_erased(
+    const Om_Type_Inference_Result *inference,
+    Om_Type_Id type_id,
+    bool *erased)
+{
+    if (inference == NULL || erased == NULL) {
+        return OM_STATUS_INVALID_ARGUMENT;
+    }
+    *erased = false;
+    Om_Type_Id resolved = OM_TYPE_ID_INVALID;
+    Om_Status status = om_type_store_resolve(&inference->type_store, type_id,
+                                             &resolved);
+    Om_Type_View view = {0};
+    if (status == OM_STATUS_OK) {
+        status = om_type_store_get(&inference->type_store, resolved, &view);
+    }
+    if (status == OM_STATUS_OK) {
+        *erased = view.kind == OM_TYPE_ACTOR_ID;
+    }
+    return status;
+}
+
 static Om_Status check_send_protocols(Om_Semantic_Analysis_Context *context)
 {
     for (size_t module_index = 0; module_index < context->module_count;
@@ -339,8 +385,13 @@ static Om_Status check_send_protocols(Om_Semantic_Analysis_Context *context)
             Om_Symbol_Id message_symbol = OM_SYMBOL_ID_INVALID;
             bool actor_known = false;
             bool message_known = false;
+            bool erased_actor_identity = false;
             Om_Status status = actor_symbol_for_type(
                 context->inference, receiver_type, &actor_symbol, &actor_known);
+            if (status == OM_STATUS_OK) {
+                status = actor_identity_erased(context->inference,
+                    receiver_type, &erased_actor_identity);
+            }
             if (status == OM_STATUS_OK) {
                 status = message_symbol_for_type(context->inference,
                                                  message_type,
@@ -352,8 +403,8 @@ static Om_Status check_send_protocols(Om_Semantic_Analysis_Context *context)
             }
             const bool universally_accepted = message_known
                 && is_actor_down(context, message_symbol);
-            if (!actor_known || !message_known
-                || (!universally_accepted
+            if ((!actor_known && !erased_actor_identity) || !message_known
+                || (!erased_actor_identity && !universally_accepted
                     && !context_actor_accepts(context, actor_symbol,
                                               message_symbol))) {
                 status = om_semantic_add_diagnostic(

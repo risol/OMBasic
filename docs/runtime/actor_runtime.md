@@ -40,3 +40,14 @@ remote Actor's state; it does not prove that the remote Actor terminated.
 Watch notifications enter the watcher's mailbox once and follow the same
 run-to-completion ordering as other Messages. The remote-node loss path uses
 `Actor_Down_Reason.node_unreachable` for its uncertainty notification.
+
+# Explicit actor identity erasure
+
+`Actor_Id(actor_ref)` converts a typed ActorRef to its opaque runtime identity.
+`Actor_Id()` creates the zero sentinel, which is not a live actor reference.
+`SEND` accepts either a typed ActorRef or an Actor_Id. Typed sends are checked
+against the recipient's nominal protocol during compilation. An erased send
+skips that compile-time protocol check, but Runtime delivery still checks the
+message descriptor and reports an unsuccessful delivery through the normal
+Runtime Fault path. Use the erased form when a service needs to retain a
+caller's identity for a typed completion message.

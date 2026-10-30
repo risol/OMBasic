@@ -1331,6 +1331,22 @@ static Om_Status lower_call(Om_Mir_Lowering_Context *context,
     if (status == OM_STATUS_OK && direct) {
         const Om_Symbol *callee_symbol = om_resolution_symbol_by_id(
             context->hir->resolution, node->symbol_id);
+        if (callee_symbol != NULL
+            && callee_symbol->kind == OM_SYMBOL_BUILTIN
+            && callee_symbol->builtin_id == OM_BUILTIN_ACTOR_ID) {
+            if (argument_count > 1) {
+                status = add_lowering_diagnostic(context, node->span);
+            } else {
+                status = emit_instruction(context, node,
+                    OM_MIR_ACTOR_IDENTITY, result_type,
+                    OM_HIR_OPERATOR_NONE,
+                    OM_FUNCTION_INSTANCE_ID_INVALID, operands,
+                    argument_count, 0, 0.0,
+                    out_value);
+            }
+            om_free(operands);
+            return status;
+        }
         if (callee_symbol != NULL && callee_symbol->native_module != NULL) {
             const Om_Omi_Module *native_module = callee_symbol->native_module;
             if (callee_symbol->native_function_index
@@ -1772,6 +1788,8 @@ static Om_Status lower_expression(Om_Mir_Lowering_Context *context,
             actor_id = OM_SYSTEM_ACTOR_REF_NETWORK;
         } else if (node->builtin_id == OM_BUILTIN_SYSTEM_ACTOR_PROCESS) {
             actor_id = OM_SYSTEM_ACTOR_REF_PROCESS;
+        } else if (node->builtin_id == OM_BUILTIN_SYSTEM_ACTOR_ENVIRONMENT) {
+            actor_id = OM_SYSTEM_ACTOR_REF_ENVIRONMENT;
         }
         if (actor_id == UINT64_MAX) {
             return add_lowering_diagnostic(context, node->span);
@@ -2103,8 +2121,11 @@ static Om_Status lower_if(Om_Mir_Lowering_Context *context,
         const Om_Hir_Node *else_block = hir_child(context->hir, node,
                                                   node->child_count - 1);
         Om_Mir_Block_Id else_block_id = OM_MIR_BLOCK_ID_INVALID;
-        status = om_mir_add_block(context->mir, context->function_id,
-                                  &else_block_id);
+        status = environment_restore(context, base_environment, base_count);
+        if (status == OM_STATUS_OK) {
+            status = om_mir_add_block(context->mir, context->function_id,
+                                      &else_block_id);
+        }
         if (status == OM_STATUS_OK) {
             Om_Mir_Test_Block *stored_test = om_vector_at(&tests,
                                                            tests.length - 1);
@@ -2129,7 +2150,8 @@ static Om_Status lower_if(Om_Mir_Lowering_Context *context,
             base_environment, base_count, true);
     }
     if (status == OM_STATUS_OK && !context->unsupported) {
-        if (predecessors.length == 0) {
+        const size_t merge_predecessor_count = predecessors.length;
+        if (merge_predecessor_count == 0) {
             for (size_t index = 0; status == OM_STATUS_OK
                  && index < tests.length; ++index) {
                 const Om_Mir_Test_Block *test = om_vector_at_const(&tests, index);
@@ -2150,7 +2172,7 @@ static Om_Status lower_if(Om_Mir_Lowering_Context *context,
             status = om_mir_add_block(context->mir, context->function_id,
                                       &merge_block);
             Om_Mir_Value_Id *merge_parameters = NULL;
-            if (status == OM_STATUS_OK && predecessors.length > 1
+            if (status == OM_STATUS_OK && merge_predecessor_count > 1
                 && base_count != 0) {
                 merge_parameters = om_alloc_array(base_count,
                                                    sizeof(*merge_parameters));
@@ -2172,7 +2194,7 @@ static Om_Status lower_if(Om_Mir_Lowering_Context *context,
                 }
                 Om_Mir_Value_Id *arguments = NULL;
                 size_t argument_count = 0;
-                if (predecessors.length > 1) {
+                if (merge_predecessor_count > 1) {
                     argument_count = base_count;
                     arguments = base_count == 0 ? NULL
                         : om_alloc_array(base_count, sizeof(*arguments));
@@ -2211,7 +2233,7 @@ static Om_Status lower_if(Om_Mir_Lowering_Context *context,
                 const Om_Mir_Block_Id false_target = implicit_false_edge
                     ? merge_block : test->false_block_id;
                 Om_Mir_Value_Id *false_arguments = NULL;
-                if (implicit_false_edge && predecessors.length > 1
+                if (implicit_false_edge && merge_predecessor_count > 1
                     && base_count != 0) {
                     false_arguments = om_alloc_array(base_count,
                         sizeof(*false_arguments));
@@ -2230,7 +2252,7 @@ static Om_Status lower_if(Om_Mir_Lowering_Context *context,
                     {.target_block_id = false_target,
                      .arguments = false_arguments,
                      .argument_count = implicit_false_edge
-                            && predecessors.length > 1
+                            && merge_predecessor_count > 1
                         ? base_count : 0},
                 };
                 if (status == OM_STATUS_OK) {
@@ -2242,9 +2264,12 @@ static Om_Status lower_if(Om_Mir_Lowering_Context *context,
             if (status == OM_STATUS_OK) {
                 context->block_id = merge_block;
                 context->terminated = false;
-                if (predecessors.length > 1) {
+                if (merge_predecessor_count > 1) {
                     status = environment_from_block_parameters(context,
                         base_environment, merge_parameters, base_count);
+                } else if (predecessors.length == 0) {
+                    status = environment_restore(context, base_environment,
+                                                 base_count);
                 } else {
                     const Om_Mir_Merge_Predecessor *predecessor =
                         om_vector_at_const(&predecessors, 0);
@@ -3975,6 +4000,12 @@ static Om_System_Message_Id system_message_id_for_builtin(Om_Builtin_Id id)
     if (id == OM_BUILTIN_SYSTEM_MESSAGE_FILE_APPEND_COMPLETED) {
         return OM_SYSTEM_MESSAGE_ID_FILE_APPEND_COMPLETED;
     }
+    if (id == OM_BUILTIN_SYSTEM_MESSAGE_FILE_READ_BYTES) return OM_SYSTEM_MESSAGE_ID_FILE_READ_BYTES;
+    if (id == OM_BUILTIN_SYSTEM_MESSAGE_FILE_READ_BYTES_COMPLETED) return OM_SYSTEM_MESSAGE_ID_FILE_READ_BYTES_COMPLETED;
+    if (id == OM_BUILTIN_SYSTEM_MESSAGE_FILE_WRITE_BYTES) return OM_SYSTEM_MESSAGE_ID_FILE_WRITE_BYTES;
+    if (id == OM_BUILTIN_SYSTEM_MESSAGE_FILE_WRITE_BYTES_COMPLETED) return OM_SYSTEM_MESSAGE_ID_FILE_WRITE_BYTES_COMPLETED;
+    if (id == OM_BUILTIN_SYSTEM_MESSAGE_FILE_APPEND_BYTES) return OM_SYSTEM_MESSAGE_ID_FILE_APPEND_BYTES;
+    if (id == OM_BUILTIN_SYSTEM_MESSAGE_FILE_APPEND_BYTES_COMPLETED) return OM_SYSTEM_MESSAGE_ID_FILE_APPEND_BYTES_COMPLETED;
     if (id == OM_BUILTIN_SYSTEM_MESSAGE_FILE_EXISTS) {
         return OM_SYSTEM_MESSAGE_ID_FILE_EXISTS;
     }
@@ -4069,6 +4100,24 @@ static Om_System_Message_Id system_message_id_for_builtin(Om_Builtin_Id id)
     if (id == OM_BUILTIN_SYSTEM_MESSAGE_UDP_RECEIVE_COMPLETED) return OM_SYSTEM_MESSAGE_ID_UDP_RECEIVE_COMPLETED;
     if (id == OM_BUILTIN_SYSTEM_MESSAGE_UDP_CLOSE) return OM_SYSTEM_MESSAGE_ID_UDP_CLOSE;
     if (id == OM_BUILTIN_SYSTEM_MESSAGE_UDP_CLOSE_COMPLETED) return OM_SYSTEM_MESSAGE_ID_UDP_CLOSE_COMPLETED;
+    if (id == OM_BUILTIN_SYSTEM_MESSAGE_ENVIRONMENT_ARGUMENTS) return OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_ARGUMENTS;
+    if (id == OM_BUILTIN_SYSTEM_MESSAGE_ENVIRONMENT_ARGUMENTS_COMPLETED) return OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_ARGUMENTS_COMPLETED;
+    if (id == OM_BUILTIN_SYSTEM_MESSAGE_ENVIRONMENT_GET) return OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_GET;
+    if (id == OM_BUILTIN_SYSTEM_MESSAGE_ENVIRONMENT_GET_COMPLETED) return OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_GET_COMPLETED;
+    if (id == OM_BUILTIN_SYSTEM_MESSAGE_ENVIRONMENT_CURRENT_DIRECTORY) return OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_CURRENT_DIRECTORY;
+    if (id == OM_BUILTIN_SYSTEM_MESSAGE_ENVIRONMENT_CURRENT_DIRECTORY_COMPLETED) return OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_CURRENT_DIRECTORY_COMPLETED;
+    if (id == OM_BUILTIN_SYSTEM_MESSAGE_ENVIRONMENT_EXECUTABLE_PATH) return OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_EXECUTABLE_PATH;
+    if (id == OM_BUILTIN_SYSTEM_MESSAGE_ENVIRONMENT_EXECUTABLE_PATH_COMPLETED) return OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_EXECUTABLE_PATH_COMPLETED;
+    if (id == OM_BUILTIN_SYSTEM_MESSAGE_DNS_RESOLVE) return OM_SYSTEM_MESSAGE_ID_DNS_RESOLVE;
+    if (id == OM_BUILTIN_SYSTEM_MESSAGE_DNS_RESOLVE_COMPLETED) return OM_SYSTEM_MESSAGE_ID_DNS_RESOLVE_COMPLETED;
+    if (id == OM_BUILTIN_SYSTEM_MESSAGE_TLS_CLIENT_START) return OM_SYSTEM_MESSAGE_ID_TLS_CLIENT_START;
+    if (id == OM_BUILTIN_SYSTEM_MESSAGE_TLS_CLIENT_START_COMPLETED) return OM_SYSTEM_MESSAGE_ID_TLS_CLIENT_START_COMPLETED;
+    if (id == OM_BUILTIN_SYSTEM_MESSAGE_TLS_SEND) return OM_SYSTEM_MESSAGE_ID_TLS_SEND;
+    if (id == OM_BUILTIN_SYSTEM_MESSAGE_TLS_SEND_COMPLETED) return OM_SYSTEM_MESSAGE_ID_TLS_SEND_COMPLETED;
+    if (id == OM_BUILTIN_SYSTEM_MESSAGE_TLS_RECEIVE) return OM_SYSTEM_MESSAGE_ID_TLS_RECEIVE;
+    if (id == OM_BUILTIN_SYSTEM_MESSAGE_TLS_RECEIVE_COMPLETED) return OM_SYSTEM_MESSAGE_ID_TLS_RECEIVE_COMPLETED;
+    if (id == OM_BUILTIN_SYSTEM_MESSAGE_TLS_CLOSE) return OM_SYSTEM_MESSAGE_ID_TLS_CLOSE;
+    if (id == OM_BUILTIN_SYSTEM_MESSAGE_TLS_CLOSE_COMPLETED) return OM_SYSTEM_MESSAGE_ID_TLS_CLOSE_COMPLETED;
     return OM_SYSTEM_MESSAGE_ID_NONE;
 }
 
@@ -4090,6 +4139,7 @@ static size_t system_message_field_count(Om_System_Message_Id message_id)
     switch (message_id) {
     case OM_SYSTEM_MESSAGE_ID_CONSOLE_WRITE:
     case OM_SYSTEM_MESSAGE_ID_FILE_READ:
+    case OM_SYSTEM_MESSAGE_ID_FILE_READ_BYTES:
     case OM_SYSTEM_MESSAGE_ID_FILE_EXISTS:
     case OM_SYSTEM_MESSAGE_ID_FILE_DELETE:
     case OM_SYSTEM_MESSAGE_ID_DIRECTORY_CREATE:
@@ -4131,11 +4181,28 @@ static size_t system_message_field_count(Om_System_Message_Id message_id)
         return 3;
     case OM_SYSTEM_MESSAGE_ID_UDP_CLOSE:
         return 2;
+    case OM_SYSTEM_MESSAGE_ID_DNS_RESOLVE:
+        return 3;
+    case OM_SYSTEM_MESSAGE_ID_TLS_CLIENT_START:
+        return 3;
+    case OM_SYSTEM_MESSAGE_ID_TLS_SEND:
+    case OM_SYSTEM_MESSAGE_ID_TLS_RECEIVE:
+        return 3;
+    case OM_SYSTEM_MESSAGE_ID_TLS_CLOSE:
+        return 2;
+    case OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_ARGUMENTS:
+    case OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_CURRENT_DIRECTORY:
+    case OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_EXECUTABLE_PATH:
+        return 1;
+    case OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_GET:
+        return 2;
     case OM_SYSTEM_MESSAGE_ID_CLOCK_MONOTONIC_NOW:
     case OM_SYSTEM_MESSAGE_ID_CLOCK_UTC_NOW:
         return 1;
     case OM_SYSTEM_MESSAGE_ID_FILE_WRITE:
     case OM_SYSTEM_MESSAGE_ID_FILE_APPEND:
+    case OM_SYSTEM_MESSAGE_ID_FILE_WRITE_BYTES:
+    case OM_SYSTEM_MESSAGE_ID_FILE_APPEND_BYTES:
     case OM_SYSTEM_MESSAGE_ID_TIMER_AFTER:
         return 3;
     case OM_SYSTEM_MESSAGE_ID_CONSOLE_WRITE_COMPLETED:
@@ -4143,6 +4210,9 @@ static size_t system_message_field_count(Om_System_Message_Id message_id)
     case OM_SYSTEM_MESSAGE_ID_FILE_READ_COMPLETED:
     case OM_SYSTEM_MESSAGE_ID_FILE_WRITE_COMPLETED:
     case OM_SYSTEM_MESSAGE_ID_FILE_APPEND_COMPLETED:
+    case OM_SYSTEM_MESSAGE_ID_FILE_READ_BYTES_COMPLETED:
+    case OM_SYSTEM_MESSAGE_ID_FILE_WRITE_BYTES_COMPLETED:
+    case OM_SYSTEM_MESSAGE_ID_FILE_APPEND_BYTES_COMPLETED:
     case OM_SYSTEM_MESSAGE_ID_FILE_EXISTS_COMPLETED:
     case OM_SYSTEM_MESSAGE_ID_FILE_DELETE_COMPLETED:
     case OM_SYSTEM_MESSAGE_ID_DIRECTORY_CREATE_COMPLETED:
@@ -4170,6 +4240,15 @@ static size_t system_message_field_count(Om_System_Message_Id message_id)
     case OM_SYSTEM_MESSAGE_ID_UDP_SEND_COMPLETED:
     case OM_SYSTEM_MESSAGE_ID_UDP_RECEIVE_COMPLETED:
     case OM_SYSTEM_MESSAGE_ID_UDP_CLOSE_COMPLETED:
+    case OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_ARGUMENTS_COMPLETED:
+    case OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_GET_COMPLETED:
+    case OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_CURRENT_DIRECTORY_COMPLETED:
+    case OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_EXECUTABLE_PATH_COMPLETED:
+    case OM_SYSTEM_MESSAGE_ID_DNS_RESOLVE_COMPLETED:
+    case OM_SYSTEM_MESSAGE_ID_TLS_CLIENT_START_COMPLETED:
+    case OM_SYSTEM_MESSAGE_ID_TLS_SEND_COMPLETED:
+    case OM_SYSTEM_MESSAGE_ID_TLS_RECEIVE_COMPLETED:
+    case OM_SYSTEM_MESSAGE_ID_TLS_CLOSE_COMPLETED:
         return 1;
     case OM_SYSTEM_MESSAGE_ID_NONE:
     case OM_SYSTEM_MESSAGE_ID_ANY:

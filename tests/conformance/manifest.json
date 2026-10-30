@@ -2,6 +2,242 @@
   "schema_version": 2,
   "cases": [
     {
+      "id": "sdk-stdlib-http-response-parser-fuzz-smoke",
+      "rules": [
+        "OM-21.18",
+        "OM-06.03"
+      ],
+      "kind": "run",
+      "source": "06_modules/http_response_fuzz.bas",
+      "tags": [
+        "module",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "http-parser-fuzz=128\n"
+        }
+      }
+    },
+    {
+      "id": "sdk-stdlib-sqlite-database-actor",
+      "rules": [
+        "OM-21.18",
+        "OM-06.03"
+      ],
+      "kind": "run",
+      "source": "06_modules/sqlite_actor.bas",
+      "tags": [
+        "module",
+        "actor",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "insert=1|1\nquery={\"columns\":[\"id\",\"name\",\"payload\",\"ratio\",\"absent\"],\"rows\":[[1,\"Ada\",{\"$blob\":\"AP8=\"},3.5,null]]}\nsyntax=false|invalid_sql|1\nclose=true|\n"
+        }
+      }
+    },
+    {
+      "id": "sdk-stdlib-regex-thompson-nfa",
+      "rules": [
+        "OM-21.18",
+        "OM-06.03"
+      ],
+      "kind": "run",
+      "source": "06_modules/regex_basics.bas",
+      "tags": [
+        "module",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "literal=true|2|5\nsyntax=true|0|5\nunicode=true|1|2\nempty=true|0|0\nbackref=unsupported\ninvalid=invalid_pattern|0\n"
+        }
+      }
+    },
+    {
+      "id": "sdk-stdlib-compression-gzip-deflate",
+      "rules": [
+        "OM-21.18",
+        "OM-06.03"
+      ],
+      "kind": "run",
+      "source": "06_modules/compression_basics.bas",
+      "tags": [
+        "module",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "gzip=31|139|true\ndeflate=120|156|true\nknown-gzip=104|111\ngzip-optional=104|111\ngzip-empty=0\nchecksum=checksum_mismatch\nmalformed=invalid_format\n"
+        }
+      }
+    },
+    {
+      "id": "stdlib-http-client-local-loopback",
+      "rules": [
+        "OM-21.18",
+        "OM-17.03"
+      ],
+      "kind": "multi_process",
+      "scenario": "runner/scenarios/http_client_actor.py",
+      "timeout_seconds": 90,
+      "tags": [
+        "actor",
+        "runtime"
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": "http-first=200|OK|104|111\nhttp-second=200|OK|104|111\n"
+      }
+    },
+    {
+      "id": "stdlib-http-client-local-https",
+      "rules": [
+        "OM-21.18",
+        "OM-17.03"
+      ],
+      "kind": "multi_process",
+      "scenario": "runner/scenarios/http_client_https.py",
+      "platforms": [
+        "linux"
+      ],
+      "timeout_seconds": 90,
+      "tags": [
+        "actor",
+        "runtime",
+        "linux"
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": "https=200|OK|104|111\n"
+      }
+    },
+    {
+      "id": "actor-id-erased-identity-in-message-field",
+      "rules": [
+        "OM-17.03"
+      ],
+      "kind": "run",
+      "source": "17_actors/actor_id_in_message.bas",
+      "tags": [
+        "actor",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "forwarded=42\n"
+        }
+      }
+    },
+    {
+      "id": "actor-receive-result-expression-inference",
+      "rules": [
+        "OM-17.03"
+      ],
+      "kind": "run",
+      "source": "17_actors/actor_result_in_receive.bas",
+      "tags": [
+        "actor",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "value=true\n"
+        }
+      }
+    },
+    {
+      "id": "actor-id-explicit-protocol-erasure",
+      "rules": [
+        "OM-17.03"
+      ],
+      "kind": "run",
+      "source": "17_actors/actor_id_erased_send.bas",
+      "tags": [
+        "actor",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "erased-message=42\n"
+        }
+      }
+    },
+    {
+      "id": "sdk-stdlib-http-wire-basics",
+      "rules": [
+        "OM-21.18",
+        "OM-06.03"
+      ],
+      "kind": "run",
+      "source": "06_modules/http_basics.bas",
+      "tags": [
+        "module",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "request=true|body=0|255\nresponse=200|OK|0|255\nchunked=200|97|99\nbefore-eof=incomplete_response\nat-eof=200|0|255\nhead=200|0\nhead-body=malformed_response\ninjection=invalid_header\ntarget-injection=invalid_uri\nhost-injection=invalid_uri\n"
+        }
+      }
+    },
+    {
+      "id": "mir-branch-environment-restoration",
+      "rules": [
+        "OM-21.18"
+      ],
+      "kind": "run",
+      "source": "06_modules/mir_branch_values.bas",
+      "tags": [
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "axx!\n"
+        }
+      }
+    },
+    {
+      "id": "sdk-stdlib-csv-basics",
+      "rules": [
+        "OM-21.18",
+        "OM-06.03"
+      ],
+      "kind": "run",
+      "source": "06_modules/csv_basics.bas",
+      "tags": [
+        "module",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "rows=3|fields=2|note=says \"hello\"\nmultiline=true\nroundtrip=true\nmalformed=malformed_quote|7\n"
+        }
+      }
+    },
+    {
       "id": "sdk-stdlib-explicit-import",
       "rules": [
         "OM-21.18"
@@ -58,7 +294,7 @@
         "compiles": true,
         "run": {
           "exit_code": 0,
-          "stdout": "length=3\nempty=false\ncontains=true\nindex=2\nconcat=4\nreverse=3\nmap-length=2\nmap-empty=false\nmap-has=true\nmap-keys=alpha|beta\nmap-get=2\nmap-default=9\n"
+          "stdout": "length=3\nempty=false\ncontains=true\nindex=2\nconcat=4\nreverse=3\ntake=2\ntake-empty=0\ndrop=3\nslice=3\nslice-empty=0\nslice-large=3\nmap=6\nmap-empty=0\nfilter=2\nfilter-empty=1\nmap-length=2\nmap-empty=false\nmap-has=true\nmap-keys=alpha|beta\nmap-get=2\nmap-default=9\n"
         }
       }
     },
@@ -307,6 +543,46 @@
         "run": {
           "exit_code": 0,
           "stdout": "first=16807\nsecond=282475249\nreproducible=true\nin-range=true\nnegative-seed=2147466840\n"
+        }
+      }
+    },
+    {
+      "id": "stdlib-uuid-v4-formatting",
+      "rules": [
+        "OM-21.18",
+        "OM-09.01"
+      ],
+      "kind": "run",
+      "source": "06_modules/uuid_v4.bas",
+      "tags": [
+        "module",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "00010203-0405-4607-8809-0a0b0c0d0e0f\nroundtrip=00010203-0405-4607-8809-0a0b0c0d0e0f\ninvalid_length\nmalformed=invalid_format\n"
+        }
+      }
+    },
+    {
+      "id": "stdlib-number-int64-radix-conversion",
+      "rules": [
+        "OM-21.18",
+        "OM-09.01"
+      ],
+      "kind": "run",
+      "source": "06_modules/number_int.bas",
+      "tags": [
+        "module",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "-9223372036854775808\n1111111111111111111111111111111\ninvalid_digit|2\ntrue\n125\n0.1\nnon_finite\nnon_finite\n-0\n5e-324\n"
         }
       }
     },
@@ -1473,6 +1749,100 @@
       }
     },
     {
+      "id": "system-network-dns-localhost",
+      "rules": [
+        "OM-17.03",
+        "OM-21.18"
+      ],
+      "kind": "run",
+      "source": "17_actors/system_network_dns.bas",
+      "tags": [
+        "actor",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "localhost=ok\n"
+        }
+      }
+    },
+    {
+      "id": "system-network-dns-numeric",
+      "rules": [
+        "OM-17.03"
+      ],
+      "kind": "run",
+      "source": "17_actors/system_network_dns_numeric.bas",
+      "tags": [
+        "actor",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "numeric=ok\n"
+        }
+      }
+    },
+    {
+      "id": "system-network-dns-invalid-host",
+      "rules": [
+        "OM-17.03"
+      ],
+      "kind": "run",
+      "source": "17_actors/system_network_dns_invalid_host.bas",
+      "tags": [
+        "actor",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "empty-host=invalid_host\n"
+        }
+      }
+    },
+    {
+      "id": "system-network-tls-message-contract",
+      "rules": [
+        "OM-17.03"
+      ],
+      "kind": "compile",
+      "source": "17_actors/system_network_tls_contract.bas",
+      "tags": [
+        "actor",
+        "type"
+      ],
+      "expect": {
+        "compiles": true
+      }
+    },
+    {
+      "id": "system-network-tls-local-ca-actor-loopback",
+      "rules": [
+        "OM-17.03"
+      ],
+      "kind": "multi_process",
+      "scenario": "runner/scenarios/network_tls.py",
+      "platforms": [
+        "linux"
+      ],
+      "timeout_seconds": 45,
+      "tags": [
+        "actor",
+        "runtime",
+        "linux"
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": "tls=world\n"
+      }
+    },
+    {
       "id": "system-network-udp-datagram-boundaries",
       "rules": [
         "OM-17.03",
@@ -1549,6 +1919,26 @@
         "run": {
           "exit_code": 0,
           "stdout": "start tail\n"
+        }
+      }
+    },
+    {
+      "id": "system-file-binary-read-write-append",
+      "rules": [
+        "OM-17.03",
+        "OM-17.04"
+      ],
+      "kind": "run",
+      "source": "17_actors/system_file_bytes.bas",
+      "tags": [
+        "actor",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "0|1|254|255\n"
         }
       }
     },
@@ -2138,7 +2528,7 @@
         "compiles": true,
         "run": {
           "exit_code": 0,
-          "stdout": "action\n42:42:ok:7:7\n"
+          "stdout": "action\n42:42:ok:7:7\nreceived=7\n"
         }
       },
       "include_interfaces": true,
@@ -2503,6 +2893,112 @@
       }
     },
     {
+      "id": "sdk-stdlib-encoding-utf8-buffer-bridge",
+      "rules": [
+        "OM-21.18",
+        "OM-06.03"
+      ],
+      "kind": "run",
+      "source": "06_modules/encoding_utf8.bas",
+      "tags": [
+        "module",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "utf8-hex=610062\nnul-roundtrip=true\ninternational-roundtrip=true\ninvalid=invalid_utf8|1\noverlong=invalid_utf8|0\nsurrogate=invalid_utf8|0\nout-of-range=invalid_utf8|0\n"
+        }
+      }
+    },
+    {
+      "id": "sdk-stdlib-uri-foundation",
+      "rules": [
+        "OM-21.18",
+        "OM-06.03"
+      ],
+      "kind": "run",
+      "source": "06_modules/uri_basics.bas",
+      "tags": [
+        "module",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "roundtrip=https://user:pass@example.com:8443/a/b?x=1#frag\nabsolute=true\ndefault-port=443\nencoded=caf%C3%A9%20%E6%9D%B1%E4%BA%AC\ndecoded=café 東京\nquery=a%26b=x%3Dy&empty=\nquery-count=2\nresolved=http://a/b/g\nipv6=http://[2001:db8::1]:443/\nempty-delimiters=true|true|mailto:user@example.com?#\nmalformed=invalid_percent_encoding|0\ndot-segments=/a/c/\ninvalid-uri=invalid_percent_encoding|19\n"
+        }
+      }
+    },
+    {
+      "id": "sdk-stdlib-hash-sha256-crc32",
+      "rules": [
+        "OM-21.18",
+        "OM-06.03"
+      ],
+      "kind": "run",
+      "source": "06_modules/hash_basics.bas",
+      "tags": [
+        "module",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "sha256-empty=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\nsha256-abc=ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\nsha256-block=fdeab9acf3710362bd2658cdc9a29e8f9c757fcf9811603a8c447cd1d9151108\nsha256-binary=2c8d07cd986f58eb210bd800133d6645c7340c59865377c8ea431cebca0b3113\ncrc32=3421780262\n"
+        }
+      }
+    },
+    {
+      "rules": [
+        "OM-21.18",
+        "OM-06.03"
+      ],
+      "kind": "run",
+      "source": "06_modules/platform_facts.bas",
+      "tags": [
+        "module",
+        "runtime"
+      ],
+      "id": "sdk-stdlib-platform-windows",
+      "platforms": [
+        "windows"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "os=windows\narchitecture=x86_64\ntriple=x86_64-unknown-windows-msvc\npath-separator=\\\nline-separator-bytes=2\n"
+        }
+      }
+    },
+    {
+      "rules": [
+        "OM-21.18",
+        "OM-06.03"
+      ],
+      "kind": "run",
+      "source": "06_modules/platform_facts.bas",
+      "tags": [
+        "module",
+        "runtime"
+      ],
+      "id": "sdk-stdlib-platform-linux",
+      "platforms": [
+        "linux"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "os=linux\narchitecture=x86_64\ntriple=x86_64-unknown-linux-gnu\npath-separator=/\nline-separator-bytes=1\n"
+        }
+      }
+    },
+    {
       "id": "sdk-stdlib-process-buffer-facade",
       "rules": [
         "OM-21.18"
@@ -2538,6 +3034,63 @@
         "run": {
           "exit_code": 0,
           "stdout": "scalar=7\nbytes=12\n"
+        }
+      }
+    },
+    {
+      "id": "system-environment-snapshot-requests",
+      "rules": [
+        "OM-17.03"
+      ],
+      "kind": "run",
+      "source": "17_actors/system_environment.bas",
+      "tags": [
+        "runtime",
+        "actor"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "arguments=ok\ndirectory=ok\nexecutable=ok\npath-variable=ok\ninvalid-name=ok\n"
+        }
+      }
+    },
+    {
+      "id": "sdk-stdlib-typed-network-addresses",
+      "rules": [
+        "OM-21.18"
+      ],
+      "kind": "run",
+      "source": "06_modules/network_address.bas",
+      "tags": [
+        "module",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "ipv4=192.0.2.1|bytes=4\nipv6=2001:db8::1\nsocket=[2001:db8::1]:443\nambiguous-ipv4=invalid_address\n"
+        }
+      }
+    },
+    {
+      "id": "sdk-stdlib-dns-socket-address-adapter",
+      "rules": [
+        "OM-21.18"
+      ],
+      "kind": "run",
+      "source": "06_modules/network_dns_adapter.bas",
+      "tags": [
+        "module",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "socket=127.0.0.1:80\n"
         }
       }
     },

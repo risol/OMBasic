@@ -5,6 +5,8 @@
 
 #include "ombasic/runtime/abi/program_descriptor.h"
 
+typedef struct Om_String_View Om_String_View;
+
 typedef void (*Om_Runtime_Native_Callback_Function)(void);
 typedef void (*Om_Runtime_CString_Release)(void *pointer);
 typedef void (*Om_Runtime_Native_Pointer_Release)(void *pointer);
@@ -52,6 +54,11 @@ Om_Status om_runtime_string_create_from_cstring(
 Om_Status om_runtime_string_create_from_owned_cstring(
     Om_Execution_Context *context,
     char *cstring,
+    Om_Runtime_CString_Release release,
+    void **result);
+Om_Status om_runtime_string_create_from_owned_utf8_slice(
+    Om_Execution_Context *context,
+    Om_String_View *slice,
     Om_Runtime_CString_Release release,
     void **result);
 

@@ -1,8 +1,8 @@
 # File System Runtime Service
 
 
-File I/O is exposed through the asynchronous `File_System` Actor. It currently
-supports UTF-8 text only:
+File I/O is exposed through the asynchronous `File_System` Actor. It supports
+UTF-8 text and binary Buffer payloads:
 
 - `File_Read(path, reply_ref)` completes with `Result<String, String>`.
 - `File_Write(path, contents, reply_ref)` completes with
@@ -51,9 +51,15 @@ Operational file failures complete with stable String code values:
 `unsupported_operation`, and `io_error`. These values do not contain localized
 OS error text. The completion payload remains `Result<T, String>` for source
 compatibility; a versioned typed `File_Error` completion protocol is still
-required before changing that payload type. There is no binary I/O,
-directory traversal, path normalization API, or cancellation operation. These
-would require separate API decisions rather than reusing Import path rules.
+required before changing that payload type. Binary I/O uses
+`File_Read_Bytes`, `File_Write_Bytes`, and `File_Append_Bytes` Actor messages.
+Requests and read completions carry `List<Int>` bytes in the inclusive range
+0..255; `@std/file_system/file_system.bas` provides Buffer adapters
+(`buffer_from_read_bytes` and `bytes_for_write`). Binary reads and writes share
+the 64 MiB per-operation limit, preserve every byte including NUL, and report
+ordinary filesystem error codes through the completion Result. Binary reads
+do not perform UTF-8 validation. There is no directory traversal, path
+normalization API, or cancellation operation.
 Reads of invalid UTF-8 and writes to a directory target also complete with the
 recoverable `Error(problem)` branch. Portable conformance covers these cases
 alongside missing files. Linux-only cases also write to a protected `/sys`

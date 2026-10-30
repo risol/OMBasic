@@ -1035,6 +1035,7 @@ Om_Status emit_instruction(Om_Llvm_Backend_Context *backend,
     case OM_MIR_RUNTIME_ACTOR_WATCH:
     case OM_MIR_RUNTIME_ACTOR_STOP:
     case OM_MIR_RUNTIME_SYSTEM_ACTOR:
+    case OM_MIR_ACTOR_IDENTITY:
         status = OM_STATUS_INVALID_ARGUMENT;
         break;
     case OM_MIR_RUNTIME_FAULT: {

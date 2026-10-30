@@ -18,6 +18,7 @@ typedef struct Om_Effect_Scan {
 static bool is_pure_builtin(Om_Builtin_Id id)
 {
     return id == OM_BUILTIN_OK || id == OM_BUILTIN_ERROR
+        || id == OM_BUILTIN_ACTOR_ID
         || id == OM_BUILTIN_ACTOR_DOWN;
 }
 

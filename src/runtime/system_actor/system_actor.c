@@ -21,6 +21,7 @@
 #include <wchar.h>
 #include <sys/stat.h>
 #if !defined(_WIN32)
+#include <arpa/inet.h>
 #include <dirent.h>
 #include <fcntl.h>
 #include <netdb.h>
@@ -40,6 +41,7 @@
 
 #include "ombasic/foundation/memory.h"
 #include "ombasic/foundation/utf8.h"
+#include "network_tls.h"
 
 #define OM_SYSTEM_FILE_MAX_TEXT_BYTES ((size_t)64 * 1024 * 1024)
 #define OM_SYSTEM_RANDOM_MAX_BYTES ((size_t)64 * 1024 * 1024)
@@ -50,6 +52,7 @@
 #define OM_SYSTEM_PROCESS_MAX_ARGUMENTS ((size_t)4096)
 #define OM_SYSTEM_PROCESS_MAX_ARGUMENT_BYTES ((size_t)1024 * 1024)
 #define OM_SYSTEM_PROCESS_MAX_IO_BYTES ((size_t)1024 * 1024)
+#define OM_SYSTEM_ENVIRONMENT_MAX_VALUE_BYTES ((size_t)1024 * 1024)
 
 struct Om_Runtime_Network_Resource {
     uint64_t id;
@@ -60,6 +63,8 @@ struct Om_Runtime_Network_Resource {
     bool native_closed;
     bool busy_read;
     bool busy_write;
+    bool busy_tls;
+    Om_Tls_Session *tls_session;
     struct Om_Runtime_Network_Resource *next;
 };
 
@@ -92,6 +97,9 @@ typedef intptr_t Om_Native_Socket;
 static Om_Status system_task_run(void *context);
 static void system_file_complete(void *context, Om_Status task_status);
 static void system_task_destroy(void *context);
+static Om_Status system_task_add_text_item(Om_Runtime_System_Task *task,
+                                           const char *bytes,
+                                           size_t length);
 
 static Om_Native_Socket network_native_socket(intptr_t value)
 {
@@ -164,6 +172,19 @@ static bool network_wait_socket(Om_Runtime_System_Task *task,
 #endif
         }
     }
+}
+
+static bool network_tls_cancelled(void *context)
+{
+    return network_is_cancelled((Om_Runtime_System_Task *)context);
+}
+
+static bool network_tls_wait_socket(void *context, bool writable)
+{
+    Om_Runtime_System_Task *task = context;
+    if (task == NULL || task->network_resource == NULL) return false;
+    return network_wait_socket(task,
+        network_native_socket(task->network_resource->native_socket), writable);
 }
 
 static bool network_set_nonblocking(Om_Native_Socket socket_value)
@@ -351,6 +372,57 @@ static Om_Status network_open_socket(Om_Runtime_System_Task *task,
 static Om_Status system_network_run(Om_Runtime_System_Task *task)
 {
     const Om_System_Message_Id operation = task->operation;
+    if (operation == OM_SYSTEM_MESSAGE_ID_TLS_CLIENT_START) {
+        if (task->network_resource == NULL
+            || task->network_resource->native_socket == -1) {
+            task->error_code = "closed";
+            return OM_STATUS_CANCELLED;
+        }
+        const bool started = om_tls_client_start(
+            task->network_resource->native_socket, task->path, task,
+            network_tls_cancelled, network_tls_wait_socket,
+            &task->tls_session, &task->error_code);
+        if (!started) return OM_STATUS_IO_ERROR;
+        task->result_integer = (int64_t)task->network_resource->id;
+        return OM_STATUS_OK;
+    }
+    if (operation == OM_SYSTEM_MESSAGE_ID_TLS_SEND) {
+        size_t sent = 0;
+        const bool succeeded = om_tls_send(task->network_resource->tls_session,
+            task->input_bytes, task->input_length, task,
+            network_tls_cancelled, network_tls_wait_socket, &sent,
+            &task->error_code);
+        if (!succeeded) return OM_STATUS_IO_ERROR;
+        task->result_integer = (int64_t)sent;
+        return OM_STATUS_OK;
+    }
+    if (operation == OM_SYSTEM_MESSAGE_ID_TLS_RECEIVE) {
+        const size_t maximum = (size_t)task->requested_length;
+        if (maximum == 0) return OM_STATUS_OK;
+        task->result_bytes = om_alloc(maximum);
+        if (task->result_bytes == NULL) {
+            task->error_code = "resource_exhausted";
+            return OM_STATUS_OUT_OF_MEMORY;
+        }
+        task->result_capacity = maximum;
+        if (!om_tls_receive(task->network_resource->tls_session,
+            task->result_bytes, maximum, task, network_tls_cancelled,
+            network_tls_wait_socket, &task->result_length, &task->error_code)) {
+            return OM_STATUS_IO_ERROR;
+        }
+        return OM_STATUS_OK;
+    }
+    if (operation == OM_SYSTEM_MESSAGE_ID_TLS_CLOSE) {
+        om_tls_close(task->tls_session);
+        task->tls_session = NULL;
+        if (task->network_resource != NULL
+            && !task->network_resource->native_closed
+            && task->network_resource->native_socket != -1) {
+            network_close_native(network_native_socket(
+                task->network_resource->native_socket));
+        }
+        return OM_STATUS_OK;
+    }
     if (operation == OM_SYSTEM_MESSAGE_ID_TCP_LISTEN
         || operation == OM_SYSTEM_MESSAGE_ID_TCP_CONNECT) {
         return network_open_socket(task,
@@ -599,6 +671,126 @@ static Om_Status system_network_run(Om_Runtime_System_Task *task)
         return OM_STATUS_OK;
     }
     return OM_STATUS_INVALID_ARGUMENT;
+}
+
+static bool system_dns_host_valid(const char *host)
+{
+    if (host == NULL || host[0] == '\0') return false;
+    struct in_addr ipv4 = {0};
+    struct in6_addr ipv6 = {0};
+    if (inet_pton(AF_INET, host, &ipv4) == 1
+        || inet_pton(AF_INET6, host, &ipv6) == 1) {
+        return true;
+    }
+
+    const size_t length = strlen(host);
+    if (length > 253) return false;
+    size_t label_length = 0;
+    bool previous_hyphen = false;
+    for (size_t index = 0; index < length; ++index) {
+        const unsigned char character = (unsigned char)host[index];
+        if (character == '.') {
+            if (label_length == 0 || previous_hyphen) return false;
+            label_length = 0;
+            previous_hyphen = false;
+            continue;
+        }
+        const bool alpha = (character >= 'A' && character <= 'Z')
+            || (character >= 'a' && character <= 'z');
+        const bool digit = character >= '0' && character <= '9';
+        if (character == '-') {
+            if (label_length == 0) return false;
+            previous_hyphen = true;
+        } else if (alpha || digit) {
+            previous_hyphen = false;
+        } else {
+            return false;
+        }
+        ++label_length;
+        if (label_length > 63) return false;
+    }
+    return !previous_hyphen
+        && (label_length != 0
+            || (length > 1 && host[length - 1] == '.'));
+}
+
+static Om_Status system_dns_resolve(Om_Runtime_System_Task *task)
+{
+    if (task == NULL || task->path == NULL) return OM_STATUS_INVALID_ARGUMENT;
+    if (!system_dns_host_valid(task->path)) {
+        task->error_code = "invalid_host";
+        return OM_STATUS_INVALID_ARGUMENT;
+    }
+    char service[6];
+    const int service_length = snprintf(service, sizeof(service), "%d",
+                                        task->network_backlog);
+    if (service_length < 1 || (size_t)service_length >= sizeof(service)) {
+        task->error_code = "invalid_host";
+        return OM_STATUS_INVALID_ARGUMENT;
+    }
+    struct addrinfo hints = {0};
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    hints.ai_flags = AI_NUMERICSERV;
+    struct addrinfo *results = NULL;
+    const int resolve_status = getaddrinfo(task->path, service, &hints,
+                                           &results);
+    if (resolve_status != 0) {
+#if defined(_WIN32)
+        if (resolve_status == WSAHOST_NOT_FOUND
+            || resolve_status == WSANO_DATA) {
+            task->error_code = "not_found";
+        } else if (resolve_status == WSATRY_AGAIN) {
+            task->error_code = "temporary_failure";
+        } else {
+            task->error_code = "io_error";
+        }
+#else
+        if (resolve_status == EAI_AGAIN) {
+            task->error_code = "temporary_failure";
+        } else if (resolve_status == EAI_SYSTEM) {
+            task->error_code = "io_error";
+        } else {
+            task->error_code = "not_found";
+        }
+#endif
+        return OM_STATUS_NOT_FOUND;
+    }
+
+    Om_Status status = OM_STATUS_OK;
+    size_t count = 0;
+    for (const struct addrinfo *item = results; item != NULL;
+         item = item->ai_next) {
+        if (item->ai_family != AF_INET && item->ai_family != AF_INET6) {
+            continue;
+        }
+        if (count >= 256) {
+            task->error_code = "resource_exhausted";
+            status = OM_STATUS_OUT_OF_RANGE;
+            break;
+        }
+        const void *address_bytes = item->ai_family == AF_INET
+            ? (const void *)&((const struct sockaddr_in *)item->ai_addr)->sin_addr
+            : (const void *)&((const struct sockaddr_in6 *)item->ai_addr)->sin6_addr;
+        char address_text[INET6_ADDRSTRLEN];
+        if (inet_ntop(item->ai_family, address_bytes, address_text,
+                      sizeof(address_text)) == NULL) {
+            task->error_code = "io_error";
+            status = OM_STATUS_IO_ERROR;
+            break;
+        }
+        status = system_task_add_text_item(task, address_text,
+                                           strlen(address_text));
+        if (status != OM_STATUS_OK) break;
+        ++count;
+    }
+    freeaddrinfo(results);
+    if (status == OM_STATUS_OK && count == 0) {
+        task->error_code = "not_found";
+        return OM_STATUS_NOT_FOUND;
+    }
+    return status;
 }
 
 #if !defined(_WIN32)
@@ -2593,6 +2785,234 @@ static Om_Status system_secure_random_bytes(Om_Runtime_System_Task *task)
     return OM_STATUS_OK;
 }
 
+static Om_Status system_environment_store_text(Om_Runtime_System_Task *task,
+                                                const char *text,
+                                                size_t length)
+{
+    if (length > OM_SYSTEM_ENVIRONMENT_MAX_VALUE_BYTES) {
+        task->error_code = "resource_exhausted";
+        return OM_STATUS_OUT_OF_RANGE;
+    }
+    if (om_utf8_validate((Om_Const_Byte_Slice){
+            (const uint8_t *)text, length}) != OM_STATUS_OK) {
+        task->error_code = "invalid_utf8";
+        return OM_STATUS_IO_ERROR;
+    }
+    task->result_bytes = om_alloc(length == 0 ? 1 : length);
+    if (task->result_bytes == NULL) {
+        task->error_code = "resource_exhausted";
+        return OM_STATUS_OUT_OF_MEMORY;
+    }
+    if (length != 0) (void)memcpy(task->result_bytes, text, length);
+    task->result_length = length;
+    task->result_capacity = length;
+    return OM_STATUS_OK;
+}
+
+#if defined(_WIN32)
+static Om_Status system_environment_utf8_from_wide(Om_Runtime_System_Task *task,
+                                                    const wchar_t *wide,
+                                                    size_t wide_length)
+{
+    if (wide_length >= (size_t)INT_MAX) return OM_STATUS_OUT_OF_RANGE;
+    const int needed = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
+        wide, (int)wide_length, NULL, 0, NULL, NULL);
+    if (needed <= 0) {
+        task->error_code = "invalid_utf8";
+        return OM_STATUS_IO_ERROR;
+    }
+    if ((size_t)needed > OM_SYSTEM_ENVIRONMENT_MAX_VALUE_BYTES) {
+        task->error_code = "resource_exhausted";
+        return OM_STATUS_OUT_OF_RANGE;
+    }
+    char *text = om_alloc((size_t)needed + 1);
+    if (text == NULL) return OM_STATUS_OUT_OF_MEMORY;
+    if (needed != 0 && WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
+            wide, (int)wide_length, text, needed, NULL, NULL) != needed) {
+        om_free(text);
+        task->error_code = "io_error";
+        return OM_STATUS_IO_ERROR;
+    }
+    text[needed] = '\0';
+    const Om_Status status = system_environment_store_text(task, text,
+        (size_t)needed);
+    om_free(text);
+    return status;
+}
+
+static wchar_t *system_environment_wide_from_utf8(const char *text)
+{
+    const size_t length = strlen(text);
+    if (length >= (size_t)INT_MAX) return NULL;
+    const int needed = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
+        text, (int)length + 1, NULL, 0);
+    if (needed <= 0) return NULL;
+    wchar_t *wide = om_alloc_array((size_t)needed, sizeof(*wide));
+    if (wide == NULL) return NULL;
+    if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text,
+            (int)length + 1, wide, needed) != needed) {
+        om_free(wide);
+        return NULL;
+    }
+    return wide;
+}
+#endif
+
+static Om_Status system_environment_run(Om_Runtime_System_Task *task)
+{
+    if (task->operation == OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_ARGUMENTS) {
+        Om_Execution_Context *context = task->system->root_context;
+        for (size_t index = 0; index < context->command_line_argument_count;
+             ++index) {
+            const char *argument = context->command_line_arguments[index];
+            const Om_Status status = system_task_add_text_item(task, argument,
+                strlen(argument));
+            if (status != OM_STATUS_OK) return status;
+        }
+        return OM_STATUS_OK;
+    }
+    if (task->operation == OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_GET) {
+        if (task->error_code != NULL
+            && strcmp(task->error_code, "invalid_name") == 0) {
+            return OM_STATUS_INVALID_ARGUMENT;
+        }
+        if (task->error_code != NULL
+            && strcmp(task->error_code, "resource_exhausted") == 0) {
+            return OM_STATUS_OUT_OF_RANGE;
+        }
+#if defined(_WIN32)
+        wchar_t *name = system_environment_wide_from_utf8(task->path);
+        if (name == NULL) {
+            task->error_code = "invalid_name";
+            return OM_STATUS_INVALID_ARGUMENT;
+        }
+        SetLastError(ERROR_SUCCESS);
+        const DWORD needed = GetEnvironmentVariableW(name, NULL, 0);
+        if (needed == 0) {
+            const DWORD error = GetLastError();
+            om_free(name);
+            if (error == ERROR_SUCCESS) {
+                return system_environment_store_text(task, "", 0);
+            }
+            task->error_code = error == ERROR_ENVVAR_NOT_FOUND
+                ? "not_found" : "io_error";
+            return error == ERROR_ENVVAR_NOT_FOUND
+                ? OM_STATUS_NOT_FOUND : OM_STATUS_IO_ERROR;
+        }
+        wchar_t *value = om_alloc_array((size_t)needed, sizeof(*value));
+        if (value == NULL) { om_free(name); return OM_STATUS_OUT_OF_MEMORY; }
+        const DWORD length = GetEnvironmentVariableW(name, value, needed);
+        om_free(name);
+        if (length == 0 || length >= needed) {
+            om_free(value);
+            task->error_code = "io_error";
+            return OM_STATUS_IO_ERROR;
+        }
+        const Om_Status status = system_environment_utf8_from_wide(task,
+            value, (size_t)length);
+        om_free(value);
+        return status;
+#else
+        const char *value = getenv(task->path);
+        if (value == NULL) {
+            task->error_code = "not_found";
+            return OM_STATUS_NOT_FOUND;
+        }
+        return system_environment_store_text(task, value, strlen(value));
+#endif
+    }
+    if (task->operation == OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_CURRENT_DIRECTORY) {
+#if defined(_WIN32)
+        DWORD needed = GetCurrentDirectoryW(0, NULL);
+        if (needed == 0) { task->error_code = "io_error"; return OM_STATUS_IO_ERROR; }
+        wchar_t *wide = om_alloc_array((size_t)needed + 1, sizeof(*wide));
+        if (wide == NULL) return OM_STATUS_OUT_OF_MEMORY;
+        const DWORD length = GetCurrentDirectoryW(needed + 1, wide);
+        const Om_Status status = length == 0 || length > needed
+            ? OM_STATUS_IO_ERROR
+            : system_environment_utf8_from_wide(task, wide, length);
+        om_free(wide);
+        if (status != OM_STATUS_OK) task->error_code = "io_error";
+        return status;
+#else
+        size_t capacity = 256;
+        while (capacity <= OM_SYSTEM_ENVIRONMENT_MAX_VALUE_BYTES) {
+            char *path = om_alloc(capacity);
+            if (path == NULL) return OM_STATUS_OUT_OF_MEMORY;
+            if (getcwd(path, capacity) != NULL) {
+                const Om_Status status = system_environment_store_text(task,
+                    path, strlen(path));
+                om_free(path);
+                return status;
+            }
+            const int error = errno;
+            om_free(path);
+            if (error != ERANGE) {
+                task->error_code = "io_error";
+                return OM_STATUS_IO_ERROR;
+            }
+            capacity *= 2;
+        }
+        task->error_code = "resource_exhausted";
+        return OM_STATUS_OUT_OF_RANGE;
+#endif
+    }
+    if (task->operation == OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_EXECUTABLE_PATH) {
+#if defined(_WIN32)
+        size_t capacity = 256;
+        for (;;) {
+            wchar_t *path = om_alloc_array(capacity, sizeof(*path));
+            if (path == NULL) return OM_STATUS_OUT_OF_MEMORY;
+            const DWORD length = GetModuleFileNameW(NULL, path,
+                capacity > UINT32_MAX ? UINT32_MAX : (DWORD)capacity);
+            if (length == 0) {
+                om_free(path); task->error_code = "io_error";
+                return OM_STATUS_IO_ERROR;
+            }
+            if ((size_t)length < capacity - 1) {
+                const Om_Status status = system_environment_utf8_from_wide(
+                    task, path, (size_t)length);
+                om_free(path);
+                return status;
+            }
+            om_free(path);
+            if (capacity >= OM_SYSTEM_ENVIRONMENT_MAX_VALUE_BYTES / sizeof(*path)) {
+                task->error_code = "resource_exhausted";
+                return OM_STATUS_OUT_OF_RANGE;
+            }
+            capacity *= 2;
+        }
+#elif defined(__linux__)
+        size_t capacity = 256;
+        for (;;) {
+            char *path = om_alloc(capacity);
+            if (path == NULL) return OM_STATUS_OUT_OF_MEMORY;
+            const ssize_t length = readlink("/proc/self/exe", path, capacity);
+            if (length < 0) {
+                om_free(path); task->error_code = "io_error";
+                return OM_STATUS_IO_ERROR;
+            }
+            if ((size_t)length < capacity) {
+                const Om_Status status = system_environment_store_text(task,
+                    path, (size_t)length);
+                om_free(path);
+                return status;
+            }
+            om_free(path);
+            if (capacity >= OM_SYSTEM_ENVIRONMENT_MAX_VALUE_BYTES) {
+                task->error_code = "resource_exhausted";
+                return OM_STATUS_OUT_OF_RANGE;
+            }
+            capacity *= 2;
+        }
+#else
+        task->error_code = "unsupported";
+        return OM_STATUS_NOT_FOUND;
+#endif
+    }
+    return OM_STATUS_INVALID_ARGUMENT;
+}
+
 static Om_Status system_task_run(void *context)
 {
     Om_Runtime_System_Task *task = context;
@@ -2614,6 +3034,13 @@ static Om_Status system_task_run(void *context)
         && task->operation <= OM_SYSTEM_MESSAGE_ID_UDP_CLOSE) {
         return system_network_run(task);
     }
+    if (task->operation >= OM_SYSTEM_MESSAGE_ID_TLS_CLIENT_START
+        && task->operation <= OM_SYSTEM_MESSAGE_ID_TLS_CLOSE) {
+        return system_network_run(task);
+    }
+    if (task->operation == OM_SYSTEM_MESSAGE_ID_DNS_RESOLVE) {
+        return system_dns_resolve(task);
+    }
     if (task->operation >= OM_SYSTEM_MESSAGE_ID_PROCESS_SPAWN
         && task->operation <= OM_SYSTEM_MESSAGE_ID_PROCESS_WAIT) {
         return system_process_run(task);
@@ -2628,7 +3055,12 @@ static Om_Status system_task_run(void *context)
     if (task->operation == OM_SYSTEM_MESSAGE_ID_SECURE_RANDOM_BYTES) {
         return system_secure_random_bytes(task);
     }
-    if (task->operation == OM_SYSTEM_MESSAGE_ID_FILE_READ) {
+    if (task->operation >= OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_ARGUMENTS
+        && task->operation <= OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_EXECUTABLE_PATH) {
+        return system_environment_run(task);
+    }
+    if (task->operation == OM_SYSTEM_MESSAGE_ID_FILE_READ
+        || task->operation == OM_SYSTEM_MESSAGE_ID_FILE_READ_BYTES) {
         return system_file_read(task);
     }
     if (task->operation == OM_SYSTEM_MESSAGE_ID_FILE_EXISTS) {
@@ -2647,9 +3079,12 @@ static Om_Status system_task_run(void *context)
         return system_file_stat(task);
     }
     if (task->operation == OM_SYSTEM_MESSAGE_ID_FILE_WRITE
-        || task->operation == OM_SYSTEM_MESSAGE_ID_FILE_APPEND) {
+        || task->operation == OM_SYSTEM_MESSAGE_ID_FILE_APPEND
+        || task->operation == OM_SYSTEM_MESSAGE_ID_FILE_WRITE_BYTES
+        || task->operation == OM_SYSTEM_MESSAGE_ID_FILE_APPEND_BYTES) {
         return system_file_write(task,
-            task->operation == OM_SYSTEM_MESSAGE_ID_FILE_APPEND);
+            task->operation == OM_SYSTEM_MESSAGE_ID_FILE_APPEND
+            || task->operation == OM_SYSTEM_MESSAGE_ID_FILE_APPEND_BYTES);
     }
     return OM_STATUS_INVALID_ARGUMENT;
 }
@@ -2710,6 +3145,21 @@ static void system_file_complete(void *context, Om_Status task_status)
                 task->network_listener->native_socket));
             task->network_listener->native_closed = true;
         }
+    } else if (task->operation == OM_SYSTEM_MESSAGE_ID_TLS_CLIENT_START
+               && task->network_resource != NULL) {
+        task->network_resource->busy_tls = false;
+        if (task_status == OM_STATUS_OK && !system->shutting_down
+            && !task->network_resource->closed) {
+            task->network_resource->tls_session = task->tls_session;
+            task->tls_session = NULL;
+        } else if (task_status == OM_STATUS_OK) {
+            task_status = OM_STATUS_CANCELLED;
+            task->error_code = "closed";
+        }
+    } else if ((task->operation == OM_SYSTEM_MESSAGE_ID_TLS_SEND
+                || task->operation == OM_SYSTEM_MESSAGE_ID_TLS_RECEIVE)
+               && task->network_resource != NULL) {
+        task->network_resource->busy_tls = false;
     } else if ((task->operation == OM_SYSTEM_MESSAGE_ID_TCP_RECEIVE
                 || task->operation == OM_SYSTEM_MESSAGE_ID_TCP_SEND
                 || task->operation == OM_SYSTEM_MESSAGE_ID_UDP_RECEIVE
@@ -2803,6 +3253,12 @@ static void system_file_complete(void *context, Om_Status task_status)
                 ? OM_SYSTEM_MESSAGE_ID_CONSOLE_READ_LINE_COMPLETED
             : task->operation == OM_SYSTEM_MESSAGE_ID_FILE_READ
                 ? OM_SYSTEM_MESSAGE_ID_FILE_READ_COMPLETED
+            : task->operation == OM_SYSTEM_MESSAGE_ID_FILE_READ_BYTES
+                ? OM_SYSTEM_MESSAGE_ID_FILE_READ_BYTES_COMPLETED
+            : task->operation == OM_SYSTEM_MESSAGE_ID_FILE_WRITE_BYTES
+                ? OM_SYSTEM_MESSAGE_ID_FILE_WRITE_BYTES_COMPLETED
+            : task->operation == OM_SYSTEM_MESSAGE_ID_FILE_APPEND_BYTES
+                ? OM_SYSTEM_MESSAGE_ID_FILE_APPEND_BYTES_COMPLETED
             : task->operation == OM_SYSTEM_MESSAGE_ID_FILE_APPEND
                 ? OM_SYSTEM_MESSAGE_ID_FILE_APPEND_COMPLETED
             : task->operation == OM_SYSTEM_MESSAGE_ID_FILE_EXISTS
@@ -2821,6 +3277,18 @@ static void system_file_complete(void *context, Om_Status task_status)
                 ? OM_SYSTEM_MESSAGE_ID_CLOCK_UTC_NOW_COMPLETED
             : task->operation == OM_SYSTEM_MESSAGE_ID_SECURE_RANDOM_BYTES
                 ? OM_SYSTEM_MESSAGE_ID_SECURE_RANDOM_BYTES_COMPLETED
+            : task->operation == OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_ARGUMENTS
+                ? OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_ARGUMENTS_COMPLETED
+            : task->operation == OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_GET
+                ? OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_GET_COMPLETED
+            : task->operation
+                    == OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_CURRENT_DIRECTORY
+                ? OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_CURRENT_DIRECTORY_COMPLETED
+            : task->operation
+                    == OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_EXECUTABLE_PATH
+                ? OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_EXECUTABLE_PATH_COMPLETED
+            : task->operation == OM_SYSTEM_MESSAGE_ID_DNS_RESOLVE
+                ? OM_SYSTEM_MESSAGE_ID_DNS_RESOLVE_COMPLETED
             : task->operation == OM_SYSTEM_MESSAGE_ID_LOGGER_WRITE
                 ? OM_SYSTEM_MESSAGE_ID_LOGGER_WRITE_COMPLETED
             : task->operation == OM_SYSTEM_MESSAGE_ID_LOGGER_FLUSH
@@ -2845,6 +3313,12 @@ static void system_file_complete(void *context, Om_Status task_status)
                 ? OM_SYSTEM_MESSAGE_ID_UDP_RECEIVE_COMPLETED
             : task->operation == OM_SYSTEM_MESSAGE_ID_UDP_CLOSE
                 ? OM_SYSTEM_MESSAGE_ID_UDP_CLOSE_COMPLETED
+            : task->operation == OM_SYSTEM_MESSAGE_ID_TLS_CLIENT_START
+                ? OM_SYSTEM_MESSAGE_ID_TLS_CLIENT_START_COMPLETED
+            : task->operation == OM_SYSTEM_MESSAGE_ID_TLS_SEND
+                ? OM_SYSTEM_MESSAGE_ID_TLS_SEND_COMPLETED
+            : task->operation == OM_SYSTEM_MESSAGE_ID_TLS_RECEIVE
+                ? OM_SYSTEM_MESSAGE_ID_TLS_RECEIVE_COMPLETED
             : task->operation == OM_SYSTEM_MESSAGE_ID_PROCESS_SPAWN
                 ? OM_SYSTEM_MESSAGE_ID_PROCESS_SPAWN_COMPLETED
             : task->operation == OM_SYSTEM_MESSAGE_ID_PROCESS_WRITE_STDIN
@@ -2868,26 +3342,44 @@ static void system_file_complete(void *context, Om_Status task_status)
             task->recipient_id, completion_id, task_status == OM_STATUS_OK,
             task->result_boolean, task->result_integer,
             (task->operation == OM_SYSTEM_MESSAGE_ID_FILE_READ
+                || task->operation == OM_SYSTEM_MESSAGE_ID_FILE_READ_BYTES
                 || task->operation == OM_SYSTEM_MESSAGE_ID_CONSOLE_READ_LINE
                 || task->operation == OM_SYSTEM_MESSAGE_ID_SECURE_RANDOM_BYTES
                 || task->operation == OM_SYSTEM_MESSAGE_ID_TCP_RECEIVE
                 || task->operation == OM_SYSTEM_MESSAGE_ID_UDP_RECEIVE
+                || task->operation == OM_SYSTEM_MESSAGE_ID_TLS_RECEIVE
                 || task->operation == OM_SYSTEM_MESSAGE_ID_PROCESS_READ_STDOUT
-                || task->operation == OM_SYSTEM_MESSAGE_ID_PROCESS_READ_STDERR)
+                || task->operation == OM_SYSTEM_MESSAGE_ID_PROCESS_READ_STDERR
+                || task->operation == OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_GET
+                || task->operation
+                    == OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_CURRENT_DIRECTORY
+                || task->operation
+                    == OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_EXECUTABLE_PATH)
                 ? task->result_bytes : NULL,
             (task->operation == OM_SYSTEM_MESSAGE_ID_FILE_READ
+                || task->operation == OM_SYSTEM_MESSAGE_ID_FILE_READ_BYTES
                 || task->operation == OM_SYSTEM_MESSAGE_ID_CONSOLE_READ_LINE
                 || task->operation == OM_SYSTEM_MESSAGE_ID_SECURE_RANDOM_BYTES
                 || task->operation == OM_SYSTEM_MESSAGE_ID_TCP_RECEIVE
                 || task->operation == OM_SYSTEM_MESSAGE_ID_UDP_RECEIVE
+                || task->operation == OM_SYSTEM_MESSAGE_ID_TLS_RECEIVE
                 || task->operation == OM_SYSTEM_MESSAGE_ID_PROCESS_READ_STDOUT
-                || task->operation == OM_SYSTEM_MESSAGE_ID_PROCESS_READ_STDERR)
+                || task->operation == OM_SYSTEM_MESSAGE_ID_PROCESS_READ_STDERR
+                || task->operation == OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_GET
+                || task->operation
+                    == OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_CURRENT_DIRECTORY
+                || task->operation
+                    == OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_EXECUTABLE_PATH)
                 ? task->result_length : 0,
             (task->operation == OM_SYSTEM_MESSAGE_ID_DIRECTORY_LIST
-                || task->operation == OM_SYSTEM_MESSAGE_ID_FILE_STAT)
+                || task->operation == OM_SYSTEM_MESSAGE_ID_FILE_STAT
+                || task->operation == OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_ARGUMENTS
+                || task->operation == OM_SYSTEM_MESSAGE_ID_DNS_RESOLVE)
                 ? task->result_items : NULL,
             (task->operation == OM_SYSTEM_MESSAGE_ID_DIRECTORY_LIST
-                || task->operation == OM_SYSTEM_MESSAGE_ID_FILE_STAT)
+                || task->operation == OM_SYSTEM_MESSAGE_ID_FILE_STAT
+                || task->operation == OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_ARGUMENTS
+                || task->operation == OM_SYSTEM_MESSAGE_ID_DNS_RESOLVE)
                 ? task->result_item_count : 0,
             error_text);
 
@@ -2952,6 +3444,11 @@ static void system_task_destroy(void *context)
     if (task->payload_context != NULL) {
         om_runtime_context_destroy(task->payload_context);
     }
+    if (task->operation == OM_SYSTEM_MESSAGE_ID_TLS_CLIENT_START
+        && task->tls_session != NULL) {
+        om_tls_close(task->tls_session);
+        task->tls_session = NULL;
+    }
     if (task->network_resource_is_new
         && !task->network_resource_registered
         && task->network_resource != NULL) {
@@ -2980,13 +3477,16 @@ Om_Status actor_send_file_locked(
     if (message_type == NULL) return OM_STATUS_NOT_FOUND;
     const Om_System_Message_Id operation = message_type->system_message_id;
     const size_t expected_fields = operation == OM_SYSTEM_MESSAGE_ID_FILE_READ
+        || operation == OM_SYSTEM_MESSAGE_ID_FILE_READ_BYTES
         || operation == OM_SYSTEM_MESSAGE_ID_FILE_EXISTS
         || operation == OM_SYSTEM_MESSAGE_ID_FILE_DELETE
         || operation == OM_SYSTEM_MESSAGE_ID_DIRECTORY_CREATE
         || operation == OM_SYSTEM_MESSAGE_ID_DIRECTORY_LIST
         || operation == OM_SYSTEM_MESSAGE_ID_FILE_STAT
         ? 2 : (operation == OM_SYSTEM_MESSAGE_ID_FILE_WRITE
-            || operation == OM_SYSTEM_MESSAGE_ID_FILE_APPEND) ? 3 : 0;
+            || operation == OM_SYSTEM_MESSAGE_ID_FILE_APPEND
+            || operation == OM_SYSTEM_MESSAGE_ID_FILE_WRITE_BYTES
+            || operation == OM_SYSTEM_MESSAGE_ID_FILE_APPEND_BYTES) ? 3 : 0;
     if (expected_fields == 0 || message_type->field_count != expected_fields) {
         return OM_STATUS_NOT_FOUND;
     }
@@ -2997,11 +3497,14 @@ Om_Status actor_send_file_locked(
                                               &path_object);
     if (status == OM_STATUS_OK
         && (operation == OM_SYSTEM_MESSAGE_ID_FILE_WRITE
-            || operation == OM_SYSTEM_MESSAGE_ID_FILE_APPEND)) {
+            || operation == OM_SYSTEM_MESSAGE_ID_FILE_APPEND
+            || operation == OM_SYSTEM_MESSAGE_ID_FILE_WRITE_BYTES
+            || operation == OM_SYSTEM_MESSAGE_ID_FILE_APPEND_BYTES)) {
         status = om_runtime_record_get(source_context, message_object, 1,
                                        &contents_object);
     }
     const size_t recipient_field = operation == OM_SYSTEM_MESSAGE_ID_FILE_READ
+        || operation == OM_SYSTEM_MESSAGE_ID_FILE_READ_BYTES
         || operation == OM_SYSTEM_MESSAGE_ID_FILE_EXISTS
         || operation == OM_SYSTEM_MESSAGE_ID_FILE_DELETE
         || operation == OM_SYSTEM_MESSAGE_ID_DIRECTORY_CREATE
@@ -3039,6 +3542,34 @@ Om_Status actor_send_file_locked(
             status = system_task_copy_string(source_context, contents_object,
                 &contents, &task->input_length);
             task->input_bytes = (uint8_t *)contents;
+        }
+    } else if (status == OM_STATUS_OK
+        && (operation == OM_SYSTEM_MESSAGE_ID_FILE_WRITE_BYTES
+            || operation == OM_SYSTEM_MESSAGE_ID_FILE_APPEND_BYTES)) {
+        size_t byte_count = 0;
+        status = om_runtime_list_length(source_context, contents_object,
+                                        &byte_count);
+        if (status == OM_STATUS_OK && byte_count > OM_SYSTEM_FILE_MAX_TEXT_BYTES) {
+            task->input_oversized = true;
+        } else if (status == OM_STATUS_OK) {
+            task->input_length = byte_count;
+            task->input_bytes = byte_count == 0 ? NULL : om_alloc(byte_count);
+            if (byte_count != 0 && task->input_bytes == NULL) {
+                status = OM_STATUS_OUT_OF_MEMORY;
+            }
+            for (size_t index = 0; status == OM_STATUS_OK
+                 && index < byte_count; ++index) {
+                Om_Runtime_Value byte_value = {0};
+                status = om_runtime_list_get(source_context, contents_object,
+                                             index, &byte_value);
+                if (status == OM_STATUS_OK
+                    && (byte_value.integer < 0 || byte_value.integer > 255)) {
+                    status = OM_STATUS_OUT_OF_RANGE;
+                }
+                if (status == OM_STATUS_OK) {
+                    task->input_bytes[index] = (uint8_t)byte_value.integer;
+                }
+            }
         }
     }
     (void)path_length;
@@ -3312,6 +3843,7 @@ void actor_network_destroy(Om_Runtime_Actor_System *system)
         if (!resource->native_closed && resource->native_socket != -1) {
             network_close_native(network_native_socket(resource->native_socket));
         }
+        om_tls_close(resource->tls_session);
         om_free(resource);
         resource = next;
     }
@@ -3423,6 +3955,16 @@ static Om_System_Message_Id network_completion_id(
         return OM_SYSTEM_MESSAGE_ID_UDP_RECEIVE_COMPLETED;
     case OM_SYSTEM_MESSAGE_ID_UDP_CLOSE:
         return OM_SYSTEM_MESSAGE_ID_UDP_CLOSE_COMPLETED;
+    case OM_SYSTEM_MESSAGE_ID_DNS_RESOLVE:
+        return OM_SYSTEM_MESSAGE_ID_DNS_RESOLVE_COMPLETED;
+    case OM_SYSTEM_MESSAGE_ID_TLS_CLIENT_START:
+        return OM_SYSTEM_MESSAGE_ID_TLS_CLIENT_START_COMPLETED;
+    case OM_SYSTEM_MESSAGE_ID_TLS_SEND:
+        return OM_SYSTEM_MESSAGE_ID_TLS_SEND_COMPLETED;
+    case OM_SYSTEM_MESSAGE_ID_TLS_RECEIVE:
+        return OM_SYSTEM_MESSAGE_ID_TLS_RECEIVE_COMPLETED;
+    case OM_SYSTEM_MESSAGE_ID_TLS_CLOSE:
+        return OM_SYSTEM_MESSAGE_ID_TLS_CLOSE_COMPLETED;
     default:
         return OM_SYSTEM_MESSAGE_ID_NONE;
     }
@@ -3460,12 +4002,24 @@ Om_Status actor_send_network_locked(
     const bool udp_send_request = operation == OM_SYSTEM_MESSAGE_ID_UDP_SEND;
     const bool udp_receive_request = operation == OM_SYSTEM_MESSAGE_ID_UDP_RECEIVE;
     const bool udp_close_request = operation == OM_SYSTEM_MESSAGE_ID_UDP_CLOSE;
-    const bool any_send_request = send_request || udp_send_request;
-    const bool any_receive_request = receive_request || udp_receive_request;
-    const bool any_close_request = close_request || udp_close_request;
+    const bool dns_resolve_request = operation == OM_SYSTEM_MESSAGE_ID_DNS_RESOLVE;
+    const bool tls_client_start_request =
+        operation == OM_SYSTEM_MESSAGE_ID_TLS_CLIENT_START;
+    const bool tls_send_request = operation == OM_SYSTEM_MESSAGE_ID_TLS_SEND;
+    const bool tls_receive_request =
+        operation == OM_SYSTEM_MESSAGE_ID_TLS_RECEIVE;
+    const bool tls_close_request = operation == OM_SYSTEM_MESSAGE_ID_TLS_CLOSE;
+    const bool any_send_request = send_request || udp_send_request
+        || tls_send_request;
+    const bool any_receive_request = receive_request || udp_receive_request
+        || tls_receive_request;
+    const bool any_close_request = close_request || udp_close_request
+        || tls_close_request;
     const size_t expected_fields = listen_request ? 4
         : connect_request ? 3
         : udp_connect_request ? 4
+        : dns_resolve_request ? 3
+        : tls_client_start_request ? 3
         : (accept_request || any_close_request) ? 2
         : (any_send_request || any_receive_request) ? 3 : 0;
     if (expected_fields == 0 || message_type->field_count != expected_fields) {
@@ -3478,7 +4032,19 @@ Om_Status actor_send_network_locked(
     void *address_object = NULL;
     void *byte_list = NULL;
     Om_Status status = OM_STATUS_OK;
-    if (listen_request || connect_request || udp_connect_request) {
+    if (tls_client_start_request) {
+        status = om_runtime_record_get(source_context, message_object, 0,
+                                       &resource_id);
+        if (status == OM_STATUS_OK) {
+            status = om_runtime_record_get(source_context, message_object, 1,
+                                           &address_object);
+        }
+        if (status == OM_STATUS_OK) {
+            status = om_runtime_record_get(source_context, message_object, 2,
+                                           &recipient);
+        }
+    } else if (listen_request || connect_request || udp_connect_request
+               || dns_resolve_request) {
         status = om_runtime_record_get(source_context, message_object, 0,
                                        &address_object);
         if (status == OM_STATUS_OK) {
@@ -3496,7 +4062,8 @@ Om_Status actor_send_network_locked(
         if (status == OM_STATUS_OK) {
             status = om_runtime_record_get(source_context, message_object,
                 listen_request || udp_connect_request ? 3
-                    : connect_request ? 2 : 0, &recipient);
+                    : connect_request || dns_resolve_request ? 2 : 0,
+                &recipient);
         }
     } else if (accept_request || any_close_request) {
         status = om_runtime_record_get(source_context, message_object, 0,
@@ -3531,10 +4098,11 @@ Om_Status actor_send_network_locked(
         system->network_initialized = true;
     }
 #endif
-    if ((listen_request || connect_request || udp_connect_request)
+    if ((listen_request || connect_request || udp_connect_request
+         || dns_resolve_request)
         && (port_or_limit < 0 || port_or_limit > 65535)) {
         return network_deliver_error_locked(system, recipient, operation,
-                                             "invalid_address");
+            dns_resolve_request ? "invalid_port" : "invalid_address");
     }
     if (udp_connect_request && (backlog < 0 || backlog > 65535)) {
         return network_deliver_error_locked(system, recipient, operation,
@@ -3568,7 +4136,7 @@ Om_Status actor_send_network_locked(
     struct Om_Runtime_Network_Resource *resource = NULL;
     struct Om_Runtime_Network_Resource *listener = NULL;
     if (accept_request || any_send_request || any_receive_request
-        || any_close_request) {
+        || tls_client_start_request || any_close_request) {
         resource = network_find_resource_locked(system, resource_id);
         if (resource == NULL) {
             if (any_close_request) {
@@ -3579,7 +4147,61 @@ Om_Status actor_send_network_locked(
             return network_deliver_error_locked(system, recipient, operation,
                                                  "closed");
         }
-        if (any_close_request) {
+        if (tls_client_start_request) {
+            if (resource->closed || resource->listener || resource->udp
+                || resource->native_socket == -1) {
+                return network_deliver_error_locked(system, recipient,
+                    operation, "invalid_argument");
+            }
+            if (resource->tls_session != NULL) {
+                return network_deliver_error_locked(system, recipient,
+                    operation, "invalid_argument");
+            }
+            if (resource->busy_tls || resource->busy_read || resource->busy_write) {
+                return network_deliver_error_locked(system, recipient,
+                    operation, "resource_exhausted");
+            }
+            resource->busy_tls = true;
+        } else if (any_close_request) {
+            if (tls_close_request) {
+                if (resource->udp || resource->listener) {
+                    return network_deliver_error_locked(system, recipient,
+                        operation, "invalid_argument");
+                }
+                if (resource->closed) {
+                    return actor_deliver_result_locked(system, recipient,
+                        network_completion_id(operation), true, false, 0,
+                        NULL, 0, NULL, 0, NULL);
+                }
+                if (resource->tls_session == NULL) {
+                    return network_deliver_error_locked(system, recipient,
+                        operation, "invalid_argument");
+                }
+                if (resource->busy_tls || resource->busy_read || resource->busy_write) {
+                    return network_deliver_error_locked(system, recipient,
+                        operation, "resource_exhausted");
+                }
+                resource->closed = true;
+                if (system->active_network_resources != 0) {
+                    --system->active_network_resources;
+                }
+                om_tls_close(resource->tls_session);
+                resource->tls_session = NULL;
+                if (!resource->native_closed && resource->native_socket != -1) {
+                    network_close_native(network_native_socket(
+                        resource->native_socket));
+                    resource->native_closed = true;
+                }
+                const Om_Status delivered = actor_deliver_result_locked(system,
+                    recipient, network_completion_id(operation), true, false, 0,
+                    NULL, 0, NULL, 0, NULL);
+                if (delivered != OM_STATUS_OK) actor_fail_locked(system, recipient);
+                return delivered;
+            }
+            if (resource->tls_session != NULL) {
+                return network_deliver_error_locked(system, recipient,
+                    operation, "invalid_argument");
+            }
             if (resource->udp != udp_close_request) {
                 return network_deliver_error_locked(system, recipient,
                     operation, "invalid_argument");
@@ -3620,6 +4242,17 @@ Om_Status actor_send_network_locked(
             }
             resource->busy_read = true;
             listener = resource;
+        } else if (tls_send_request || tls_receive_request) {
+            if (resource->listener || resource->udp
+                || resource->tls_session == NULL) {
+                return network_deliver_error_locked(system, recipient,
+                    operation, "invalid_argument");
+            }
+            if (resource->busy_tls) {
+                return network_deliver_error_locked(system, recipient,
+                    operation, "resource_exhausted");
+            }
+            resource->busy_tls = true;
         } else {
             if ((any_send_request || any_receive_request)
                 && (resource->listener
@@ -3632,6 +4265,10 @@ Om_Status actor_send_network_locked(
             if (*busy) {
                 return network_deliver_error_locked(system, recipient,
                     operation, "resource_exhausted");
+            }
+            if (resource->tls_session != NULL) {
+                return network_deliver_error_locked(system, recipient,
+                    operation, "invalid_argument");
             }
             *busy = true;
         }
@@ -3650,6 +4287,8 @@ Om_Status actor_send_network_locked(
     }
     if (system->blocking_pool == NULL) {
         if (resource != NULL) {
+            if (tls_client_start_request || tls_send_request || tls_receive_request)
+                resource->busy_tls = false;
             if (any_send_request) resource->busy_write = false;
             if (any_receive_request || accept_request) resource->busy_read = false;
         }
@@ -3658,6 +4297,8 @@ Om_Status actor_send_network_locked(
     Om_Runtime_System_Task *task = om_alloc(sizeof(*task));
     if (task == NULL) {
         if (resource != NULL) {
+            if (tls_client_start_request || tls_send_request || tls_receive_request)
+                resource->busy_tls = false;
             if (any_send_request) resource->busy_write = false;
             if (any_receive_request || accept_request) resource->busy_read = false;
         }
@@ -3672,7 +4313,9 @@ Om_Status actor_send_network_locked(
         .error_code = "io_error",
         .network_resource = resource,
         .network_listener = listener,
-        .network_backlog = (int)backlog,
+        .tls_session = NULL,
+        .network_backlog = dns_resolve_request ? (int)port_or_limit
+                                               : (int)backlog,
         .input_length = any_send_request ? input_length : 0,
     };
     if (creates_resource) {
@@ -3693,19 +4336,43 @@ Om_Status actor_send_network_locked(
         task->network_resource_is_new = true;
         if (accept_request) task->network_listener = listener;
     }
-    if (listen_request || connect_request || udp_connect_request) {
+    if (listen_request || connect_request || udp_connect_request
+        || dns_resolve_request || tls_client_start_request) {
         status = system_task_copy_string(source_context, address_object,
                                         &task->path, &input_length);
         if (status != OM_STATUS_OK) {
             system_task_destroy(task);
+            if (resource != NULL && tls_client_start_request)
+                resource->busy_tls = false;
             return network_deliver_error_locked(system, recipient, operation,
-                                                 "invalid_address");
+                dns_resolve_request ? "invalid_host" : "invalid_address");
+        }
+        if (tls_client_start_request
+            && (input_length == 0 || input_length > 253
+                || !system_dns_host_valid(task->path))) {
+            system_task_destroy(task);
+            resource->busy_tls = false;
+            return network_deliver_error_locked(system, recipient, operation,
+                                                 "invalid_host");
+        }
+        if (dns_resolve_request && input_length == 0) {
+            system_task_destroy(task);
+            return network_deliver_error_locked(system, recipient, operation,
+                                                 "invalid_host");
+        }
+        if (dns_resolve_request && input_length > 253) {
+            system_task_destroy(task);
+            return network_deliver_error_locked(system, recipient, operation,
+                                                 "invalid_host");
         }
     } else if (any_send_request && input_length != 0) {
         task->input_bytes = om_alloc(input_length);
         if (task->input_bytes == NULL) {
             system_task_destroy(task);
-            if (resource != NULL) resource->busy_write = false;
+            if (resource != NULL) {
+                if (tls_send_request) resource->busy_tls = false;
+                else resource->busy_write = false;
+            }
             return network_deliver_error_locked(system, recipient, operation,
                                                  "resource_exhausted");
         }
@@ -3716,7 +4383,10 @@ Om_Status actor_send_network_locked(
             if (status != OM_STATUS_OK || item.integer < 0
                 || item.integer > 255) {
                 system_task_destroy(task);
-                if (resource != NULL) resource->busy_write = false;
+                if (resource != NULL) {
+                    if (tls_send_request) resource->busy_tls = false;
+                    else resource->busy_write = false;
+                }
                 return network_deliver_error_locked(system, recipient,
                     operation, "invalid_argument");
             }
@@ -3726,6 +4396,8 @@ Om_Status actor_send_network_locked(
     if (system->outstanding_messages == SIZE_MAX) {
         system_task_destroy(task);
         if (resource != NULL) {
+            if (tls_client_start_request || tls_send_request || tls_receive_request)
+                resource->busy_tls = false;
             if (any_send_request) resource->busy_write = false;
             if (any_receive_request || accept_request) resource->busy_read = false;
         }
@@ -3747,6 +4419,8 @@ Om_Status actor_send_network_locked(
             --system->pending_network_resources;
         }
         if (resource != NULL) {
+            if (tls_client_start_request || tls_send_request || tls_receive_request)
+                resource->busy_tls = false;
             if (any_send_request) resource->busy_write = false;
             if (any_receive_request || accept_request) resource->busy_read = false;
         }
@@ -3963,6 +4637,99 @@ Om_Status actor_send_process_locked(
         return process_error_locked(system, recipient, operation, "resource_exhausted");
     }
     return OM_STATUS_OK;
+}
+
+Om_Status actor_send_environment_locked(
+    Om_Runtime_Actor_System *system,
+    Om_Execution_Context *source_context,
+    const Om_Runtime_Type_Descriptor *message_type,
+    const void *message_object)
+{
+    if (message_type == NULL) return OM_STATUS_NOT_FOUND;
+    const Om_System_Message_Id operation = message_type->system_message_id;
+    const bool get = operation == OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_GET;
+    const bool supported = get
+        || operation == OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_ARGUMENTS
+        || operation == OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_CURRENT_DIRECTORY
+        || operation == OM_SYSTEM_MESSAGE_ID_ENVIRONMENT_EXECUTABLE_PATH;
+    if (!supported || message_type->field_count != (get ? 2U : 1U)) {
+        return OM_STATUS_NOT_FOUND;
+    }
+    void *name_object = NULL;
+    uint64_t recipient_id = 0;
+    Om_Status status = OM_STATUS_OK;
+    if (get) {
+        status = om_runtime_record_get(source_context, message_object, 0,
+                                       &name_object);
+    }
+    if (status == OM_STATUS_OK) {
+        status = om_runtime_record_get(source_context, message_object,
+            get ? 1 : 0, &recipient_id);
+    }
+    if (status != OM_STATUS_OK) return status;
+    Om_Runtime_System_Task *task = om_alloc(sizeof(*task));
+    if (task == NULL) return OM_STATUS_OUT_OF_MEMORY;
+    *task = (Om_Runtime_System_Task){
+        .system = system,
+        .operation = operation,
+        .recipient_id = recipient_id,
+        .error_code = "io_error",
+    };
+    if (get) {
+        size_t name_length = 0;
+        status = system_task_copy_string(source_context, name_object,
+            &task->path, &name_length);
+        if (status == OM_STATUS_INVALID_ARGUMENT) {
+            task->error_code = "invalid_name";
+            task->path = om_alloc(1);
+            if (task->path == NULL) status = OM_STATUS_OUT_OF_MEMORY;
+            else { task->path[0] = '\0'; status = OM_STATUS_OK; }
+        } else if (status == OM_STATUS_OUT_OF_RANGE) {
+            task->error_code = "resource_exhausted";
+            task->path = om_alloc(1);
+            if (task->path == NULL) status = OM_STATUS_OUT_OF_MEMORY;
+            else { task->path[0] = '\0'; status = OM_STATUS_OK; }
+        }
+        if (status == OM_STATUS_OK
+            && name_length > OM_SYSTEM_ENVIRONMENT_MAX_VALUE_BYTES) {
+            om_free(task->path);
+            task->path = om_alloc(1);
+            if (task->path == NULL) {
+                status = OM_STATUS_OUT_OF_MEMORY;
+            } else {
+                task->path[0] = '\0';
+                task->error_code = "resource_exhausted";
+            }
+        }
+        if (status == OM_STATUS_OK && task->error_code != NULL
+            && strcmp(task->error_code, "invalid_name") == 0) {
+            /* Preserve the async completion contract for malformed names. */
+        } else if (status == OM_STATUS_OK
+            && (name_length == 0 || memchr(task->path, '=', name_length))) {
+            task->error_code = "invalid_name";
+        }
+    }
+    if (status != OM_STATUS_OK) {
+        system_task_destroy(task);
+        return status;
+    }
+    if (system->blocking_pool == NULL
+        || system->outstanding_messages == SIZE_MAX) {
+        system_task_destroy(task);
+        return system->blocking_pool == NULL ? OM_STATUS_CANCELLED
+                                             : OM_STATUS_OUT_OF_RANGE;
+    }
+    ++system->outstanding_messages;
+    status = om_blocking_pool_submit(system->blocking_pool,
+        (Om_Blocking_Task){.run = system_task_run,
+            .complete = system_file_complete,
+            .destroy = system_task_destroy, .context = task});
+    if (status != OM_STATUS_OK) {
+        --system->outstanding_messages;
+        system_task_destroy(task);
+        actor_condition_broadcast(system);
+    }
+    return status;
 }
 
 Om_Status actor_send_timer_locked(

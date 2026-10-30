@@ -594,7 +594,8 @@ static Om_Native_Abi_Type parse_abi_type(Om_Omi_Parser *parser,
         {"CSize", OM_NATIVE_ABI_CSIZE},
         {"CBool", OM_NATIVE_ABI_CBOOL},
         {"CPointer", OM_NATIVE_ABI_CPOINTER},
-        {"CString", OM_NATIVE_ABI_CSTRING}
+        {"CString", OM_NATIVE_ABI_CSTRING},
+        {"CUtf8Slice", OM_NATIVE_ABI_CUTF8_SLICE}
     };
     const Om_Omi_Token *token = peek_token(parser);
     if (token == NULL || token->kind != OM_OMI_TOKEN_WORD) {
@@ -627,7 +628,8 @@ static Om_Native_Abi_Type parse_abi_type(Om_Omi_Parser *parser,
 static bool is_pointer_type(Om_Native_Abi_Type type)
 {
     return type == OM_NATIVE_ABI_CPOINTER
-        || type == OM_NATIVE_ABI_CSTRING;
+        || type == OM_NATIVE_ABI_CSTRING
+        || type == OM_NATIVE_ABI_CUTF8_SLICE;
 }
 
 static bool push_value(Om_Omi_Parser *parser, Om_Vector *vector,
@@ -894,6 +896,10 @@ static void validate_function_metadata(Om_Omi_Parser *parser,
                     || owner->ownership == OM_NATIVE_OWNERSHIP_OWNED))) {
             add_diagnostic(parser, OM_OMI_DIAGNOSTIC_E0805, function->span);
         }
+    }
+    if (function->result_type == OM_NATIVE_ABI_CUTF8_SLICE
+        && function->result_ownership != OM_NATIVE_OWNERSHIP_OWNED) {
+        add_diagnostic(parser, OM_OMI_DIAGNOSTIC_E0805, function->span);
     }
     for (size_t index = 0; index < function->parameter_count; ++index) {
         const Om_Omi_Parameter *parameter = om_vector_at_const(

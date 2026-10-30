@@ -215,8 +215,10 @@ def check(root: Path) -> list[str]:
             errors.append(
                 f"{relative}: do not add dependencies on build-tree Runtime archive macros"
             )
-        if not relative.startswith("tests/") and RAW_ALLOCATORS.search(code) and not any(
+        if (not relative.startswith("tests/")
+                and RAW_ALLOCATORS.search(code) and not any(
             relative.startswith(allowed) for allowed in ALLOCATOR_OWNERS
+        ) and not relative.startswith("src/runtime/system_actor/network_tls_")
         ):
             errors.append(f"{relative}: raw allocator call is outside an authorized module")
         if FORBIDDEN_APIS.search(code):

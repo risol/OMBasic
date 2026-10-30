@@ -1,5 +1,40 @@
 # Native AOT implementation status
 
+## Foundation libraries — implementation in progress
+
+- Added Number parsing/formatting, UTF-8 String/Buffer conversion, binary File
+  System requests, URI, SHA-256/CRC-32, Environment/Platform, typed IP and
+  socket addresses, DNS, TLS, HTTP/1.1 request/response handling and Client
+  Actor, typed-empty collection inference, UUID, and CSV. Public contracts,
+  resource bounds, and module imports are described in `docs/stdlib/` and
+  ADR-0041.
+- HTTP Client Actor loopback coverage verifies HTTP over TCP. A Linux local
+  HTTPS scenario now verifies certificate and host validation, HTTP request
+  delivery over TLS, and response parsing against the local CA fixture.
+- Bounded gzip and zlib-wrapped DEFLATE are now available over Buffer with
+  checksum validation and a decoder fuzzer. Conformance covers local/external
+  gzip data, optional gzip headers, empty streams, round trips, bad checksums,
+  and malformed streams. The seeded compression decoder fuzzer passes 200
+  ASan/UBSan runs. Regex v1 now provides bounded Thompson-NFA search with
+  Unicode-scalar offsets, documented syntax, conformance, and a seeded
+  ASan/UBSan fuzzer. SQLite 3.54.1 is bundled in the Runtime and exposed
+  through a per-connection Database Actor with bounded execute/query
+  operations and JSON row output. HTTP Client Actor now reuses same-origin
+  keep-alive connections and has explicit close lifecycle coverage. ZIP/TAR
+  archives and direct HTTP response parser fuzzing remain open items.
+- The complete Windows Release CTest suite passes (38/38). The complete Linux
+  Release CTest suite passes (39/39), including the HTTPS scenario and Runtime
+  conformance and compression; the Runtime conformance test completes in
+  158.91 seconds with the latest SDK copy in the single-core validation
+  container. SDK relocation checks both the standard
+  library `.bas` and module `.omi` digests.
+- Linux Regex parser fuzzing passes a 500-run ASan/UBSan smoke test. The full
+  Linux ThreadSanitizer CTest suite passes (39/39) when run with `setarch -R`
+  in a container with seccomp disabled; this includes Runtime conformance and
+  the 2,000,000-message Actor stress test. A direct HTTP response-parser fuzz
+  target remains open; `http_response_fuzz.bas` is a deterministic
+  conformance stress case, not a libFuzzer target.
+
 The migration follows [OMBasic-Native-AOT-Refactor-Plan.md](../../OMBasic-Native-AOT-Refactor-Plan.md).
 The source and architecture baseline is commit
 `ecbbacc5fb235c4a706a9c4eeb31bc7b41dec299` on branch

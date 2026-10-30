@@ -356,6 +356,21 @@ bool om_test_type_inference_project(void)
     SEMANTIC_ASSERT(count_type_diagnostics(
                         &inference,
                         OM_TYPE_INFERENCE_DIAGNOSTIC_E0402) == 1);
+    om_type_inference_result_destroy(&inference);
+    destroy_test_project(&test_project);
+
+    SEMANTIC_ASSERT(load_and_resolve(
+        "type_inference/empty_collection_inferred.bas", &test_project));
+    SEMANTIC_ASSERT(om_type_infer_project(
+                        &test_project.project, test_project.parsed_modules,
+                        test_project.module_count, &test_project.resolution,
+                        &inference) == OM_STATUS_OK);
+    SEMANTIC_ASSERT(count_type_diagnostics(
+                        &inference,
+                        OM_TYPE_INFERENCE_DIAGNOSTIC_E0402) == 0);
+    SEMANTIC_ASSERT(count_type_diagnostics(
+                        &inference,
+                        OM_TYPE_INFERENCE_DIAGNOSTIC_E0401) == 0);
     passed = true;
 
 cleanup:
@@ -908,15 +923,15 @@ bool om_test_name_resolution_builtin_identities(void)
     }
     SEMANTIC_ASSERT(found_actor_down_reason && found_ok && found_error
                     && found_actor_down);
-    bool registered[OM_BUILTIN_SYSTEM_MESSAGE_UDP_CLOSE_COMPLETED + 1] = {false};
+    bool registered[OM_BUILTIN_SYSTEM_MESSAGE_TLS_CLOSE_COMPLETED + 1] = {false};
     SEMANTIC_ASSERT(om_builtin_descriptor_count()
-                    == (size_t)OM_BUILTIN_SYSTEM_MESSAGE_UDP_CLOSE_COMPLETED);
+                    == (size_t)OM_BUILTIN_SYSTEM_MESSAGE_TLS_CLOSE_COMPLETED);
     for (size_t index = 0; index < om_builtin_descriptor_count(); ++index) {
         const Om_Builtin_Descriptor *descriptor =
             om_builtin_descriptor_at(index);
         SEMANTIC_ASSERT(descriptor != NULL
             && descriptor->id > OM_BUILTIN_NONE
-            && descriptor->id <= OM_BUILTIN_SYSTEM_MESSAGE_UDP_CLOSE_COMPLETED
+            && descriptor->id <= OM_BUILTIN_SYSTEM_MESSAGE_TLS_CLOSE_COMPLETED
             && !registered[descriptor->id]
             && om_string_view_is_valid(descriptor->spelling)
             && descriptor->spelling.length != 0

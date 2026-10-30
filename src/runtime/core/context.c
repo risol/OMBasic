@@ -1,6 +1,8 @@
 #include "runtime_internal.h"
 
 #include "ombasic/foundation/memory.h"
+#include "ombasic/foundation/utf8.h"
+#include <string.h>
 
 #define OM_RUNTIME_DEFAULT_COLLECTION_THRESHOLD ((size_t)64 * 1024)
 
@@ -17,6 +19,47 @@ Om_Execution_Context *om_runtime_context_create(size_t collection_threshold)
         .minimum_collection_threshold = threshold,
     };
     return context;
+}
+
+Om_Status om_runtime_context_set_command_line(
+    Om_Execution_Context *context, int argc, const char *const argv[])
+{
+    const size_t max_count = 4096;
+    const size_t max_bytes = (size_t)1024 * 1024;
+    if (context == NULL || argc < 0 || (argc != 0 && argv == NULL)
+        || context->actor_system != NULL
+        || context->command_line_arguments != NULL
+        || (size_t)argc > max_count) {
+        return OM_STATUS_INVALID_ARGUMENT;
+    }
+    char **copies = argc == 0 ? NULL : om_alloc_array((size_t)argc,
+        sizeof(*copies));
+    if (argc != 0 && copies == NULL) return OM_STATUS_OUT_OF_MEMORY;
+    if (copies != NULL) (void)memset(copies, 0,
+        (size_t)argc * sizeof(*copies));
+    size_t bytes = 0;
+    for (int index = 0; index < argc; ++index) {
+        if (argv[index] == NULL) goto invalid;
+        const size_t length = strlen(argv[index]);
+        if (length > max_bytes - bytes || om_utf8_validate(
+                (Om_Const_Byte_Slice){(const uint8_t *)argv[index], length})
+                != OM_STATUS_OK) goto invalid;
+        bytes += length;
+        copies[index] = om_alloc(length + 1);
+        if (copies[index] == NULL) goto exhausted;
+        (void)memcpy(copies[index], argv[index], length + 1);
+    }
+    context->command_line_arguments = copies;
+    context->command_line_argument_count = (size_t)argc;
+    return OM_STATUS_OK;
+invalid:
+    for (int index = 0; index < argc; ++index) om_free(copies[index]);
+    om_free(copies);
+    return OM_STATUS_INVALID_ARGUMENT;
+exhausted:
+    for (int index = 0; index < argc; ++index) om_free(copies[index]);
+    om_free(copies);
+    return OM_STATUS_OUT_OF_MEMORY;
 }
 
 Om_Status om_runtime_actor_system_context_create(
@@ -81,5 +124,10 @@ void om_runtime_context_destroy(Om_Execution_Context *context)
         om_free(frame);
         frame = previous;
     }
+    for (size_t index = 0; index < context->command_line_argument_count;
+         ++index) {
+        om_free(context->command_line_arguments[index]);
+    }
+    om_free(context->command_line_arguments);
     om_free(context);
 }

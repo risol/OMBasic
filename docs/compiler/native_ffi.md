@@ -72,6 +72,21 @@ FUNCTION release_string(value: CPointer OWNED): CVoid
 END FUNCTION
 ```
 
+## CUtf8Slice
+
+`CUtf8Slice` is a Native-only, length-delimited UTF-8 view for functions that
+must accept embedded U+0000. As a borrowed parameter, OMBasic passes a pointer
+to an `Om_String_View` containing the UTF-8 data pointer and byte length. The
+view is valid only for the duration of the call; C code must not retain either
+pointer. Unlike `CString`, it does not copy or reject embedded NUL.
+
+An owned `CUtf8Slice` result is a pointer to an allocated `Om_String_View`.
+The Runtime validates and copies its bytes into a managed String, then invokes
+the declared release function on the view, including when validation or String
+allocation fails. Such a result must be declared `RETURNS OWNED WITH ...`.
+`CUtf8Slice` is not a BASIC value type and is not currently supported in Native
+callbacks.
+
 CPointer is a managed opaque resource handle. Its raw address exists only
 inside a generated Native call wrapper. BORROWED and STATIC parameters borrow
 the address for the call; OWNED parameters transfer the owned address to C and

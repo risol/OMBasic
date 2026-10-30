@@ -1,0 +1,39 @@
+NATIVE "ombasic_runtime"
+FUNCTION address_ip_status(text: CString BORROWED): CInt64
+    SYMBOL "om_runtime_address_ip_status"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION address_ip_family(text: CString BORROWED): CInt64
+    SYMBOL "om_runtime_address_ip_family"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION address_ip_byte(text: CString BORROWED, index: CInt64): CInt64
+    SYMBOL "om_runtime_address_ip_byte"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION address_ip_bytes_hex(text: CString BORROWED): CString
+    SYMBOL "om_runtime_address_ip_bytes_hex"
+    EFFECT PURE
+    NONBLOCKING
+    RETURNS OWNED WITH release_address_string
+END FUNCTION
+
+FUNCTION address_ip_format(family: CInt64, bytes_hex: CString BORROWED): CString
+    SYMBOL "om_runtime_address_ip_format"
+    EFFECT PURE
+    NONBLOCKING
+    RETURNS OWNED WITH release_address_string
+END FUNCTION
+
+FUNCTION release_address_string(value: CPointer OWNED): CVoid
+    SYMBOL "om_runtime_address_release"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+END NATIVE

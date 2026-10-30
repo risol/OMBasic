@@ -1683,7 +1683,29 @@ static Om_Status parse_receive(Om_Parser *parser, Om_Ast_Node_Id *out)
 {
     const Om_Token *begin = advance(parser);
     Om_Token message = {0};
-    Om_Status status = expect_name(parser, true, &message);
+    const Om_Token *first_name = peek(parser);
+    Om_Status status = OM_STATUS_OK;
+    if (!is_name_token(first_name)) {
+        status = add_diagnostic(parser, OM_PARSE_DIAGNOSTIC_E0202,
+            first_name->span, OM_TOKEN_ENTITY_IDENTIFIER, OM_KEYWORD_NONE);
+    } else {
+        message = *advance(parser);
+    }
+    if (status == OM_STATUS_OK && at_kind(parser, OM_TOKEN_DOT)) {
+        (void)advance(parser);
+        Om_Token member = {0};
+        status = expect_name(parser, true, &member);
+        if (status == OM_STATUS_OK) {
+            message.lexeme.length += 1 + member.lexeme.length;
+            message.kind = member.kind;
+            message.span = span_between(message.span, member.span);
+        }
+    } else if (status == OM_STATUS_OK
+               && message.kind != OM_TOKEN_ENTITY_IDENTIFIER
+               && message.kind != OM_TOKEN_INVALID_IDENTIFIER) {
+        status = add_diagnostic(parser, OM_PARSE_DIAGNOSTIC_E0102,
+            message.span, OM_TOKEN_INVALID_IDENTIFIER, OM_KEYWORD_NONE);
+    }
     Om_Vector parameters = {0};
     if (status == OM_STATUS_OK) {
         status = parse_parameter_list(parser, &parameters);

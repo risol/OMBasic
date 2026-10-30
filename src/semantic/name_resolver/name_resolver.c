@@ -470,13 +470,14 @@ bool om_builtin_id_is_system_actor(Om_Builtin_Id id)
         || id == OM_BUILTIN_SYSTEM_ACTOR_SECURE_RANDOM
         || id == OM_BUILTIN_SYSTEM_ACTOR_LOGGER
         || id == OM_BUILTIN_SYSTEM_ACTOR_NETWORK
-        || id == OM_BUILTIN_SYSTEM_ACTOR_PROCESS;
+        || id == OM_BUILTIN_SYSTEM_ACTOR_PROCESS
+        || id == OM_BUILTIN_SYSTEM_ACTOR_ENVIRONMENT;
 }
 
 bool om_builtin_id_is_system_message(Om_Builtin_Id id)
 {
     return id >= OM_BUILTIN_SYSTEM_MESSAGE_CONSOLE_WRITE
-        && id <= OM_BUILTIN_SYSTEM_MESSAGE_UDP_CLOSE_COMPLETED;
+        && id <= OM_BUILTIN_SYSTEM_MESSAGE_TLS_CLOSE_COMPLETED;
 }
 
 static Om_Status add_builtin(Om_Resolver *resolver, Om_String_View name)
@@ -524,6 +525,7 @@ static bool source_native_abi_type_supported(Om_Native_Abi_Type type,
     case OM_NATIVE_ABI_CBOOL:
     case OM_NATIVE_ABI_CPOINTER:
     case OM_NATIVE_ABI_CSTRING:
+    case OM_NATIVE_ABI_CUTF8_SLICE:
     case OM_NATIVE_ABI_RECORD:
         return true;
     case OM_NATIVE_ABI_INVALID:
@@ -583,6 +585,7 @@ static bool native_function_source_callable(const Om_Omi_Module *module,
                     .abi_type;
             if (!source_native_abi_type_supported(callback_type, false)
                 || callback_type == OM_NATIVE_ABI_CSTRING
+                || callback_type == OM_NATIVE_ABI_CUTF8_SLICE
                 || callback_type == OM_NATIVE_ABI_RECORD) {
                 return false;
             }
@@ -674,6 +677,7 @@ static Om_Status setup_prelude(Om_Resolver *resolver,
         OM_SYSTEM_ACTOR_NAME_LOGGER,
         OM_SYSTEM_ACTOR_NAME_NETWORK,
         OM_SYSTEM_ACTOR_NAME_PROCESS,
+        OM_SYSTEM_ACTOR_NAME_ENVIRONMENT,
         OM_SYSTEM_MESSAGE_NAME_CONSOLE_WRITE,
         OM_SYSTEM_MESSAGE_NAME_CONSOLE_WRITE_COMPLETED,
         OM_SYSTEM_MESSAGE_NAME_FILE_READ,
@@ -693,6 +697,12 @@ static Om_Status setup_prelude(Om_Resolver *resolver,
         OM_SYSTEM_MESSAGE_NAME_DIRECTORY_LIST_COMPLETED,
         OM_SYSTEM_MESSAGE_NAME_FILE_STAT,
         OM_SYSTEM_MESSAGE_NAME_FILE_STAT_COMPLETED,
+        OM_SYSTEM_MESSAGE_NAME_FILE_READ_BYTES,
+        OM_SYSTEM_MESSAGE_NAME_FILE_READ_BYTES_COMPLETED,
+        OM_SYSTEM_MESSAGE_NAME_FILE_WRITE_BYTES,
+        OM_SYSTEM_MESSAGE_NAME_FILE_WRITE_BYTES_COMPLETED,
+        OM_SYSTEM_MESSAGE_NAME_FILE_APPEND_BYTES,
+        OM_SYSTEM_MESSAGE_NAME_FILE_APPEND_BYTES_COMPLETED,
         OM_SYSTEM_MESSAGE_NAME_CLOCK_MONOTONIC_NOW,
         OM_SYSTEM_MESSAGE_NAME_CLOCK_MONOTONIC_NOW_COMPLETED,
         OM_SYSTEM_MESSAGE_NAME_CLOCK_UTC_NOW,
@@ -738,7 +748,25 @@ static Om_Status setup_prelude(Om_Resolver *resolver,
         OM_SYSTEM_MESSAGE_NAME_UDP_RECEIVE,
         OM_SYSTEM_MESSAGE_NAME_UDP_RECEIVE_COMPLETED,
         OM_SYSTEM_MESSAGE_NAME_UDP_CLOSE,
-        OM_SYSTEM_MESSAGE_NAME_UDP_CLOSE_COMPLETED
+        OM_SYSTEM_MESSAGE_NAME_UDP_CLOSE_COMPLETED,
+        OM_SYSTEM_MESSAGE_NAME_ENVIRONMENT_ARGUMENTS,
+        OM_SYSTEM_MESSAGE_NAME_ENVIRONMENT_ARGUMENTS_COMPLETED,
+        OM_SYSTEM_MESSAGE_NAME_ENVIRONMENT_GET,
+        OM_SYSTEM_MESSAGE_NAME_ENVIRONMENT_GET_COMPLETED,
+        OM_SYSTEM_MESSAGE_NAME_ENVIRONMENT_CURRENT_DIRECTORY,
+        OM_SYSTEM_MESSAGE_NAME_ENVIRONMENT_CURRENT_DIRECTORY_COMPLETED,
+        OM_SYSTEM_MESSAGE_NAME_ENVIRONMENT_EXECUTABLE_PATH,
+        OM_SYSTEM_MESSAGE_NAME_ENVIRONMENT_EXECUTABLE_PATH_COMPLETED,
+        OM_SYSTEM_MESSAGE_NAME_DNS_RESOLVE,
+        OM_SYSTEM_MESSAGE_NAME_DNS_RESOLVE_COMPLETED,
+        OM_SYSTEM_MESSAGE_NAME_TLS_CLIENT_START,
+        OM_SYSTEM_MESSAGE_NAME_TLS_CLIENT_START_COMPLETED,
+        OM_SYSTEM_MESSAGE_NAME_TLS_SEND,
+        OM_SYSTEM_MESSAGE_NAME_TLS_SEND_COMPLETED,
+        OM_SYSTEM_MESSAGE_NAME_TLS_RECEIVE,
+        OM_SYSTEM_MESSAGE_NAME_TLS_RECEIVE_COMPLETED,
+        OM_SYSTEM_MESSAGE_NAME_TLS_CLOSE,
+        OM_SYSTEM_MESSAGE_NAME_TLS_CLOSE_COMPLETED
     };
     Om_Status status = add_scope(resolver, OM_SCOPE_ID_INVALID, OM_SCOPE_PRELUDE,
                                  OM_MODULE_ID_INVALID, OM_AST_NODE_ID_INVALID,
@@ -1594,8 +1622,31 @@ static Om_Status resolve_receive(Om_Resolver *resolver,
                                  const Om_Ast_Node *receive,
                                  Om_Scope_Id actor_scope)
 {
-    const Om_Symbol_Id message_id = lookup_visible(resolver, actor_scope,
-                                                   receive->name);
+    Om_Symbol_Id message_id = OM_SYMBOL_ID_INVALID;
+    const char *separator = receive->name.data != NULL
+        ? memchr(receive->name.data, '.', receive->name.length) : NULL;
+    if (separator == NULL) {
+        message_id = lookup_visible(resolver, actor_scope, receive->name);
+    } else {
+        const size_t alias_length = (size_t)(separator - receive->name.data);
+        const size_t member_offset = alias_length + 1;
+        if (alias_length != 0 && member_offset < receive->name.length) {
+            const Om_String_View alias_name = {
+                receive->name.data, alias_length,
+            };
+            const Om_String_View member_name = {
+                receive->name.data + member_offset,
+                receive->name.length - member_offset,
+            };
+            const Om_Symbol_Id alias_id = lookup_visible(
+                resolver, actor_scope, alias_name);
+            const Om_Symbol *alias = symbol_at(resolver, alias_id);
+            if (alias != NULL && alias->kind == OM_SYMBOL_MODULE_ALIAS) {
+                message_id = lookup_export(resolver, alias->target_module,
+                                           member_name);
+            }
+        }
+    }
     const Om_Symbol *message = symbol_at(resolver, message_id);
     const bool system_message = message != NULL
         && message->kind == OM_SYMBOL_BUILTIN

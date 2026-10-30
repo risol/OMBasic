@@ -14,7 +14,8 @@ def main() -> int:
     output = pathlib.Path(sys.argv[3])
     files = []
     aggregate = hashlib.sha256()
-    for path in sorted(root.rglob("*.bas"), key=lambda item: item.relative_to(root).as_posix()):
+    source_files = [*root.rglob("*.bas"), *root.rglob("*.omi")]
+    for path in sorted(source_files, key=lambda item: item.relative_to(root).as_posix()):
         relative = path.relative_to(root).as_posix()
         content_hash = hashlib.sha256(path.read_bytes()).hexdigest()
         files.append({"path": relative, "sha256": content_hash})

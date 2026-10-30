@@ -31,7 +31,8 @@ It does not embed build-tree archive paths.
 
 The target manifest stores relative resource paths, the standard-library
 version and content digest, and the target triple used to build this SDK.
-`stdlib-manifest.json` lists each `.bas` file by relative path and SHA-256. Its
+`stdlib-manifest.json` lists each `.bas` and module-scoped `.omi` file by
+relative path and SHA-256. Its
 aggregate digest is repeated in the target manifest. Installed static archives
 have debug records stripped so they do not retain paths from the machine that
 built the SDK.

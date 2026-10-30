@@ -94,6 +94,16 @@ Om_Status initialize_types(Om_Llvm_Backend_Context *backend)
         backend->byte_pointer_type, context_create_parameters, 1, 0);
     backend->runtime_context_create = LLVMAddFunction(backend->module,
         "om_runtime_context_create", context_create_type);
+    LLVMTypeRef command_line_parameters[3] = {
+        backend->byte_pointer_type,
+        backend->i32_type,
+        LLVMPointerType(backend->byte_pointer_type, 0),
+    };
+    LLVMTypeRef command_line_type = LLVMFunctionType(backend->i32_type,
+        command_line_parameters, 3, 0);
+    backend->runtime_context_set_command_line = LLVMAddFunction(
+        backend->module, "om_runtime_context_set_command_line",
+        command_line_type);
     LLVMTypeRef context_destroy_parameters[1] = {backend->byte_pointer_type};
     LLVMTypeRef context_destroy_type = LLVMFunctionType(
         LLVMVoidTypeInContext(backend->context), context_destroy_parameters,
@@ -200,6 +210,15 @@ Om_Status initialize_types(Om_Llvm_Backend_Context *backend)
     backend->runtime_string_cstring_view = LLVMAddFunction(backend->module,
         "om_runtime_string_cstring_view",
         runtime_string_cstring_view_type);
+    LLVMTypeRef runtime_string_view_parameters[3] = {
+        backend->byte_pointer_type,
+        backend->byte_pointer_type,
+        backend->byte_pointer_type,
+    };
+    LLVMTypeRef runtime_string_view_type = LLVMFunctionType(
+        backend->i32_type, runtime_string_view_parameters, 3, 0);
+    backend->runtime_string_view = LLVMAddFunction(backend->module,
+        "om_runtime_string_view", runtime_string_view_type);
     LLVMTypeRef runtime_string_from_cstring_parameters[3] = {
         backend->byte_pointer_type,
         backend->byte_pointer_type,
@@ -227,6 +246,10 @@ Om_Status initialize_types(Om_Llvm_Backend_Context *backend)
     backend->runtime_string_from_owned_cstring = LLVMAddFunction(
         backend->module,
         "om_runtime_string_create_from_owned_cstring",
+        runtime_string_from_owned_cstring_type);
+    backend->runtime_string_from_owned_utf8_slice = LLVMAddFunction(
+        backend->module,
+        "om_runtime_string_create_from_owned_utf8_slice",
         runtime_string_from_owned_cstring_type);
     LLVMTypeRef string_format_parameters[4] = {
         backend->byte_pointer_type, backend->i32_type,
@@ -481,6 +504,7 @@ Om_Status initialize_types(Om_Llvm_Backend_Context *backend)
         ? NULL : LLVMAddFunction(backend->module,
             "om_runtime_native_callback_post", callback_post_type);
     return backend->runtime_context_create == NULL
+        || backend->runtime_context_set_command_line == NULL
         || backend->runtime_context_destroy == NULL
         || backend->runtime_set_source_spans == NULL
         || backend->runtime_validate_program == NULL
@@ -493,8 +517,10 @@ Om_Status initialize_types(Om_Llvm_Backend_Context *backend)
         || backend->runtime_native_pointer_take == NULL
         || backend->runtime_string_create == NULL
         || backend->runtime_string_cstring_view == NULL
+        || backend->runtime_string_view == NULL
         || backend->runtime_string_from_cstring == NULL
         || backend->runtime_string_from_owned_cstring == NULL
+        || backend->runtime_string_from_owned_utf8_slice == NULL
         || backend->runtime_string_format == NULL
         || backend->runtime_string_concat == NULL
         || backend->runtime_string_compare == NULL

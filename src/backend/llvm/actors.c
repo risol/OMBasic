@@ -15,6 +15,17 @@ Om_Status emit_actor_instruction(Om_Llvm_Backend_Context *backend,
     *handled = true;
     *result = NULL;
     switch (instruction->opcode) {
+    case OM_MIR_ACTOR_IDENTITY:
+        if (instruction->operand_count == 0) {
+            *result = LLVMConstInt(backend->i64_type, 0, 0);
+            return OM_STATUS_OK;
+        }
+        if (instruction->operand_count != 1 || operands == NULL
+            || value_at(backend, operands[0]) == NULL) {
+            return OM_STATUS_INVALID_ARGUMENT;
+        }
+        *result = value_at(backend, operands[0]);
+        return OM_STATUS_OK;
     case OM_MIR_RUNTIME_ACTOR_SPAWN: {
         if (instruction->operand_count > 1
             || backend->actor_descriptors == NULL) {
@@ -161,7 +172,9 @@ Om_Status emit_actor_instruction(Om_Llvm_Backend_Context *backend,
                 && instruction->integer_value
                     != OM_SYSTEM_ACTOR_REF_NETWORK
                 && instruction->integer_value
-                    != OM_SYSTEM_ACTOR_REF_PROCESS)) {
+                    != OM_SYSTEM_ACTOR_REF_PROCESS
+                && instruction->integer_value
+                    != OM_SYSTEM_ACTOR_REF_ENVIRONMENT)) {
             return OM_STATUS_INVALID_ARGUMENT;
         }
         *result = LLVMConstInt(backend->i64_type,

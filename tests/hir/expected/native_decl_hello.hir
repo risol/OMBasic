@@ -1,10 +1,10 @@
 module 0 path="native_decl/hello.bas"
-  entity 0 kind=1 symbol=83 related=4294967295 name="main" span=0:0-56
+  entity 0 kind=1 symbol=108 related=4294967295 name="main" span=0:0-56
 node 0 module=0 kind=program op=none type=4294967295 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:0-56 children=0:1
-node 1 module=0 kind=action op=none type=244 symbol=83 related=4294967295 effects=0 flags=0 span=0:0-56 children=1:1 name="main"
+node 1 module=0 kind=action op=none type=318 symbol=108 related=4294967295 effects=0 flags=0 span=0:0-56 children=1:1 name="main"
 node 2 module=0 kind=block op=none type=5 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:18-45 children=2:1
-node 3 module=0 kind=bind op=none type=0 symbol=84 related=4294967295 effects=0 flags=0 span=0:18-44 children=3:1 name="answer_value"
-node 4 module=0 kind=call-direct op=none type=0 symbol=82 related=4294967295 effects=0 flags=0 span=0:33-44 children=4:3 name="add"
-node 5 module=0 kind=local op=none type=243 symbol=82 related=4294967295 effects=0 flags=0 span=0:33-36 children=7:0 name="add"
+node 3 module=0 kind=bind op=none type=0 symbol=109 related=4294967295 effects=0 flags=0 span=0:18-44 children=3:1 name="answer_value"
+node 4 module=0 kind=call-direct op=none type=0 symbol=107 related=4294967295 effects=0 flags=0 span=0:33-44 children=4:3 name="add"
+node 5 module=0 kind=local op=none type=317 symbol=107 related=4294967295 effects=0 flags=0 span=0:33-36 children=7:0 name="add"
 node 6 module=0 kind=integer op=none type=0 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:37-39 children=7:0 name="20" magnitude=20
 node 7 module=0 kind=integer op=none type=0 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:41-43 children=7:0 name="22" magnitude=22

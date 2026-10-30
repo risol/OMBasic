@@ -186,6 +186,12 @@ Om_Status om_runtime_actor_send(Om_Execution_Context *context,
         actor_mutex_unlock(system);
         return status;
     }
+    if (target.id == OM_SYSTEM_ACTOR_REF_ENVIRONMENT) {
+        const Om_Status status = actor_send_environment_locked(system, context,
+            source->fields.type, message_object);
+        actor_mutex_unlock(system);
+        return status;
+    }
     Om_Runtime_Actor *actor = actor_find_locked(system, target);
     if (actor == NULL && target.id >= OM_RUNTIME_REMOTE_ACTOR_ID_BIT) {
         const Om_Runtime_Distribution_Hooks *hooks =

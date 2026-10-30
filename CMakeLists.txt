@@ -316,6 +316,27 @@ if(WIN32)
     target_link_libraries(ombasic_distribution PRIVATE ws2_32 bcrypt)
 endif()
 
+add_library(ombasic_miniz OBJECT
+    third_party/miniz/miniz.c
+    third_party/miniz/miniz_tdef.c
+    third_party/miniz/miniz_tinfl.c
+)
+target_include_directories(ombasic_miniz PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/miniz")
+target_compile_definitions(ombasic_miniz PRIVATE
+    MINIZ_NO_ARCHIVE_APIS MINIZ_NO_STDIO MINIZ_NO_TIME
+    MINIZ_NO_ZLIB_COMPATIBLE_NAMES)
+target_link_libraries(ombasic_miniz PRIVATE ombasic_sanitizers)
+
+add_library(ombasic_sqlite OBJECT third_party/sqlite/sqlite3.c)
+target_include_directories(ombasic_sqlite PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/sqlite")
+target_compile_definitions(ombasic_sqlite PRIVATE
+    SQLITE_THREADSAFE=1 SQLITE_OMIT_LOAD_EXTENSION SQLITE_DQS=0
+    SQLITE_MAX_LENGTH=67108864 SQLITE_MAX_SQL_LENGTH=1048576
+    SQLITE_MAX_COLUMN=2048 SQLITE_MAX_VARIABLE_NUMBER=32766)
+target_link_libraries(ombasic_sqlite PRIVATE ombasic_sanitizers)
+
 add_library(ombasic_runtime STATIC
     src/runtime/actor/actor.c
     src/runtime/actor/mailbox.c
@@ -328,6 +349,17 @@ add_library(ombasic_runtime STATIC
     src/runtime/data/list.c
     src/runtime/data/json_native.c
     src/runtime/data/math_native.c
+    src/runtime/data/number_native.c
+    src/runtime/data/encoding_native.c
+    src/runtime/data/uri_native.c
+    src/runtime/data/hash_native.c
+    src/runtime/data/platform_native.c
+    src/runtime/data/address_native.c
+    src/runtime/data/compression_native.c
+    src/runtime/data/regex_native.c
+    src/runtime/data/sqlite_native.c
+    $<TARGET_OBJECTS:ombasic_miniz>
+    $<TARGET_OBJECTS:ombasic_sqlite>
     src/runtime/data/map.c
     src/runtime/data/native_pointer.c
     src/runtime/data/record.c
@@ -346,15 +378,24 @@ target_include_directories(ombasic_runtime PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/actor"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/core"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/system_actor"
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/miniz"
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/sqlite"
 )
 target_link_libraries(ombasic_runtime
     PUBLIC ombasic::foundation
     PRIVATE Threads::Threads ombasic_warnings ombasic_sanitizers
 )
 if(UNIX)
+    find_package(OpenSSL REQUIRED)
+    target_sources(ombasic_runtime PRIVATE
+        src/runtime/system_actor/network_tls_openssl.c)
+    target_link_libraries(ombasic_runtime PRIVATE
+        ${OPENSSL_SSL_LIBRARY} ${OPENSSL_CRYPTO_LIBRARY})
     target_link_libraries(ombasic_runtime PUBLIC m)
 elseif(WIN32)
-    target_link_libraries(ombasic_runtime PRIVATE bcrypt ws2_32)
+    target_sources(ombasic_runtime PRIVATE
+        src/runtime/system_actor/network_tls_schannel.c)
+      target_link_libraries(ombasic_runtime PRIVATE bcrypt ws2_32 secur32 crypt32)
 endif()
 
 add_library(ombasic_runtime_services STATIC
@@ -645,7 +686,8 @@ set(OM_BUILD_STDLIB_DIRECTORY "${OM_BUILD_RESOURCE_ROOT}/share/ombasic/stdlib")
 set(OM_STDLIB_MANIFEST
     "${CMAKE_CURRENT_BINARY_DIR}/share/ombasic/stdlib-manifest.json")
 file(GLOB_RECURSE OM_STDLIB_SOURCE_FILES CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/stdlib/*.bas")
+    "${CMAKE_CURRENT_SOURCE_DIR}/stdlib/*.bas"
+    "${CMAKE_CURRENT_SOURCE_DIR}/stdlib/*.omi")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     ${OM_STDLIB_SOURCE_FILES}
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/release/write_stdlib_manifest.py")
@@ -704,6 +746,8 @@ install(SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/StripSdkArchives.cmake")
 install(DIRECTORY include/ombasic DESTINATION include)
 install(FILES tools/ombasic_bind.py tools/ombasic_lsp.py
         DESTINATION share/ombasic/tools)
+install(FILES third_party/miniz/LICENSE third_party/miniz/README.md
+        DESTINATION share/ombasic/licenses/miniz)
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/share/ombasic/target-manifest.json"
         DESTINATION share/ombasic)
 install(FILES "${OM_STDLIB_MANIFEST}" DESTINATION share/ombasic)
@@ -867,6 +911,19 @@ if(BUILD_TESTING)
             /experimental:c11atomics)
     endif()
     add_test(NAME blocking_pool COMMAND ombasic_blocking_pool_tests)
+
+    if(UNIX)
+        add_executable(ombasic_network_tls_tests
+            tests/runtime/network_tls_tests.c)
+        target_include_directories(ombasic_network_tls_tests PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/system_actor")
+        target_link_libraries(ombasic_network_tls_tests PRIVATE
+            ombasic::runtime ${OPENSSL_SSL_LIBRARY} ${OPENSSL_CRYPTO_LIBRARY}
+            Threads::Threads ombasic_warnings ombasic_sanitizers)
+        add_test(NAME network_tls
+            COMMAND ombasic_network_tls_tests
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/runtime/fixtures/tls")
+    endif()
 
     add_executable(ombasic_timer_service_tests tests/runtime/timer_service_tests.c)
     target_include_directories(ombasic_timer_service_tests PRIVATE
@@ -1043,6 +1100,8 @@ if(OM_BUILD_FUZZERS)
         OM_BUILD_FUZZERS=1)
     target_compile_options(ombasic_runtime_distribution PRIVATE
         -fsanitize=fuzzer-no-link)
+    target_compile_options(ombasic_runtime PRIVATE -fsanitize=fuzzer-no-link)
+    target_compile_options(ombasic_miniz PRIVATE -fsanitize=fuzzer-no-link)
 
     add_executable(ombasic_fuzz_syntax tests/fuzz/syntax_fuzzer.c)
     target_compile_options(ombasic_fuzz_syntax PRIVATE -fsanitize=fuzzer-no-link)
@@ -1119,5 +1178,44 @@ if(OM_BUILD_FUZZERS)
         -fsanitize=fuzzer-no-link)
     target_link_options(ombasic_fuzz_json_parser PRIVATE -fsanitize=fuzzer)
     target_link_libraries(ombasic_fuzz_json_parser PRIVATE
+        ombasic::runtime ombasic_warnings ombasic_sanitizers)
+
+    add_executable(ombasic_fuzz_number_parser
+        tests/fuzz/number_parser_fuzzer.c)
+    target_compile_options(ombasic_fuzz_number_parser PRIVATE
+        -fsanitize=fuzzer-no-link)
+    target_link_options(ombasic_fuzz_number_parser PRIVATE -fsanitize=fuzzer)
+    target_link_libraries(ombasic_fuzz_number_parser PRIVATE
+        ombasic::runtime ombasic_warnings ombasic_sanitizers)
+
+    add_executable(ombasic_fuzz_utf8_decoder
+        tests/fuzz/utf8_decoder_fuzzer.c)
+    target_compile_options(ombasic_fuzz_utf8_decoder PRIVATE
+        -fsanitize=fuzzer-no-link)
+    target_link_options(ombasic_fuzz_utf8_decoder PRIVATE -fsanitize=fuzzer)
+    target_link_libraries(ombasic_fuzz_utf8_decoder PRIVATE
+        ombasic::runtime ombasic_warnings ombasic_sanitizers)
+
+    add_executable(ombasic_fuzz_uri_parser tests/fuzz/uri_parser_fuzzer.c)
+    target_compile_options(ombasic_fuzz_uri_parser PRIVATE
+        -fsanitize=fuzzer-no-link)
+    target_link_options(ombasic_fuzz_uri_parser PRIVATE -fsanitize=fuzzer)
+    target_link_libraries(ombasic_fuzz_uri_parser PRIVATE
+        ombasic::runtime ombasic_warnings ombasic_sanitizers)
+
+    add_executable(ombasic_fuzz_compression_decoder
+        tests/fuzz/compression_decoder_fuzzer.c)
+    target_compile_options(ombasic_fuzz_compression_decoder PRIVATE
+        -fsanitize=fuzzer-no-link)
+    target_link_options(ombasic_fuzz_compression_decoder PRIVATE
+        -fsanitize=fuzzer)
+    target_link_libraries(ombasic_fuzz_compression_decoder PRIVATE
+        ombasic::runtime ombasic_warnings ombasic_sanitizers)
+
+    add_executable(ombasic_fuzz_regex_parser tests/fuzz/regex_parser_fuzzer.c)
+    target_compile_options(ombasic_fuzz_regex_parser PRIVATE
+        -fsanitize=fuzzer-no-link)
+    target_link_options(ombasic_fuzz_regex_parser PRIVATE -fsanitize=fuzzer)
+    target_link_libraries(ombasic_fuzz_regex_parser PRIVATE
         ombasic::runtime ombasic_warnings ombasic_sanitizers)
 endif()

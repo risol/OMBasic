@@ -1,5 +1,7 @@
 #include "ombasic/semantic/type_inference.h"
 
+
+
 #include "ombasic/foundation/memory.h"
 #include "ombasic/semantic/system_actors.h"
 #include "ombasic/foundation/vector.h"
@@ -56,6 +58,11 @@ static Om_Status infer_statement(Om_Infer_Context *context,
                                  uint32_t level);
 static Om_Status infer_callable(Om_Infer_Context *context,
                                 Om_Symbol_Id symbol_id);
+static Om_Status check_known_kind(Om_Infer_Context *context,
+                                  Om_Module_Id module,
+                                  Om_Source_Span span,
+                                  Om_Type_Id type_id,
+                                  Om_Type_Kind expected_kind);
 static Om_Status infer_actor(Om_Infer_Context *context,
                              Om_Module_Id module,
                              Om_Ast_Node_Id node_id,
@@ -644,6 +651,7 @@ static Om_Status native_abi_type_to_language_type(
         kind = OM_TYPE_BOOL;
         break;
     case OM_NATIVE_ABI_CSTRING:
+    case OM_NATIVE_ABI_CUTF8_SLICE:
         kind = OM_TYPE_STRING;
         break;
     case OM_NATIVE_ABI_CPOINTER:
@@ -696,6 +704,7 @@ static Om_Status initialize_native_builtin(Om_Infer_Context *context,
                         parameter->callback_parameter_start
                             + callback_index].abi_type;
                 if (callback_abi_type == OM_NATIVE_ABI_CSTRING
+                    || callback_abi_type == OM_NATIVE_ABI_CUTF8_SLICE
                     || callback_abi_type == OM_NATIVE_ABI_CPOINTER
                     || callback_abi_type == OM_NATIVE_ABI_RECORD
                     || callback_abi_type == OM_NATIVE_ABI_CVOID
@@ -841,6 +850,12 @@ static Om_Status initialize_system_message_builtin(
         == OM_BUILTIN_SYSTEM_MESSAGE_FILE_WRITE;
     const bool file_append = symbol->builtin_id
         == OM_BUILTIN_SYSTEM_MESSAGE_FILE_APPEND;
+    const bool file_read_bytes = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_FILE_READ_BYTES;
+    const bool file_write_bytes = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_FILE_WRITE_BYTES;
+    const bool file_append_bytes = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_FILE_APPEND_BYTES;
     const bool file_exists = symbol->builtin_id
         == OM_BUILTIN_SYSTEM_MESSAGE_FILE_EXISTS;
     const bool file_delete = symbol->builtin_id
@@ -897,12 +912,33 @@ static Om_Status initialize_system_message_builtin(
         == OM_BUILTIN_SYSTEM_MESSAGE_FILE_STAT;
     const bool timer_after = symbol->builtin_id
         == OM_BUILTIN_SYSTEM_MESSAGE_TIMER_AFTER;
+    const bool environment_arguments = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_ENVIRONMENT_ARGUMENTS;
+    const bool environment_get = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_ENVIRONMENT_GET;
+    const bool environment_current_directory = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_ENVIRONMENT_CURRENT_DIRECTORY;
+    const bool environment_executable_path = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_ENVIRONMENT_EXECUTABLE_PATH;
+    const bool dns_resolve = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_DNS_RESOLVE;
+    const bool tls_client_start = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_TLS_CLIENT_START;
+    const bool tls_send = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_TLS_SEND;
+    const bool tls_receive = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_TLS_RECEIVE;
+    const bool tls_close = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_TLS_CLOSE;
     const bool file_read_completed = symbol->builtin_id
         == OM_BUILTIN_SYSTEM_MESSAGE_FILE_READ_COMPLETED;
+    const bool file_read_bytes_completed = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_FILE_READ_BYTES_COMPLETED;
     Om_Type_Id reply_protocol = OM_TYPE_ID_INVALID;
     Om_Type_Id reply_ref = OM_TYPE_ID_INVALID;
     if (status == OM_STATUS_OK
         && (console_write || console_read_line || file_read || file_write || file_append
+            || file_read_bytes || file_write_bytes || file_append_bytes
             || file_exists || file_delete || directory_create || directory_list
             || file_stat || clock_monotonic || clock_utc
             || secure_random_bytes || logger_write || logger_flush
@@ -910,7 +946,11 @@ static Om_Status initialize_system_message_builtin(
             || tcp_receive || tcp_close || process_spawn || process_write
             || process_close_stdin || process_read_stdout || process_read_stderr
             || process_terminate || process_wait || udp_connect || udp_send
-            || udp_receive || udp_close || timer_after)) {
+            || udp_receive || udp_close || timer_after
+            || environment_arguments || environment_get
+            || environment_current_directory || environment_executable_path
+            || dns_resolve || tls_client_start || tls_send || tls_receive
+            || tls_close)) {
         status = om_type_store_variable(&context->type_store, 1,
                                         &reply_protocol);
         if (status == OM_STATUS_OK) {
@@ -939,6 +979,34 @@ static Om_Status initialize_system_message_builtin(
         parameters[1] = string_type;
         parameters[2] = reply_ref;
         parameter_count = 3;
+    } else if (status == OM_STATUS_OK && file_read_bytes) {
+        parameters[0] = string_type;
+        parameters[1] = reply_ref;
+        parameter_count = 2;
+    } else if (status == OM_STATUS_OK && (file_write_bytes || file_append_bytes)) {
+        parameters[0] = string_type;
+        parameters[1] = integer_list_type;
+        parameters[2] = reply_ref;
+        parameter_count = 3;
+    } else if (status == OM_STATUS_OK && tls_client_start) {
+        parameters[0] = int_type;
+        parameters[1] = string_type;
+        parameters[2] = reply_ref;
+        parameter_count = 3;
+    } else if (status == OM_STATUS_OK && tls_send) {
+        parameters[0] = int_type;
+        parameters[1] = integer_list_type;
+        parameters[2] = reply_ref;
+        parameter_count = 3;
+    } else if (status == OM_STATUS_OK && tls_receive) {
+        parameters[0] = int_type;
+        parameters[1] = int_type;
+        parameters[2] = reply_ref;
+        parameter_count = 3;
+    } else if (status == OM_STATUS_OK && tls_close) {
+        parameters[0] = int_type;
+        parameters[1] = reply_ref;
+        parameter_count = 2;
     } else if (status == OM_STATUS_OK && file_exists) {
         parameters[0] = string_type;
         parameters[1] = reply_ref;
@@ -962,6 +1030,22 @@ static Om_Status initialize_system_message_builtin(
     } else if (status == OM_STATUS_OK && (clock_monotonic || clock_utc)) {
         parameters[0] = reply_ref;
         parameter_count = 1;
+    } else if (status == OM_STATUS_OK && environment_arguments) {
+        parameters[0] = reply_ref;
+        parameter_count = 1;
+    } else if (status == OM_STATUS_OK && environment_get) {
+        parameters[0] = string_type;
+        parameters[1] = reply_ref;
+        parameter_count = 2;
+    } else if (status == OM_STATUS_OK
+               && (environment_current_directory || environment_executable_path)) {
+        parameters[0] = reply_ref;
+        parameter_count = 1;
+    } else if (status == OM_STATUS_OK && dns_resolve) {
+        parameters[0] = string_type;
+        parameters[1] = int_type;
+        parameters[2] = reply_ref;
+        parameter_count = 3;
     } else if (status == OM_STATUS_OK && secure_random_bytes) {
         parameters[0] = int_type;
         parameters[1] = reply_ref;
@@ -1083,6 +1167,21 @@ static Om_Status initialize_system_message_builtin(
                 == OM_BUILTIN_SYSTEM_MESSAGE_TCP_ACCEPT_COMPLETED
             || symbol->builtin_id
                 == OM_BUILTIN_SYSTEM_MESSAGE_TCP_SEND_COMPLETED;
+        const bool environment_arguments_completed = symbol->builtin_id
+            == OM_BUILTIN_SYSTEM_MESSAGE_ENVIRONMENT_ARGUMENTS_COMPLETED;
+        const bool dns_resolve_completed = symbol->builtin_id
+            == OM_BUILTIN_SYSTEM_MESSAGE_DNS_RESOLVE_COMPLETED;
+        const bool tls_receive_completed = symbol->builtin_id
+            == OM_BUILTIN_SYSTEM_MESSAGE_TLS_RECEIVE_COMPLETED;
+        const bool tls_integer_completed = symbol->builtin_id
+            == OM_BUILTIN_SYSTEM_MESSAGE_TLS_CLIENT_START_COMPLETED
+            || symbol->builtin_id == OM_BUILTIN_SYSTEM_MESSAGE_TLS_SEND_COMPLETED;
+        const bool environment_text_completed = symbol->builtin_id
+            == OM_BUILTIN_SYSTEM_MESSAGE_ENVIRONMENT_GET_COMPLETED
+            || symbol->builtin_id
+                == OM_BUILTIN_SYSTEM_MESSAGE_ENVIRONMENT_CURRENT_DIRECTORY_COMPLETED
+            || symbol->builtin_id
+                == OM_BUILTIN_SYSTEM_MESSAGE_ENVIRONMENT_EXECUTABLE_PATH_COMPLETED;
         const bool process_integer_completed = symbol->builtin_id
             == OM_BUILTIN_SYSTEM_MESSAGE_PROCESS_SPAWN_COMPLETED
             || symbol->builtin_id == OM_BUILTIN_SYSTEM_MESSAGE_PROCESS_WRITE_STDIN_COMPLETED
@@ -1099,14 +1198,18 @@ static Om_Status initialize_system_message_builtin(
             == OM_BUILTIN_SYSTEM_MESSAGE_CLOCK_MONOTONIC_NOW_COMPLETED
             || symbol->builtin_id
                 == OM_BUILTIN_SYSTEM_MESSAGE_CLOCK_UTC_NOW_COMPLETED;
-        Om_Type_Id result_value = file_read_completed || console_read_line_completed
+        Om_Type_Id result_value = file_read_bytes_completed
+            ? integer_list_type
+            : file_read_completed || console_read_line_completed
             ? string_type
             : secure_random_bytes_completed ? integer_list_type
-            : tcp_receive_completed || process_bytes_completed || udp_receive_completed ? integer_list_type
-            : process_integer_completed || udp_integer_completed ? int_type
+            : tcp_receive_completed || process_bytes_completed || udp_receive_completed || tls_receive_completed ? integer_list_type
+            : process_integer_completed || udp_integer_completed || tls_integer_completed ? int_type
             : tcp_handle_completed ? int_type
             : file_exists_completed ? bool_type
             : clock_completed ? int_type
+            : environment_text_completed ? string_type
+            : environment_arguments_completed || dns_resolve_completed ? string_list_type
             : directory_list_completed || file_stat_completed
                 ? string_list_type : unit_type;
         status = make_system_result_type(context, result_value, &result_type);
@@ -1733,6 +1836,7 @@ static Om_Status infer_native_callback_bindings(
                 &native_module->callback_parameters[
                     parameter->callback_parameter_start + field_index];
             if (callback_parameter->abi_type == OM_NATIVE_ABI_CSTRING
+                || callback_parameter->abi_type == OM_NATIVE_ABI_CUTF8_SLICE
                 || callback_parameter->abi_type == OM_NATIVE_ABI_CPOINTER
                 || callback_parameter->abi_type == OM_NATIVE_ABI_RECORD
                 || callback_parameter->abi_type == OM_NATIVE_ABI_CVOID
@@ -1786,6 +1890,36 @@ static Om_Status infer_call(Om_Infer_Context *context,
     const Om_Symbol_Id callee_symbol_id = resolved_symbol_for_node(
         context, module, callee_id);
     const Om_Symbol *callee_symbol = infer_symbol(context, callee_symbol_id);
+    if (callee_symbol != NULL
+        && callee_symbol->kind == OM_SYMBOL_BUILTIN
+        && callee_symbol->builtin_id == OM_BUILTIN_ACTOR_ID) {
+        if (node->child_count > 2) {
+            return add_type_diagnostic(context,
+                OM_TYPE_INFERENCE_DIAGNOSTIC_E0401, module, node->span,
+                OM_TYPE_ID_INVALID, OM_TYPE_ID_INVALID);
+        }
+        Om_Type_Id constructor_type = OM_TYPE_ID_INVALID;
+        Om_Status cast_status = infer_expression(context, module, callee_id,
+                                                  level, &constructor_type);
+        (void)constructor_type;
+        Om_Type_Id source_type = OM_TYPE_ID_INVALID;
+        if (cast_status == OM_STATUS_OK && node->child_count == 2) {
+            cast_status = infer_expression(context, module,
+                infer_child(context, module, node, 1), level, &source_type);
+        }
+        if (cast_status == OM_STATUS_OK && node->child_count == 2) {
+            cast_status = check_known_kind(context, module, node->span,
+                source_type, OM_TYPE_ACTOR_REF);
+        }
+        if (cast_status == OM_STATUS_OK) {
+            cast_status = get_primitive_type(context, OM_TYPE_ACTOR_ID,
+                                             type_id);
+        }
+        if (cast_status == OM_STATUS_OK) {
+            cast_status = set_node_type(context, module, node_id, *type_id);
+        }
+        return cast_status;
+    }
     if (callee_symbol != NULL
         && (callee_symbol->kind == OM_SYMBOL_RECORD
             || callee_symbol->kind == OM_SYMBOL_MESSAGE)) {
@@ -1925,7 +2059,7 @@ static Om_Status infer_call(Om_Infer_Context *context,
         const Om_Symbol_Id *callable_symbol = context->callable_stack.length != 0
             ? om_vector_at_const(&context->callable_stack,
                                  context->callable_stack.length - 1)
-            : NULL;
+            : context->in_actor_receive ? &context->current_actor : NULL;
         if (callable_symbol == NULL) {
             status = OM_STATUS_INVALID_ARGUMENT;
         } else {
@@ -2813,9 +2947,29 @@ static Om_Status infer_statement(Om_Infer_Context *context,
                 context, module, infer_child(context, module, node, 0));
             const Om_Ast_Node *message = infer_node(
                 context, module, infer_child(context, module, node, 1));
-            status = check_known_kind(context, module,
-                                      receiver != NULL ? receiver->span : node->span,
-                                      receiver_type, OM_TYPE_ACTOR_REF);
+            Om_Type_Id resolved_receiver = OM_TYPE_ID_INVALID;
+            Om_Type_View receiver_view = {0};
+            status = om_type_store_resolve(&context->type_store,
+                                           receiver_type,
+                                           &resolved_receiver);
+            if (status == OM_STATUS_OK) {
+                status = om_type_store_get(&context->type_store,
+                                           resolved_receiver,
+                                           &receiver_view);
+            }
+            if (status == OM_STATUS_OK
+                && receiver_view.kind != OM_TYPE_ACTOR_ID) {
+                if (receiver_view.kind == OM_TYPE_VARIABLE) {
+                    status = require_constraint_at(context, module,
+                        receiver != NULL ? receiver->span : node->span,
+                        receiver_type,
+                        (uint32_t)OM_TYPE_CONSTRAINT_ACTOR_TARGET);
+                } else {
+                    status = check_known_kind(context, module,
+                        receiver != NULL ? receiver->span : node->span,
+                        receiver_type, OM_TYPE_ACTOR_REF);
+                }
+            }
             if (status == OM_STATUS_OK) {
                 status = check_known_kind(context, module,
                                           message != NULL ? message->span : node->span,
@@ -3262,6 +3416,58 @@ static bool type_contains_unresolved_unquantified_variable(
     return true;
 }
 
+static bool type_contains_unresolved_unquantified_variable_in_project(
+    const Om_Infer_Context *context,
+    Om_Type_Id type_id,
+    size_t depth,
+    bool *contains)
+{
+    if (depth >= 256 || contains == NULL) return false;
+    Om_Type_Id resolved = OM_TYPE_ID_INVALID;
+    if (om_type_store_resolve(&context->type_store, type_id, &resolved)
+        != OM_STATUS_OK) return false;
+    Om_Type_View view = {0};
+    if (om_type_store_get(&context->type_store, resolved, &view)
+        != OM_STATUS_OK) return false;
+    if (view.kind == OM_TYPE_VARIABLE) {
+        bool generalized = false;
+        if (view.type_variable_unbound) {
+            for (size_t index = 0; index < context->resolution->symbol_count;
+                 ++index) {
+                const Om_Symbol *symbol =
+                    &context->resolution->symbols[index];
+                if (symbol->kind != OM_SYMBOL_FUNCTION
+                    && symbol->kind != OM_SYMBOL_ACTION) {
+                    continue;
+                }
+                if (scheme_quantifies_type_variable(context,
+                        &context->symbol_schemes[index], resolved)) {
+                    generalized = true;
+                    break;
+                }
+            }
+        }
+        *contains = view.type_variable_unbound && !generalized;
+        return true;
+    }
+    for (size_t index = 0; index < view.child_count; ++index) {
+        Om_Type_Id child = OM_TYPE_ID_INVALID;
+        bool child_contains = false;
+        if (om_type_store_child_at(&context->type_store, resolved, index,
+                &child) != OM_STATUS_OK
+            || !type_contains_unresolved_unquantified_variable_in_project(
+                context, child, depth + 1, &child_contains)) {
+            return false;
+        }
+        if (child_contains) {
+            *contains = true;
+            return true;
+        }
+    }
+    *contains = false;
+    return true;
+}
+
 static Om_Status diagnose_unresolved_result_expressions(
     Om_Infer_Context *context)
 {
@@ -3304,8 +3510,8 @@ static Om_Status diagnose_unresolved_empty_collections(Om_Infer_Context *context
         const Om_Empty_Collection *entry = om_vector_at_const(
             &context->empty_collections, index);
         bool unresolved = false;
-        if (!type_contains_unresolved_variable(context, entry->type_id, 0,
-                                               &unresolved)) {
+        if (!type_contains_unresolved_unquantified_variable_in_project(
+                context, entry->type_id, 0, &unresolved)) {
             return OM_STATUS_INVALID_ARGUMENT;
         }
         if (unresolved) {

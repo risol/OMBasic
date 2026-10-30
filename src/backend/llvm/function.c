@@ -495,7 +495,12 @@ Om_Status add_entry_wrapper(Om_Llvm_Backend_Context *backend,
     if (status != OM_STATUS_OK) {
         return status;
     }
-    LLVMTypeRef wrapper_type = LLVMFunctionType(backend->i32_type, NULL, 0, 0);
+    LLVMTypeRef wrapper_parameters[2] = {
+        backend->i32_type,
+        LLVMPointerType(backend->byte_pointer_type, 0),
+    };
+    LLVMTypeRef wrapper_type = LLVMFunctionType(backend->i32_type,
+        wrapper_parameters, 2, 0);
     LLVMValueRef wrapper = LLVMAddFunction(backend->module, "main", wrapper_type);
     if (wrapper == NULL) {
         return OM_STATUS_OUT_OF_MEMORY;
@@ -524,6 +529,22 @@ Om_Status add_entry_wrapper(Om_Llvm_Backend_Context *backend,
     if (status != OM_STATUS_OK) {
         return status;
     }
+    LLVMValueRef command_line_arguments[3] = {
+        execution_context,
+        LLVMGetParam(wrapper, 0),
+        LLVMGetParam(wrapper, 1),
+    };
+    LLVMValueRef command_line_status = LLVMBuildCall2(backend->builder,
+        LLVMGlobalGetValueType(backend->runtime_context_set_command_line),
+        backend->runtime_context_set_command_line,
+        command_line_arguments, 3, "command_line_status");
+    LLVMValueRef command_line_failed = command_line_status == NULL ? NULL
+        : LLVMBuildICmp(backend->builder, LLVMIntNE, command_line_status,
+            LLVMConstInt(backend->i32_type, 0, 0), "command_line_failed");
+    if (command_line_failed == NULL) return OM_STATUS_OUT_OF_MEMORY;
+    status = add_wrapper_failure_check(backend, wrapper,
+        command_line_failed, execution_context);
+    if (status != OM_STATUS_OK) return status;
     LLVMValueRef source_span_table = NULL;
     status = create_source_span_table(backend, &source_span_table);
     if (status != OM_STATUS_OK) {

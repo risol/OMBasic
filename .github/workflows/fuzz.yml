@@ -51,9 +51,14 @@ jobs:
             ombasic_fuzz_mir_verifier \
             ombasic_fuzz_distribution_serializer \
             ombasic_fuzz_native_descriptor_codec \
-            ombasic_fuzz_json_parser; do
+            ombasic_fuzz_json_parser \
+            ombasic_fuzz_number_parser \
+            ombasic_fuzz_utf8_decoder \
+            ombasic_fuzz_uri_parser; do
             "build/linux/clang/fuzz/${fuzzer}" -runs=200 -max_len=4096
           done
+          build/linux/clang/fuzz/ombasic_fuzz_compression_decoder tests/fuzz/corpus/compression_decoder -runs=200 -max_len=4096
+          build/linux/clang/fuzz/ombasic_fuzz_regex_parser tests/fuzz/corpus/regex_parser -runs=200 -max_len=2048
           build/linux/clang/fuzz/ombasic_fuzz_llvm_backend -runs=20 -max_len=4096
 
   fuzz-extended:
@@ -95,7 +100,12 @@ jobs:
             ombasic_fuzz_mir_verifier \
             ombasic_fuzz_distribution_serializer \
             ombasic_fuzz_native_descriptor_codec \
-            ombasic_fuzz_json_parser; do
+            ombasic_fuzz_json_parser \
+            ombasic_fuzz_number_parser \
+            ombasic_fuzz_utf8_decoder \
+            ombasic_fuzz_uri_parser; do
             "build/linux/clang/fuzz/${fuzzer}" -max_total_time=60 -max_len=4096
           done
+          build/linux/clang/fuzz/ombasic_fuzz_compression_decoder tests/fuzz/corpus/compression_decoder -max_total_time=60 -max_len=4096
+          build/linux/clang/fuzz/ombasic_fuzz_regex_parser tests/fuzz/corpus/regex_parser -max_total_time=60 -max_len=2048
           build/linux/clang/fuzz/ombasic_fuzz_llvm_backend -max_total_time=60 -max_len=4096

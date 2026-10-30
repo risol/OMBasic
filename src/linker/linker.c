@@ -296,6 +296,8 @@ int om_linker_link_native(const Om_Linker_Request *request,
     arguments[count++] = resources->foundation_archive;
     arguments[count++] = "/defaultlib:Ws2_32.lib";
     arguments[count++] = "/defaultlib:Bcrypt.lib";
+    arguments[count++] = "/defaultlib:secur32.lib";
+    arguments[count++] = "/defaultlib:crypt32.lib";
     arguments[count++] = "/defaultlib:libcmt.lib";
     arguments[count++] = "/defaultlib:libvcruntime.lib";
     arguments[count++] = "/defaultlib:libucrt.lib";
@@ -344,6 +346,8 @@ int om_linker_link_native(const Om_Linker_Request *request,
     arguments[count++] = resources->runtime_services_archive;
     arguments[count++] = resources->foundation_archive;
     arguments[count++] = "-lm";
+    arguments[count++] = "-lssl";
+    arguments[count++] = "-lcrypto";
 #endif
     for (size_t index = 0; index < native_module_count; ++index) {
         const Om_String_View library = libraries[index];

@@ -32,6 +32,8 @@ typedef enum Om_Native_Abi_Type {
     OM_NATIVE_ABI_CBOOL,
     OM_NATIVE_ABI_CPOINTER,
     OM_NATIVE_ABI_CSTRING,
+    /* Pointer to a length-delimited Om_String_View for NATIVE only. */
+    OM_NATIVE_ABI_CUTF8_SLICE,
     /* A by-value type resolved through an NATIVE RECORD declaration. */
     OM_NATIVE_ABI_RECORD
 } Om_Native_Abi_Type;

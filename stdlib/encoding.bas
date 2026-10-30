@@ -1,5 +1,6 @@
 IMPORT "@std/text/text.bas"
 IMPORT "@std/collections/list.bas"
+NATIVE IMPORT "./encoding_native.omi"
 
 EXPORT RECORD Buffer(bytes)
 EXPORT RECORD Encoding_Error(code, offset)
@@ -39,6 +40,18 @@ EXPORT FUNCTION buffer_length(value)
         RETURN Error(Encoding_Error("invalid_buffer", 0))
     END IF
     RETURN Ok(list.length(value.bytes))
+END FUNCTION
+
+EXPORT FUNCTION utf8_encode(value)
+    status = native_utf8_encode_status(value)
+    IF status = 2 THEN
+        RETURN Error(Encoding_Error("resource_exhausted", 0))
+    END IF
+    IF status <> 0 THEN
+        RETURN Error(Encoding_Error("invalid_utf8", 0))
+    END IF
+    encoded = native_utf8_encode_hex(value)
+    RETURN hex_decode(encoded)
 END FUNCTION
 
 FUNCTION valid_buffer(value)
@@ -245,4 +258,28 @@ EXPORT FUNCTION base64_decode(encoded)
         normalized = normalized + [byte_value + 0]
     END FOR
     RETURN buffer_from_bytes(normalized)
+END FUNCTION
+
+EXPORT FUNCTION utf8_decode(value)
+    hex = TRY hex_encode(value)
+    status = native_utf8_decode_status(hex)
+    IF status = 2 THEN
+        RETURN Error(Encoding_Error("resource_exhausted", 0))
+    END IF
+    IF status <> 0 THEN
+        RETURN Error(Encoding_Error("invalid_utf8", native_utf8_decode_offset(hex)))
+    END IF
+    RETURN Ok(native_utf8_decode_slice(hex))
+END FUNCTION
+
+EXPORT FUNCTION utf8_encode_status_code(value)
+    RETURN native_utf8_encode_status(value)
+END FUNCTION
+
+EXPORT FUNCTION utf8_encode_hex_raw(value)
+    RETURN native_utf8_encode_hex(value)
+END FUNCTION
+
+EXPORT FUNCTION utf8_decode_hex_raw(value)
+    RETURN native_utf8_decode_slice(value)
 END FUNCTION

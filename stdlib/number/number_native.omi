@@ -1,0 +1,63 @@
+NATIVE "ombasic_runtime"
+FUNCTION int_status(text: CString BORROWED, radix: CInt64): CInt64
+    SYMBOL "om_runtime_number_parse_int_status"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION int_offset(text: CString BORROWED, radix: CInt64): CInt64
+    SYMBOL "om_runtime_number_parse_int_offset"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION int_value(text: CString BORROWED, radix: CInt64): CInt64
+    SYMBOL "om_runtime_number_parse_int_value"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION int_format(value: CInt64, radix: CInt64): CString
+    SYMBOL "om_runtime_number_format_int"
+    EFFECT PURE
+    NONBLOCKING
+    RETURNS OWNED WITH release_number_string
+END FUNCTION
+
+FUNCTION float_status(text: CString BORROWED): CInt64
+    SYMBOL "om_runtime_number_parse_float_status"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION float_offset(text: CString BORROWED): CInt64
+    SYMBOL "om_runtime_number_parse_float_offset"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION float_value(text: CString BORROWED): CDouble
+    SYMBOL "om_runtime_number_parse_float_value"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION float_is_finite(value: CDouble): CBool
+    SYMBOL "om_runtime_number_float_is_finite"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION float_format(value: CDouble): CString
+    SYMBOL "om_runtime_number_format_float"
+    EFFECT PURE
+    NONBLOCKING
+    RETURNS OWNED WITH release_number_string
+END FUNCTION
+
+FUNCTION release_number_string(value: CPointer OWNED): CVoid
+    SYMBOL "om_runtime_number_release"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+END NATIVE

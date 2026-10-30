@@ -1,0 +1,20 @@
+NATIVE "ombasic_runtime"
+FUNCTION compression_status(hex: CString BORROWED, format: CInt64, decompress: CInt64): CInt64
+    SYMBOL "om_runtime_compression_status"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION native_transform(hex: CString BORROWED, format: CInt64, decompress: CInt64): CString
+    SYMBOL "om_runtime_compression_transform"
+    EFFECT PURE
+    NONBLOCKING
+    RETURNS OWNED WITH release_value
+END FUNCTION
+
+FUNCTION release_value(value: CPointer OWNED): CVoid
+    SYMBOL "om_runtime_compression_release"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+END NATIVE

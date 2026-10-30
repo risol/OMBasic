@@ -1,6 +1,6 @@
 # ADR-0037: Network Actor Model
 
-- Status: TCP and connected UDP v1 implemented; expanded integration coverage is pending
+- Status: DNS, TCP and connected UDP v1 implemented; expanded integration coverage is pending
 - Date: 2026-10-30
 
 ## Context
@@ -53,12 +53,20 @@ coverage. Cross-node Distribution serialization remains a release prerequisite.
     remote and local ports, where local port zero asks the OS for an ephemeral
     port. `Udp_Send` sends one complete datagram; `Udp_Receive` returns one
     datagram or `datagram_too_large` if it exceeds the supplied buffer.
+11. `Dns_Resolve(host, port, reply)` uses the same Network Actor and bounded
+    Runtime worker pool. Its completion carries numeric IP literals as
+    `Result<List<String>, String>` because system messages cannot depend on a
+    record declared in an imported standard-library module. The DNS facade
+    converts each literal to a typed `Socket_Address`. Resolver
+    preference order is preserved, no user-visible cache is kept, and the
+    resolver's localized error strings never cross the API boundary.
 
 ## Stable error codes
 
-`invalid_argument`, `invalid_address`, `address_in_use`, `permission_denied`, `not_found`,
+`invalid_argument`, `invalid_address`, `invalid_port`, `invalid_host`, `address_in_use`, `permission_denied`, `not_found`,
 `connection_refused`, `connection_reset`, `closed`, `end_of_stream`,
 `datagram_too_large`, `resource_exhausted`, `unsupported`, and `io_error`.
+DNS also reports `temporary_failure` for transient resolver errors.
 
 Platform text may vary; code is the program-facing value. Name lookup uses
 the operating system resolver. TLS, multicast, half-close, and connection
@@ -66,8 +74,9 @@ pooling are outside v1.
 
 ## Validation status
 
-Windows and Linux Release conformance verifies TCP bind/accept/connect/send/receive
-and connected UDP send/receive on loopback. Error mapping,
+Windows and Linux Release conformance verifies localhost and numeric DNS
+resolution, TCP bind/accept/connect/send/receive, and connected UDP
+send/receive on loopback. Error mapping,
 partial-send stress, EOF, reset, close races, queue saturation, GC pressure,
 and shutdown still need dedicated integration tests. Buffer serialization is
 covered separately by the Distribution layer's current serializer tests.

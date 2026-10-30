@@ -1093,7 +1093,11 @@ Om_Status om_hir_verify_project(const Om_Hir_Project *project,
             Om_Type_Id message_type = OM_TYPE_ID_INVALID;
             Om_Type_View message_view = {0};
             bool serializable = false;
-            const bool send_types_valid = receiver != NULL && message != NULL
+            const bool erased_target = receiver != NULL
+                && resolved_type_view(project, receiver->type_id,
+                    &receiver_type, &receiver_view) == OM_STATUS_OK
+                && receiver_view.kind == OM_TYPE_ACTOR_ID;
+            const bool typed_target = receiver != NULL
                 && resolved_type_view(project, receiver->type_id,
                     &receiver_type, &receiver_view) == OM_STATUS_OK
                 && receiver_view.kind == OM_TYPE_ACTOR_REF
@@ -1103,13 +1107,17 @@ Om_Status om_hir_verify_project(const Om_Hir_Project *project,
                 && resolved_type_view(project, protocol_type, &protocol_type,
                     &protocol_view) == OM_STATUS_OK
                 && protocol_view.kind == OM_TYPE_ACTOR_PROTOCOL
-                && protocol_view.nominal_symbol.value != UINT32_MAX
+                && protocol_view.nominal_symbol.value != UINT32_MAX;
+            const bool valid_target = erased_target || typed_target;
+            const bool send_types_valid = valid_target && message != NULL
                 && resolved_type_view(project, message->type_id, &message_type,
                     &message_view) == OM_STATUS_OK
                 && message_view.kind == OM_TYPE_MESSAGE
                 && message_view.nominal_symbol.value != UINT32_MAX;
-            if (send_types_valid) {
+            if (send_types_valid && typed_target) {
                 actor_symbol = protocol_view.nominal_symbol;
+            }
+            if (send_types_valid) {
                 message_symbol = message_view.nominal_symbol;
             }
             const bool serializability_known = send_types_valid
@@ -1118,10 +1126,14 @@ Om_Status om_hir_verify_project(const Om_Hir_Project *project,
                     || om_semantic_type_is_serializable(project->semantic,
                         message_type, &serializable));
             if (node->child_count != 2 || !send_types_valid
-                || node->related_symbol_id.value != actor_symbol.value
+                || (!erased_target
+                    && node->related_symbol_id.value != actor_symbol.value)
+                || (erased_target
+                    && node->related_symbol_id.value != UINT32_MAX)
                 || node->symbol_id.value != message_symbol.value
-                || !om_semantic_actor_accepts(project->semantic, actor_symbol,
-                                               message_symbol)
+                || (!erased_target
+                    && !om_semantic_actor_accepts(project->semantic,
+                        actor_symbol, message_symbol))
                 || !serializability_known || !serializable) {
                 status = push_diagnostic(&diagnostics,
                                          OM_HIR_DIAGNOSTIC_E0905, node);

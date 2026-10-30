@@ -55,6 +55,13 @@ static Om_Status native_cstring_call_argument(
     const Om_Omi_Parameter *parameter,
     LLVMValueRef value,
     LLVMValueRef *argument);
+static Om_Status native_utf8_slice_call_argument(
+    Om_Llvm_Backend_Context *backend,
+    const Om_Mir_Function *function,
+    Om_Mir_Block_Id block_id,
+    const Om_Omi_Parameter *parameter,
+    LLVMValueRef value,
+    LLVMValueRef *argument);
 static Om_Status native_pointer_call_argument(
     Om_Llvm_Backend_Context *backend,
     const Om_Mir_Function *function,
@@ -157,6 +164,7 @@ Om_Status native_abi_type(Om_Llvm_Backend_Context *backend,
         break;
     case OM_NATIVE_ABI_CSTRING:
     case OM_NATIVE_ABI_CPOINTER:
+    case OM_NATIVE_ABI_CUTF8_SLICE:
         *result = (Om_Llvm_Native_Abi_Type){
             .llvm_type = backend->byte_pointer_type,
             .bit_width = pointer_bits,
@@ -888,6 +896,52 @@ static Om_Status native_cstring_call_argument(
     return OM_STATUS_OK;
 }
 
+static Om_Status native_utf8_slice_call_argument(
+    Om_Llvm_Backend_Context *backend,
+    const Om_Mir_Function *function,
+    Om_Mir_Block_Id block_id,
+    const Om_Omi_Parameter *parameter,
+    LLVMValueRef value,
+    LLVMValueRef *argument)
+{
+    if (backend == NULL || function == NULL || parameter == NULL
+        || value == NULL || argument == NULL
+        || parameter->abi_type != OM_NATIVE_ABI_CUTF8_SLICE
+        || parameter->ownership != OM_NATIVE_OWNERSHIP_BORROWED) {
+        return OM_STATUS_INVALID_ARGUMENT;
+    }
+    const unsigned pointer_bits = LLVMPointerSize(backend->target_data)
+        * CHAR_BIT;
+    LLVMTypeRef size_type = LLVMIntTypeInContext(backend->context,
+                                                 pointer_bits);
+    LLVMTypeRef fields[2] = {backend->byte_pointer_type, size_type};
+    LLVMTypeRef view_type = LLVMStructTypeInContext(backend->context,
+                                                    fields, 2, 0);
+    LLVMValueRef view_slot = entry_alloca(backend, function, view_type,
+                                          "native_utf8_slice_argument");
+    LLVMValueRef context = context_for_function(backend, function);
+    if (view_slot == NULL || context == NULL) {
+        return view_slot == NULL ? OM_STATUS_OUT_OF_MEMORY
+                                 : OM_STATUS_INVALID_ARGUMENT;
+    }
+    LLVMValueRef view_arguments[3] = {
+        context, value,
+        LLVMBuildBitCast(backend->builder, view_slot,
+            backend->byte_pointer_type, "native_utf8_slice_view_out"),
+    };
+    if (view_arguments[2] == NULL) return OM_STATUS_OUT_OF_MEMORY;
+    LLVMValueRef view_status = LLVMBuildCall2(backend->builder,
+        LLVMGlobalGetValueType(backend->runtime_string_view),
+        backend->runtime_string_view, view_arguments, 3,
+        "native_utf8_slice_view_status");
+    Om_Status status = emit_runtime_status_check(backend, block_id,
+                                                 view_status);
+    if (status != OM_STATUS_OK) return status;
+    *argument = LLVMBuildBitCast(backend->builder, view_slot,
+        backend->byte_pointer_type, "native_utf8_slice_argument_pointer");
+    return *argument == NULL ? OM_STATUS_OUT_OF_MEMORY : OM_STATUS_OK;
+}
+
 static Om_Status native_pointer_call_argument(
     Om_Llvm_Backend_Context *backend,
     const Om_Mir_Function *function,
@@ -951,6 +1005,10 @@ static Om_Status native_scalar_call_argument(
         if (parameter->abi_type == OM_NATIVE_ABI_CSTRING) {
             return native_cstring_call_argument(backend, function, block_id,
                                                 parameter, value, argument);
+        }
+        if (parameter->abi_type == OM_NATIVE_ABI_CUTF8_SLICE) {
+            return native_utf8_slice_call_argument(backend, function, block_id,
+                                                   parameter, value, argument);
         }
         if (parameter->abi_type == OM_NATIVE_ABI_CPOINTER) {
             return native_pointer_call_argument(backend, function, block_id,
@@ -1386,6 +1444,46 @@ static Om_Status emit_native_record_call(
         } else if (native_function->result_type == OM_NATIVE_ABI_CPOINTER) {
             status = native_pointer_result(backend, function, block_id,
                 module, native_function, operands, call, result);
+        } else if (native_function->result_type
+                   == OM_NATIVE_ABI_CUTF8_SLICE) {
+            LLVMValueRef managed_result_slot = entry_alloca(backend,
+                function, backend->byte_pointer_type,
+                "native_utf8_string_result_slot");
+            LLVMValueRef release_function_value = NULL;
+            if (managed_result_slot == NULL) {
+                status = OM_STATUS_OUT_OF_MEMORY;
+            } else {
+                status = native_release_function(backend, module,
+                    native_function->release_function,
+                    &release_function_value);
+            }
+            if (status == OM_STATUS_OK) {
+                LLVMBuildStore(backend->builder,
+                    LLVMConstNull(backend->byte_pointer_type),
+                    managed_result_slot);
+                LLVMValueRef string_arguments[4] = {
+                    context_for_function(backend, function), call,
+                    release_function_value, managed_result_slot,
+                };
+                if (string_arguments[0] == NULL) {
+                    status = OM_STATUS_INVALID_ARGUMENT;
+                } else {
+                    LLVMValueRef string_status = LLVMBuildCall2(
+                        backend->builder,
+                        LLVMGlobalGetValueType(
+                            backend->runtime_string_from_owned_utf8_slice),
+                        backend->runtime_string_from_owned_utf8_slice,
+                        string_arguments, 4,
+                        "native_utf8_string_conversion_status");
+                    status = emit_runtime_status_check(backend, block_id,
+                                                       string_status);
+                }
+            }
+            if (status == OM_STATUS_OK) {
+                *result = LLVMBuildLoad2(backend->builder,
+                    backend->byte_pointer_type, managed_result_slot,
+                    "native_managed_utf8_string_result");
+            }
         } else if (result_scalar.is_float && result_scalar.bit_width == 32) {
             *result = LLVMBuildFPExt(backend->builder, call,
                 backend->double_type, "native_float_result");
@@ -1769,6 +1867,43 @@ Om_Status emit_native_call(Om_Llvm_Backend_Context *backend,
             *result = LLVMBuildLoad2(backend->builder,
                 backend->byte_pointer_type, managed_result_slot,
                 "native_managed_string_result");
+        } else if (return_abi.is_pointer
+                   && native_function->result_type
+                       == OM_NATIVE_ABI_CUTF8_SLICE) {
+            LLVMValueRef managed_result_slot = entry_alloca(backend, function,
+                backend->byte_pointer_type,
+                "native_utf8_string_result_slot");
+            if (managed_result_slot == NULL) {
+                status = OM_STATUS_OUT_OF_MEMORY;
+                goto native_call_cleanup;
+            }
+            LLVMBuildStore(backend->builder,
+                LLVMConstNull(backend->byte_pointer_type),
+                managed_result_slot);
+            LLVMValueRef release_function_value = NULL;
+            status = native_release_function(backend, module,
+                native_function->release_function, &release_function_value);
+            if (status != OM_STATUS_OK) goto native_call_cleanup;
+            LLVMValueRef string_arguments[4] = {
+                context_for_function(backend, function), call,
+                release_function_value, managed_result_slot,
+            };
+            if (string_arguments[0] == NULL) {
+                status = OM_STATUS_INVALID_ARGUMENT;
+                goto native_call_cleanup;
+            }
+            LLVMValueRef string_status = LLVMBuildCall2(backend->builder,
+                LLVMGlobalGetValueType(
+                    backend->runtime_string_from_owned_utf8_slice),
+                backend->runtime_string_from_owned_utf8_slice,
+                string_arguments, 4,
+                "native_utf8_string_conversion_status");
+            status = emit_runtime_status_check(backend, block_id,
+                                               string_status);
+            if (status != OM_STATUS_OK) goto native_call_cleanup;
+            *result = LLVMBuildLoad2(backend->builder,
+                backend->byte_pointer_type, managed_result_slot,
+                "native_managed_utf8_string_result");
         } else if (return_abi.is_pointer
                    && native_function->result_type == OM_NATIVE_ABI_CPOINTER) {
             status = native_pointer_result(backend, function, block_id,

@@ -538,3 +538,61 @@ cleanup:
     OM_TEST_ASSERT(passed);
     return true;
 }
+
+bool om_test_type_store_actor_target_constraint(void)
+{
+    Om_Type_Store store = {0};
+    Om_Type_Scheme scheme = {0};
+    bool passed = false;
+    TYPE_STORE_ASSERT(om_type_store_init(&store) == OM_STATUS_OK);
+    Om_Type_Id variable = OM_TYPE_ID_INVALID;
+    TYPE_STORE_ASSERT(om_type_store_variable(&store, 1, &variable)
+                      == OM_STATUS_OK);
+    bool satisfied = false;
+    TYPE_STORE_ASSERT(om_type_store_require(&store, variable,
+                          OM_TYPE_CONSTRAINT_ACTOR_TARGET, &satisfied)
+                      == OM_STATUS_OK && satisfied);
+    TYPE_STORE_ASSERT(om_type_store_generalize(&store, variable, 0, &scheme)
+                      == OM_STATUS_OK
+                      && scheme.quantified_variable_count == 1
+                      && scheme.quantified_constraints[0]
+                          == (uint32_t)OM_TYPE_CONSTRAINT_ACTOR_TARGET);
+
+    Om_Type_Id actor_ref_instance = OM_TYPE_ID_INVALID;
+    Om_Type_Id actor_id_instance = OM_TYPE_ID_INVALID;
+    Om_Type_Id bad_instance = OM_TYPE_ID_INVALID;
+    Om_Type_Id actor_ref = OM_TYPE_ID_INVALID;
+    Om_Type_Id actor_id = OM_TYPE_ID_INVALID;
+    Om_Type_Id string_type = OM_TYPE_ID_INVALID;
+    TYPE_STORE_ASSERT(om_type_store_instantiate(&store, &scheme, 0,
+                                                &actor_ref_instance)
+                      == OM_STATUS_OK);
+    TYPE_STORE_ASSERT(om_type_store_instantiate(&store, &scheme, 0,
+                                                &actor_id_instance)
+                      == OM_STATUS_OK);
+    TYPE_STORE_ASSERT(om_type_store_instantiate(&store, &scheme, 0,
+                                                &bad_instance)
+                      == OM_STATUS_OK);
+    TYPE_STORE_ASSERT(om_type_store_actor_ref(
+                          &store, (Om_Symbol_Id){31}, &actor_ref)
+                      == OM_STATUS_OK);
+    TYPE_STORE_ASSERT(get_primitive(&store, OM_TYPE_ACTOR_ID, &actor_id));
+    TYPE_STORE_ASSERT(get_primitive(&store, OM_TYPE_STRING, &string_type));
+    bool unified = false;
+    TYPE_STORE_ASSERT(om_type_store_unify(&store, actor_ref_instance,
+                                          actor_ref, &unified)
+                      == OM_STATUS_OK && unified);
+    TYPE_STORE_ASSERT(om_type_store_unify(&store, actor_id_instance,
+                                          actor_id, &unified)
+                      == OM_STATUS_OK && unified);
+    TYPE_STORE_ASSERT(om_type_store_unify(&store, bad_instance,
+                                          string_type, &unified)
+                      == OM_STATUS_OK && !unified);
+    passed = true;
+
+cleanup:
+    om_type_scheme_destroy(&scheme);
+    om_type_store_destroy(&store);
+    OM_TEST_ASSERT(passed);
+    return true;
+}

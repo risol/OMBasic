@@ -102,6 +102,7 @@ typedef struct Om_Llvm_Backend_Context {
     LLVMBasicBlockRef *block_tails;
     LLVMValueRef *values;
     LLVMValueRef runtime_context_create;
+    LLVMValueRef runtime_context_set_command_line;
     LLVMValueRef runtime_context_destroy;
     LLVMValueRef runtime_set_source_spans;
     LLVMValueRef runtime_validate_program;
@@ -114,8 +115,10 @@ typedef struct Om_Llvm_Backend_Context {
     LLVMValueRef runtime_native_pointer_take;
     LLVMValueRef runtime_string_create;
     LLVMValueRef runtime_string_cstring_view;
+    LLVMValueRef runtime_string_view;
     LLVMValueRef runtime_string_from_cstring;
     LLVMValueRef runtime_string_from_owned_cstring;
+    LLVMValueRef runtime_string_from_owned_utf8_slice;
     LLVMValueRef runtime_string_format;
     LLVMValueRef runtime_string_concat;
     LLVMValueRef runtime_string_compare;

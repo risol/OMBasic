@@ -1,0 +1,45 @@
+NATIVE "ombasic_runtime"
+FUNCTION native_utf8_encode_status(value: CUtf8Slice BORROWED): CInt64
+    SYMBOL "om_runtime_encoding_utf8_encode_status"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION native_utf8_encode_hex(value: CUtf8Slice BORROWED): CString
+    SYMBOL "om_runtime_encoding_utf8_encode_hex"
+    EFFECT PURE
+    NONBLOCKING
+    RETURNS OWNED WITH release_string
+END FUNCTION
+
+FUNCTION native_utf8_decode_status(hex: CString BORROWED): CInt64
+    SYMBOL "om_runtime_encoding_utf8_decode_status"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION native_utf8_decode_offset(hex: CString BORROWED): CInt64
+    SYMBOL "om_runtime_encoding_utf8_decode_offset"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION native_utf8_decode_slice(hex: CString BORROWED): CUtf8Slice
+    SYMBOL "om_runtime_encoding_utf8_decode_slice"
+    EFFECT PURE
+    NONBLOCKING
+    RETURNS OWNED WITH release_slice
+END FUNCTION
+
+FUNCTION release_string(value: CPointer OWNED): CVoid
+    SYMBOL "om_runtime_encoding_utf8_string_release"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION release_slice(value: CPointer OWNED): CVoid
+    SYMBOL "om_runtime_encoding_utf8_slice_release"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+END NATIVE

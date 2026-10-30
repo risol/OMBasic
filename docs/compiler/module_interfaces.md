@@ -17,6 +17,11 @@ contracts. It does not include private implementation source content. Changing
 a private function body therefore leaves the public fingerprint stable, while
 changing a public contract changes it.
 
+An Actor can receive an exported message through an imported module alias. For
+example, `RECEIVE library.Ping(value)` resolves `Ping` from the public interface
+of `library` and adds that message to the receiving Actor's protocol. The
+message must be exported by the imported module or one of its facades.
+
 The fingerprint is an incremental tooling contract, not a package version or a
 replacement for pinning source revisions. Source libraries remain ordinary
 files under the consuming project's Source Root.

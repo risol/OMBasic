@@ -211,6 +211,8 @@ struct Om_Execution_Context {
     size_t minimum_collection_threshold;
     size_t live_object_count;
     size_t collection_count;
+    char **command_line_arguments;
+    size_t command_line_argument_count;
     bool collecting;
     Om_Runtime_Actor_System *actor_system;
     Om_Runtime_Actor *current_actor;

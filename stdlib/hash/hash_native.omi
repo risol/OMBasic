@@ -1,0 +1,32 @@
+NATIVE "ombasic_runtime"
+FUNCTION sha256_status(hex: CString BORROWED): CInt64
+    SYMBOL "om_runtime_hash_sha256_status"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION native_sha256_hex(hex: CString BORROWED): CString
+    SYMBOL "om_runtime_hash_sha256_hex"
+    EFFECT PURE
+    NONBLOCKING
+    RETURNS OWNED WITH release_string
+END FUNCTION
+
+FUNCTION crc32_status(hex: CString BORROWED): CInt64
+    SYMBOL "om_runtime_hash_crc32_status"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION native_crc32(hex: CString BORROWED): CInt64
+    SYMBOL "om_runtime_hash_crc32"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION release_string(value: CPointer OWNED): CVoid
+    SYMBOL "om_runtime_hash_release"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+END NATIVE

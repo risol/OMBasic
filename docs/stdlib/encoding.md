@@ -1,6 +1,6 @@
 # Encoding
 
-**Status: Buffer, Hex, and Base64 are implemented.** Import
+**Status: Buffer, Hex, Base64, and UTF-8 conversion are implemented.** Import
 `@std/encoding.bas`.
 
 `Buffer` is an immutable Record containing a List of Int bytes in 0..255.
@@ -14,15 +14,17 @@ Hex output uses lowercase ASCII; decoding accepts either case. Base64 uses the
 standard alphabet and canonical `=` padding. Decoding rejects malformed
 alphabet, padding, lengths, and nonzero unused trailing bits. Error offsets
 are zero-based UTF-8 byte positions in the encoded input. Decoded output is
-capped at 64 MiB. The module does not provide implicit String-to-Buffer conversion;
-String remains UTF-8 text. Native borrowed byte slices and UTF-8 conversion
-helpers remain future work.
+capped at 64 MiB. `utf8_encode(String)` and `utf8_decode(Buffer)` provide the
+explicit bridge. They preserve U+0000 and report malformed UTF-8 as
+`Encoding_Error("invalid_utf8", byte_offset)`; both directions enforce the
+64 MiB byte limit. The offset identifies the first invalid UTF-8 sequence in
+the Buffer. String remains valid UTF-8 text, while Buffer represents arbitrary
+bytes.
 
-The current Native-backed Text boundary rejects embedded NUL because its ABI
-uses borrowed NUL-terminated strings. Consequently a String containing U+0000
-passed to an Encoding decoder raises a recoverable Runtime fault at that
-boundary instead of returning `Encoding_Error`. Ordinary malformed ASCII
-input returns the documented stable error code and byte offset.
+The private Native ABI uses a length-delimited `CUtf8Slice` for this bridge.
+The older `CString` Native ABI remains NUL-terminated and continues to reject
+embedded NUL. Hex and Base64 textual inputs therefore retain the Text module's
+CString boundary constraints.
 
 The source implementation uses explicit Int normalization before constructing
 the Buffer Record so that the compiler preserves the `List<Int>` field type

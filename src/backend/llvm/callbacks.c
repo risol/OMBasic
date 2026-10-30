@@ -213,6 +213,7 @@ static Om_Status native_callback_thunk_set_get(
         const Om_Native_Abi_Type abi_type = module->callback_parameters[
             parameter->callback_parameter_start + index].abi_type;
         if (abi_type == OM_NATIVE_ABI_CSTRING
+            || abi_type == OM_NATIVE_ABI_CUTF8_SLICE
             || abi_type == OM_NATIVE_ABI_CPOINTER
             || abi_type == OM_NATIVE_ABI_RECORD
             || abi_type == OM_NATIVE_ABI_CVOID

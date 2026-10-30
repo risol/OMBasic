@@ -394,7 +394,7 @@ Om_Status om_mir_set_system_message_id(
     Om_Mir_Storage *storage = storage_of(project);
     if (storage == NULL || symbol_id.value == UINT32_MAX
         || (system_message_id != OM_SYSTEM_MESSAGE_ID_NONE
-            && (system_message_id > OM_SYSTEM_MESSAGE_ID_UDP_CLOSE_COMPLETED
+            && (system_message_id > OM_SYSTEM_MESSAGE_ID_TLS_CLOSE_COMPLETED
                 && system_message_id != OM_SYSTEM_MESSAGE_ID_ANY))) {
         return OM_STATUS_INVALID_ARGUMENT;
     }
@@ -1848,7 +1848,8 @@ static Om_Status verify_instruction(const Om_Mir_Project *project,
         Om_Type_Kind target_kind = OM_TYPE_VARIABLE;
         Om_Type_Kind message_kind = OM_TYPE_VARIABLE;
         if (value_type_kind(project, operands[0], &target_kind) != OM_STATUS_OK
-            || target_kind != OM_TYPE_ACTOR_REF
+            || (target_kind != OM_TYPE_ACTOR_REF
+                && target_kind != OM_TYPE_ACTOR_ID)
             || value_type_kind(project, operands[1], &message_kind) != OM_STATUS_OK
             || message_kind != OM_TYPE_MESSAGE) {
             return add_diagnostic(diagnostics, OM_MIR_DIAGNOSTIC_E1102,
@@ -1875,6 +1876,23 @@ static Om_Status verify_instruction(const Om_Mir_Project *project,
                 function->id, block->id, result->id, instruction->span);
         }
         break;
+    case OM_MIR_ACTOR_IDENTITY: {
+        if (instruction->operand_count > 1) {
+            return add_diagnostic(diagnostics, OM_MIR_DIAGNOSTIC_E1101,
+                function->id, block->id, result->id, instruction->span);
+        }
+        MIR_EXPECT_RESULT(OM_TYPE_ACTOR_ID);
+        if (instruction->operand_count == 0) {
+            break;
+        }
+        Om_Type_Kind source_kind = OM_TYPE_VARIABLE;
+        if (value_type_kind(project, operands[0], &source_kind) != OM_STATUS_OK
+            || source_kind != OM_TYPE_ACTOR_REF) {
+            return add_diagnostic(diagnostics, OM_MIR_DIAGNOSTIC_E1102,
+                function->id, block->id, result->id, instruction->span);
+        }
+        break;
+    }
     case OM_MIR_NATIVE_CALL:
     case OM_MIR_NATIVE_CALLBACK_ADDRESS:
     case OM_MIR_CSTRING_CONVERT:
@@ -1891,7 +1909,8 @@ static Om_Status verify_instruction(const Om_Mir_Project *project,
                 != OM_SYSTEM_ACTOR_REF_SECURE_RANDOM
             && instruction->integer_value != OM_SYSTEM_ACTOR_REF_LOGGER
             && instruction->integer_value != OM_SYSTEM_ACTOR_REF_NETWORK
-            && instruction->integer_value != OM_SYSTEM_ACTOR_REF_PROCESS) {
+            && instruction->integer_value != OM_SYSTEM_ACTOR_REF_PROCESS
+            && instruction->integer_value != OM_SYSTEM_ACTOR_REF_ENVIRONMENT) {
             return add_diagnostic(diagnostics, OM_MIR_DIAGNOSTIC_E1101,
                 function->id, block->id, result->id, instruction->span);
         }
@@ -3421,7 +3440,7 @@ const char *om_mir_opcode_name(Om_Mir_Opcode opcode)
         "runtime-string-concat", "runtime-actor-spawn", "runtime-actor-self",
         "runtime-actor-send",
         "runtime-actor-watch", "runtime-actor-stop",
-        "runtime-system-actor", "runtime-fault", "native-call",
+        "runtime-system-actor", "actor-identity", "runtime-fault", "native-call",
         "native-callback-address", "cstring-convert", "runtime-print",
     };
     return (size_t)opcode < sizeof(names) / sizeof(names[0])
