@@ -34,21 +34,16 @@ jobs:
           sudo apt-get install -y clang-23 lld-23 llvm-23-dev llvm-23-tools libclang-rt-23-dev libpolly-23-dev
           python -m pip install --upgrade "cmake>=4.2"
       - name: Configure ASan and UBSan
-        run: >-
-          cmake -S . -B build/asan-ubsan -G Ninja
-          -DCMAKE_BUILD_TYPE=RelWithDebInfo
-          -DCMAKE_C_COMPILER=clang-23
-          -DCMAKE_CXX_COMPILER=clang++-23
-          -DLLVM_DIR=/usr/lib/llvm-23/lib/cmake/llvm
-          -DOM_LLVM_TARGET_TRIPLE=x86_64-unknown-linux-gnu
-          -DOM_SANITIZER=address-undefined
+        env:
+          LLVM_ROOT: /usr/lib/llvm-23
+        run: cmake --preset linux-clang-asan-ubsan
       - name: Build
-        run: cmake --build build/asan-ubsan --parallel 2
+        run: cmake --build --preset linux-clang-asan-ubsan --parallel 2
       - name: Run ASan and UBSan CTest gates
         env:
           ASAN_OPTIONS: detect_leaks=1:strict_string_checks=1
           UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
-        run: ctest --test-dir build/asan-ubsan --output-on-failure
+        run: ctest --preset linux-clang-asan-ubsan
 
   tsan:
     name: tsan
@@ -71,17 +66,12 @@ jobs:
           sudo apt-get install -y clang-23 lld-23 llvm-23-dev llvm-23-tools libclang-rt-23-dev libpolly-23-dev
           python -m pip install --upgrade "cmake>=4.2"
       - name: Configure TSan
-        run: >-
-          cmake -S . -B build/tsan -G Ninja
-          -DCMAKE_BUILD_TYPE=RelWithDebInfo
-          -DCMAKE_C_COMPILER=clang-23
-          -DCMAKE_CXX_COMPILER=clang++-23
-          -DLLVM_DIR=/usr/lib/llvm-23/lib/cmake/llvm
-          -DOM_LLVM_TARGET_TRIPLE=x86_64-unknown-linux-gnu
-          -DOM_SANITIZER=thread
+        env:
+          LLVM_ROOT: /usr/lib/llvm-23
+        run: cmake --preset linux-clang-tsan
       - name: Build
-        run: cmake --build build/tsan --parallel 2
+        run: cmake --build --preset linux-clang-tsan --parallel 2
       - name: Run TSan CTest gates
         env:
           TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1
-        run: ctest --test-dir build/tsan --output-on-failure
+        run: ctest --preset linux-clang-tsan

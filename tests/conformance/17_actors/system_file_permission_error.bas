@@ -4,7 +4,7 @@ ACTOR File_Client
     RECEIVE File_Write_Completed(outcome)
         SELECT outcome
         CASE Error(problem)
-            print("permission-error")
+            print(problem)
             STOP
         CASE Ok(done)
             print("unexpected-write-success")
@@ -20,6 +20,6 @@ END ACTOR
 
 ACTION main()
     client_ref = SPAWN File_Client
-    SEND File_System, File_Write("/proc/1/status", "contents", client_ref)
+    SEND File_System, File_Write("/sys/kernel/uevent_seqnum", "contents", client_ref)
     SEND Timer, Timer_After(1000, Write_Timeout(), client_ref)
 END ACTION

@@ -34,34 +34,29 @@ jobs:
       - name: Configure clang-cl Release build
         shell: pwsh
         run: |
-          cmake -S . -B build/windows-release -G Ninja `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DCMAKE_C_COMPILER="$env:LLVM_ROOT/bin/clang-cl.exe" `
-            -DCMAKE_CXX_COMPILER="$env:LLVM_ROOT/bin/clang-cl.exe" `
-            -DLLVM_DIR="$env:LLVM_ROOT/lib/cmake/llvm" `
-            -DOM_LLVM_TARGET_TRIPLE=x86_64-pc-windows-msvc
+          cmake --preset windows-clang-cl-release
       - name: Build
-        run: cmake --build build/windows-release --parallel 2
+        run: cmake --build --preset windows-clang-cl-release --parallel 2
       - name: Architecture and language checks
         run: |
           python tools/architecture_check/check.py --root .
           python tools/spec_check/check.py --root .
       - name: Run CTest release gates
-        run: ctest --test-dir build/windows-release -C Release --output-on-failure
+        run: ctest --preset windows-clang-cl-release
       - name: Build and run Hello World
         shell: pwsh
         run: |
-          build/windows-release/ombasic.exe check examples/hello/main.bas
+          build/windows/clang-cl/release/ombasic.exe check examples/hello/main.bas
           $hello = Join-Path $env:RUNNER_TEMP 'hello.exe'
-          build/windows-release/ombasic.exe build examples/hello/main.bas -o $hello
+          build/windows/clang-cl/release/ombasic.exe build examples/hello/main.bas -o $hello
           & $hello
       - name: Verify installed SDK with build tree removed
-        run: python tests/tooling/install_sdk_without_build_tree_test.py cmake build/windows-release . Release
+        run: python tests/tooling/install_sdk_without_build_tree_test.py cmake build/windows/clang-cl/release . Release
       - name: Stage the SDK with build provenance
         shell: pwsh
         run: |
           $package = Join-Path $PWD 'build/package/windows'
-          cmake --install build/windows-release --prefix $package
+          cmake --install build/windows/clang-cl/release --prefix $package
           python tools/release/write_provenance.py `
             --root . `
             --output (Join-Path $package 'share/ombasic/release-provenance.json') `

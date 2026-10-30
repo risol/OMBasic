@@ -1352,6 +1352,14 @@ END RECEIVE
 SEND Console, Console_Write("hello", SELF)
 SEND File_System, File_Read(path, SELF)
 SEND File_System, File_Write(path, contents, SELF)
+SEND File_System, File_Append(path, contents, SELF)
+SEND File_System, File_Exists(path, SELF)
+SEND File_System, File_Delete(path, SELF)
+SEND File_System, Directory_Create(path, SELF)
+SEND File_System, Directory_List(path, SELF)
+SEND File_System, File_Stat(path, SELF)
+SEND Clock, Clock_Monotonic_Now(SELF)
+SEND Clock, Clock_Utc_Now(SELF)
 SEND Timer, Timer_After(1000, Tick(), SELF)
 ```
 
@@ -1363,10 +1371,21 @@ RECEIVE File_Read_Completed(outcome)
 END RECEIVE
 ```
 
-`Console_Write_Completed` 和 `File_Write_Completed` 携带
-`Result<Unit, String>`；`File_Read_Completed` 携带
-`Result<String, String>`。Console 写入传入的完整文本，不追加换行；文件
-API 按 UTF-8 文本读写，`File_Write` 会覆盖目标文件。Timer 到期时向
+`Console_Write_Completed`、`File_Write_Completed` 和
+`File_Append_Completed` 携带 `Result<Unit, String>`；
+`File_Exists_Completed` 携带 `Result<Bool, String>`；
+`File_Delete_Completed` 携带 `Result<Unit, String>`；
+`Directory_Create_Completed` 携带 `Result<Unit, String>`；
+`Directory_List_Completed` 携带 `Result<List<String>, String>`；
+`File_Stat_Completed` 携带 `Result<List<String>, String>`，成功列表依次为
+`file` / `directory` / `other`、十进制字节数和 Unix 毫秒时间戳；
+`Clock_Monotonic_Now_Completed` 携带单调毫秒的 `Result<Int, String>`，
+`Clock_Utc_Now_Completed` 携带 Unix epoch 毫秒的 `Result<Int, String>`；
+`File_Read_Completed` 携带 `Result<String, String>`。Console 写入传入的
+完整文本，不追加换行；文件 API 按 UTF-8 文本读写，`File_Write` 会覆盖
+目标文件，`File_Append` 会追加到目标文件或创建新文件。文件失败值使用
+稳定代码字符串，例如 `not_found`、`permission_denied`、`invalid_utf8` 和
+`io_error`。Timer 到期时向
 recipient 投递传入的 Message，本身不返回应答 Message。底层 I/O 在独立
 blocking worker pool 执行，Timer 等待由单独的定时队列管理；所有完成事件
 都通过 Actor mailbox 传递。

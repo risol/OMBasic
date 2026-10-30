@@ -15,6 +15,11 @@ the path before the last `/`, so `dirname("a/b/")` is `a/b`; it returns `.`
 when no separator is present and `/` for a root-level name. `extension` returns
 the final suffix including its dot; names beginning with a dot and names ending
 with a dot have an empty extension.
+`stem` returns the basename without its final extension. `change_extension`
+replaces the final suffix; the replacement may include or omit its leading dot,
+and an empty replacement removes the suffix. A dotfile without an extension
+receives the replacement as a new suffix; a trailing dot is replaced without
+leaving a doubled dot.
 
 All operations count Unicode scalar values through `@std/text`. A string with
 embedded NUL raises the Text module's documented recoverable Native runtime

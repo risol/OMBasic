@@ -78,6 +78,24 @@ static const Om_Runtime_Type_Descriptor TEST_STRING_LIST_TYPE = {
     .element_type = &TEST_STRING_TYPE,
 };
 
+#ifdef OM_RUNTIME_TEST_SUPPORT_ONLY
+static const Om_Runtime_Type_Descriptor TEST_STRING_LIST_LIST_TYPE = {
+    .fingerprint = UINT64_C(13),
+    .kind = OM_RUNTIME_TYPE_LIST,
+    .size = sizeof(void *),
+    .alignment = _Alignof(void *),
+    .element_type = &TEST_STRING_LIST_TYPE,
+};
+
+static const Om_Runtime_Type_Descriptor TEST_INT_LIST_TYPE = {
+    .fingerprint = UINT64_C(14),
+    .kind = OM_RUNTIME_TYPE_LIST,
+    .size = sizeof(void *),
+    .alignment = _Alignof(void *),
+    .element_type = &TEST_INT_TYPE,
+};
+#endif
+
 static const Om_Runtime_Type_Descriptor TEST_STRING_INT_MAP_TYPE = {
     .fingerprint = UINT64_C(6),
     .kind = OM_RUNTIME_TYPE_MAP,
@@ -479,6 +497,7 @@ static bool test_runtime_cstring_conversion(void)
         (char)0xc3, (char)0xa9, (char)0xe6, (char)0x9d, (char)0xb1, 0
     };
     RUNTIME_ASSERT(om_runtime_text_length(unicode_text) == 5);
+    RUNTIME_ASSERT(om_runtime_text_byte_length(unicode_text) == 10);
     RUNTIME_ASSERT(om_runtime_text_starts_with(unicode_text, "a"));
     RUNTIME_ASSERT(om_runtime_text_ends_with(unicode_text, "z"));
     RUNTIME_ASSERT(om_runtime_text_find(unicode_text, unicode_query, 0) == 2);
@@ -533,11 +552,39 @@ static bool test_json_native(void)
     owned = NULL;
 
     static const char escaped_key[] = "{\"\\u0061\":1}";
+    RUNTIME_ASSERT(om_runtime_json_object_length(escaped_key) == 1);
+    RUNTIME_ASSERT(om_runtime_json_object_length("{}") == 0);
+    RUNTIME_ASSERT(om_runtime_json_object_length("[]") == -1);
     RUNTIME_ASSERT(om_runtime_json_object_key_valid(escaped_key, "a"));
     owned = om_runtime_json_object_get(escaped_key, "a");
     RUNTIME_ASSERT(owned != NULL && strcmp(owned, "1") == 0);
     om_runtime_json_release(owned);
     owned = NULL;
+    owned = om_runtime_json_object_keys("{\"first\":1,\"\\u0061\":2}");
+    RUNTIME_ASSERT(owned != NULL
+                   && strcmp(owned, "[\"first\",\"\\u0061\"]") == 0);
+    om_runtime_json_release(owned);
+    owned = NULL;
+
+    static const char escaped_string[] = "\"line\\n\\u00e9\"";
+    owned = om_runtime_json_string_value(escaped_string);
+    RUNTIME_ASSERT(owned != NULL && strcmp(owned, "line\n\xc3\xa9") == 0);
+    om_runtime_json_release(owned);
+    owned = NULL;
+    RUNTIME_ASSERT(om_runtime_json_string_value("true") == NULL);
+    RUNTIME_ASSERT(om_runtime_json_int64_valid("-9223372036854775808"));
+    RUNTIME_ASSERT(om_runtime_json_int64_value("-9223372036854775808")
+                   == INT64_MIN);
+    RUNTIME_ASSERT(om_runtime_json_int64_valid("9223372036854775807"));
+    RUNTIME_ASSERT(om_runtime_json_int64_value("9223372036854775807")
+                   == INT64_MAX);
+    RUNTIME_ASSERT(!om_runtime_json_int64_valid("9223372036854775808"));
+    RUNTIME_ASSERT(!om_runtime_json_int64_valid("1.0"));
+    RUNTIME_ASSERT(!om_runtime_json_int64_valid("1e0"));
+    RUNTIME_ASSERT(om_runtime_json_float64_valid("1.25e2"));
+    RUNTIME_ASSERT(om_runtime_json_float64_value("1.25e2") == 125.0);
+    RUNTIME_ASSERT(!om_runtime_json_float64_valid("1e9999"));
+    RUNTIME_ASSERT(!om_runtime_json_float64_valid("1e-9999"));
 
     static const char duplicate_key[] = "{\"a\":1,\"\\u0061\":2}";
     RUNTIME_ASSERT(!om_runtime_json_valid(duplicate_key));
@@ -750,11 +797,11 @@ bool om_runtime_test_lists(void)
 {
     Om_Execution_Context *context = om_runtime_context_create(0);
     Om_Runtime_Root_Frame *frame = NULL;
-    void *roots[4] = {NULL, NULL, NULL, NULL};
+    void *roots[6] = {NULL, NULL, NULL, NULL, NULL, NULL};
     bool passed = false;
     static const uint8_t item[] = "list item";
     RUNTIME_ASSERT(context != NULL);
-    frame = om_runtime_roots_push(context, roots, 4);
+    frame = om_runtime_roots_push(context, roots, 6);
     RUNTIME_ASSERT(frame != NULL);
     RUNTIME_ASSERT(om_runtime_string_create_utf8_default(context, item,
         sizeof(item) - 1, &roots[1]) == OM_STATUS_OK);
@@ -782,14 +829,37 @@ bool om_runtime_test_lists(void)
     RUNTIME_ASSERT(om_runtime_list_get(context, roots[3], 1, &value)
                    == OM_STATUS_OK);
     RUNTIME_ASSERT(value.managed == roots[1]);
+    RUNTIME_ASSERT(om_runtime_list_create(context,
+        &TEST_STRING_LIST_LIST_TYPE, &roots[4]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_append(context, roots[4],
+        (Om_Runtime_Value){.managed = roots[0]}) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_create(context, &TEST_INT_LIST_TYPE,
+        &roots[5]) == OM_STATUS_OK);
+    for (int64_t index = 0; index < 1024; ++index) {
+        RUNTIME_ASSERT(om_runtime_list_append(context, roots[5],
+            (Om_Runtime_Value){.integer = index}) == OM_STATUS_OK);
+    }
+    RUNTIME_ASSERT(om_runtime_list_length(context, roots[5], &length)
+                   == OM_STATUS_OK);
+    RUNTIME_ASSERT(length == 1024);
+    RUNTIME_ASSERT(om_runtime_list_get(context, roots[5], 1023, &value)
+                   == OM_STATUS_OK);
+    RUNTIME_ASSERT(value.integer == 1023);
+    RUNTIME_ASSERT(om_runtime_list_get(context, roots[4], 0, &value)
+                   == OM_STATUS_OK);
+    RUNTIME_ASSERT(value.managed == roots[0]);
     roots[1] = NULL;
     RUNTIME_ASSERT(om_runtime_collect(context) == OM_STATUS_OK);
-    RUNTIME_ASSERT(om_runtime_live_object_count(context) == 4);
+    RUNTIME_ASSERT(om_runtime_live_object_count(context) == 6);
     roots[0] = NULL;
     roots[2] = NULL;
-    RUNTIME_ASSERT(om_runtime_collect(context) == OM_STATUS_OK);
-    RUNTIME_ASSERT(om_runtime_live_object_count(context) == 2);
     roots[3] = NULL;
+    RUNTIME_ASSERT(om_runtime_collect(context) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_live_object_count(context) == 4);
+    roots[4] = NULL;
+    RUNTIME_ASSERT(om_runtime_collect(context) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_live_object_count(context) == 1);
+    roots[5] = NULL;
     RUNTIME_ASSERT(om_runtime_collect(context) == OM_STATUS_OK);
     RUNTIME_ASSERT(om_runtime_live_object_count(context) == 0);
     passed = true;

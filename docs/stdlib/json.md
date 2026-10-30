@@ -21,11 +21,28 @@ The public API provides these operations:
 - `parse(source) -> Result<Value, Parse_Error>`
 - `stringify(value) -> Result<String, Parse_Error>`
 - `kind(value) -> Result<String, Parse_Error>`
+- `as_string(value) -> Result<String, Parse_Error>` (decodes JSON escapes)
+- `as_boolean(value) -> Result<Bool, Parse_Error>`
+- `as_number_text(value) -> Result<String, Parse_Error>` (preserves the token)
+- `as_int64(value) -> Result<Int, Parse_Error>` accepts only integer-form
+  number tokens within the signed 64-bit range; decimal and exponent notation
+  are rejected rather than rounded or truncated.
+- `as_float64(value) -> Result<Float, Parse_Error>` accepts any JSON number
+  that converts to a finite Float64; overflow and underflow are errors. The
+  conversion may round, while `as_number_text` always preserves the source
+  number token.
+- `is_null(value) -> Result<Bool, Parse_Error>`
 - `array(values: List<Value>) -> Result<Value, Parse_Error>`
 - `array_length(value) -> Result<Int, Parse_Error>`
 - `array_get(value, index) -> Result<Value, Parse_Error>`
 - `object(entries: List<Entry>) -> Result<Value, Parse_Error>`
 - `object_get(value, key) -> Result<Value, Parse_Error>`
+- `object_has(value, key) -> Result<Bool, Parse_Error>`
+- `object_keys(value) -> Result<List<String>, Parse_Error>` returns decoded
+  keys in insertion order.
+- `object_entries(value) -> Result<List<Entry>, Parse_Error>` returns decoded
+  keys and their values in insertion order.
+- `object_length(value) -> Result<Int, Parse_Error>`
 - `null_value()`, `boolean(flag)`, `number(decimal_text)`, and
   `string_value(text)`
 

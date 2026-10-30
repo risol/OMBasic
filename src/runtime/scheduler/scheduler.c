@@ -279,6 +279,8 @@ void destroy_actor_system(Om_Runtime_Actor_System *system)
         }
     }
     actor_condition_broadcast(system);
+    actor_network_shutdown_locked(system);
+    actor_process_shutdown_locked(system);
     actor_mutex_unlock(system);
 
     /* Stop asynchronous producers before waiting for their outstanding work.
@@ -288,6 +290,8 @@ void destroy_actor_system(Om_Runtime_Actor_System *system)
     system->timer_service = NULL;
     om_blocking_pool_destroy(system->blocking_pool);
     system->blocking_pool = NULL;
+    actor_network_destroy(system);
+    actor_process_destroy(system);
 
     actor_mutex_lock(system);
     while (!actor_all_terminated_locked(system)) {
@@ -454,9 +458,39 @@ Om_Status om_runtime_actor_system_wait(Om_Execution_Context *context)
         return OM_STATUS_INVALID_ARGUMENT;
     }
     Om_Runtime_Actor_System *system = context->actor_system;
+    bool cancelled_orphaned_work = false;
     actor_mutex_lock(system);
-    while (system->outstanding_messages != 0
-           || system->running_handlers != 0) {
+    for (;;) {
+        bool all_actors_terminated = system->ready_head == NULL
+            && system->running_handlers == 0;
+        for (Om_Runtime_Actor *actor = system->actors;
+             all_actors_terminated && actor != NULL; actor = actor->next) {
+            all_actors_terminated = actor->terminated;
+        }
+        if (all_actors_terminated && system->outstanding_messages != 0
+            && !cancelled_orphaned_work) {
+            /* Outstanding asynchronous operations can outlive every Actor
+               that could receive their completion (for example, a console
+               read requested by an Actor that immediately stopped). Treat
+               that as end-of-program and cancel the orphaned operations. */
+            system->shutting_down = true;
+            actor_network_shutdown_locked(system);
+            actor_process_shutdown_locked(system);
+            actor_condition_broadcast(system);
+            Om_Timer_Service *timer_service = system->timer_service;
+            Om_Blocking_Pool *blocking_pool = system->blocking_pool;
+            cancelled_orphaned_work = true;
+            actor_mutex_unlock(system);
+            om_timer_service_shutdown(timer_service);
+            om_blocking_pool_shutdown(blocking_pool,
+                OM_BLOCKING_POOL_CANCEL_PENDING);
+            actor_mutex_lock(system);
+            continue;
+        }
+        if (system->outstanding_messages == 0
+            && system->running_handlers == 0) {
+            break;
+        }
         actor_condition_wait(system);
     }
     actor_mutex_unlock(system);

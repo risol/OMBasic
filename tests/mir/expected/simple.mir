@@ -1,4 +1,4 @@
-function f0 instance=0 kind=1 symbol=34 signature=t96(Action) entry=bb0 effects=1
+function f0 instance=0 kind=1 symbol=97 signature=t286(Action) entry=bb0 effects=1
 bb0():
   v0 = runtime-string-create value="Hello, OMBasic" : t3(String)
   v1 = const-int value=20 : t0(Int)
@@ -22,7 +22,7 @@ bb4(v11:t2(Bool)):
   v13 = const-int value=20 : t0(Int)
   v14 = const-int value=22 : t0(Int)
   v15 = call-direct v13, v14 : t0(Int)
-  v16 = function-ref : t123(Function)
+  v16 = function-ref : t313(Function)
   v17 = const-int value=41 : t0(Int)
   v18 = call-direct v16, v17 : t0(Int)
   v19 = runtime-string-create value="Hello {world}: " : t3(String)
@@ -48,13 +48,13 @@ bb4(v11:t2(Bool)):
   v39 = const-int value=1 : t0(Int)
   v40 = const-int value=2 : t0(Int)
   v41 = const-int value=3 : t0(Int)
-  v42 = list-create v39, v40, v41 : t129(List)
+  v42 = list-create v39, v40, v41 : t39(List)
   v43 = const-int value=0 : t0(Int)
   v44 = list-get v42, v43 : t0(Int)
   v45 = const-int value=0 : t0(Int)
   v46 = const-int value=0 : t0(Int)
   br bb5(v0, v3, v7, v11, v12, v15, v18, v23, v26, v28, v30, v32, v34, v35, v38, v42, v44, v45, v42, v46)
-bb5(v47:t3(String), v48:t0(Int), v49:t2(Bool), v50:t2(Bool), v51:t3(String), v52:t0(Int), v53:t0(Int), v54:t3(String), v55:t0(Int), v56:t0(Int), v57:t0(Int), v58:t0(Int), v59:t0(Int), v60:t0(Int), v61:t0(Int), v62:t129(List), v63:t0(Int), v64:t0(Int), v65:t129(List), v66:t0(Int)):
+bb5(v47:t3(String), v48:t0(Int), v49:t2(Bool), v50:t2(Bool), v51:t3(String), v52:t0(Int), v53:t0(Int), v54:t3(String), v55:t0(Int), v56:t0(Int), v57:t0(Int), v58:t0(Int), v59:t0(Int), v60:t0(Int), v61:t0(Int), v62:t39(List), v63:t0(Int), v64:t0(Int), v65:t39(List), v66:t0(Int)):
   v67 = list-length v65 : t0(Int)
   v68 = compare v66, v67 : t2(Bool)
   cond-br v68 bb6(), bb12(v47, v48, v49, v50, v51, v52, v53, v54, v55, v56, v57, v58, v59, v60, v61, v62, v63, v64)
@@ -74,22 +74,22 @@ bb9():
 bb10():
   v74 = int-add-checked v64, v69 : t0(Int)
   br bb11(v47, v48, v49, v50, v51, v52, v53, v54, v55, v56, v57, v58, v59, v60, v61, v62, v63, v74, v65, v66)
-bb11(v75:t3(String), v76:t0(Int), v77:t2(Bool), v78:t2(Bool), v79:t3(String), v80:t0(Int), v81:t0(Int), v82:t3(String), v83:t0(Int), v84:t0(Int), v85:t0(Int), v86:t0(Int), v87:t0(Int), v88:t0(Int), v89:t0(Int), v90:t129(List), v91:t0(Int), v92:t0(Int), v93:t129(List), v94:t0(Int)):
+bb11(v75:t3(String), v76:t0(Int), v77:t2(Bool), v78:t2(Bool), v79:t3(String), v80:t0(Int), v81:t0(Int), v82:t3(String), v83:t0(Int), v84:t0(Int), v85:t0(Int), v86:t0(Int), v87:t0(Int), v88:t0(Int), v89:t0(Int), v90:t39(List), v91:t0(Int), v92:t0(Int), v93:t39(List), v94:t0(Int)):
   v95 = const-int value=1 : t0(Int)
   v96 = int-add-checked v94, v95 : t0(Int)
   br bb5(v75, v76, v77, v78, v79, v80, v81, v82, v83, v84, v85, v86, v87, v88, v89, v90, v91, v92, v93, v96)
-bb12(v97:t3(String), v98:t0(Int), v99:t2(Bool), v100:t2(Bool), v101:t3(String), v102:t0(Int), v103:t0(Int), v104:t3(String), v105:t0(Int), v106:t0(Int), v107:t0(Int), v108:t0(Int), v109:t0(Int), v110:t0(Int), v111:t0(Int), v112:t129(List), v113:t0(Int), v114:t0(Int)):
+bb12(v97:t3(String), v98:t0(Int), v99:t2(Bool), v100:t2(Bool), v101:t3(String), v102:t0(Int), v103:t0(Int), v104:t3(String), v105:t0(Int), v106:t0(Int), v107:t0(Int), v108:t0(Int), v109:t0(Int), v110:t0(Int), v111:t0(Int), v112:t39(List), v113:t0(Int), v114:t0(Int)):
   v115 = runtime-string-create value="name" : t3(String)
   v116 = runtime-string-create value="Alice" : t3(String)
   v117 = runtime-string-create value="city" : t3(String)
   v118 = runtime-string-create value="Paris" : t3(String)
-  v119 = map-create v115, v116, v117, v118 : t133(Map)
+  v119 = map-create v115, v116, v117, v118 : t322(Map)
   v120 = runtime-string-create value="name" : t3(String)
   v121 = map-get v119, v120 : t3(String)
   v122 = const-int value=0 : t0(Int)
   v123 = const-int value=0 : t0(Int)
   br bb13(v97, v98, v99, v100, v101, v102, v103, v104, v105, v106, v107, v108, v109, v110, v111, v112, v113, v114, v119, v121, v122, v119, v123)
-bb13(v124:t3(String), v125:t0(Int), v126:t2(Bool), v127:t2(Bool), v128:t3(String), v129:t0(Int), v130:t0(Int), v131:t3(String), v132:t0(Int), v133:t0(Int), v134:t0(Int), v135:t0(Int), v136:t0(Int), v137:t0(Int), v138:t0(Int), v139:t129(List), v140:t0(Int), v141:t0(Int), v142:t133(Map), v143:t3(String), v144:t0(Int), v145:t133(Map), v146:t0(Int)):
+bb13(v124:t3(String), v125:t0(Int), v126:t2(Bool), v127:t2(Bool), v128:t3(String), v129:t0(Int), v130:t0(Int), v131:t3(String), v132:t0(Int), v133:t0(Int), v134:t0(Int), v135:t0(Int), v136:t0(Int), v137:t0(Int), v138:t0(Int), v139:t39(List), v140:t0(Int), v141:t0(Int), v142:t322(Map), v143:t3(String), v144:t0(Int), v145:t322(Map), v146:t0(Int)):
   v147 = map-length v145 : t0(Int)
   v148 = compare v146, v147 : t2(Bool)
   cond-br v148 bb14(), bb16(v124, v125, v126, v127, v128, v129, v130, v131, v132, v133, v134, v135, v136, v137, v138, v139, v140, v141, v142, v143, v144)
@@ -98,23 +98,23 @@ bb14():
   v150 = const-int value=1 : t0(Int)
   v151 = int-add-checked v144, v150 : t0(Int)
   br bb15(v124, v125, v126, v127, v128, v129, v130, v131, v132, v133, v134, v135, v136, v137, v138, v139, v140, v141, v142, v143, v151, v145, v146)
-bb15(v152:t3(String), v153:t0(Int), v154:t2(Bool), v155:t2(Bool), v156:t3(String), v157:t0(Int), v158:t0(Int), v159:t3(String), v160:t0(Int), v161:t0(Int), v162:t0(Int), v163:t0(Int), v164:t0(Int), v165:t0(Int), v166:t0(Int), v167:t129(List), v168:t0(Int), v169:t0(Int), v170:t133(Map), v171:t3(String), v172:t0(Int), v173:t133(Map), v174:t0(Int)):
+bb15(v152:t3(String), v153:t0(Int), v154:t2(Bool), v155:t2(Bool), v156:t3(String), v157:t0(Int), v158:t0(Int), v159:t3(String), v160:t0(Int), v161:t0(Int), v162:t0(Int), v163:t0(Int), v164:t0(Int), v165:t0(Int), v166:t0(Int), v167:t39(List), v168:t0(Int), v169:t0(Int), v170:t322(Map), v171:t3(String), v172:t0(Int), v173:t322(Map), v174:t0(Int)):
   v175 = const-int value=1 : t0(Int)
   v176 = int-add-checked v174, v175 : t0(Int)
   br bb13(v152, v153, v154, v155, v156, v157, v158, v159, v160, v161, v162, v163, v164, v165, v166, v167, v168, v169, v170, v171, v172, v173, v176)
-bb16(v177:t3(String), v178:t0(Int), v179:t2(Bool), v180:t2(Bool), v181:t3(String), v182:t0(Int), v183:t0(Int), v184:t3(String), v185:t0(Int), v186:t0(Int), v187:t0(Int), v188:t0(Int), v189:t0(Int), v190:t0(Int), v191:t0(Int), v192:t129(List), v193:t0(Int), v194:t0(Int), v195:t133(Map), v196:t3(String), v197:t0(Int)):
+bb16(v177:t3(String), v178:t0(Int), v179:t2(Bool), v180:t2(Bool), v181:t3(String), v182:t0(Int), v183:t0(Int), v184:t3(String), v185:t0(Int), v186:t0(Int), v187:t0(Int), v188:t0(Int), v189:t0(Int), v190:t0(Int), v191:t0(Int), v192:t39(List), v193:t0(Int), v194:t0(Int), v195:t322(Map), v196:t3(String), v197:t0(Int)):
   v198 = const-int value=1 : t0(Int)
-  v199 = list-create v198 : t129(List)
+  v199 = list-create v198 : t39(List)
   v200 = runtime-string-create value="key" : t3(String)
   v201 = runtime-string-create value="one" : t3(String)
-  v202 = map-create v200, v201 : t133(Map)
-  v203 = alloc-object v199, v202 : t54(Record)
-  v204 = load-field v203 : t129(List)
+  v202 = map-create v200, v201 : t322(Map)
+  v203 = alloc-object v199, v202 : t244(Record)
+  v204 = load-field v203 : t39(List)
   v205 = const-int value=2 : t0(Int)
-  v206 = list-create v205 : t129(List)
-  v207 = copy-managed v203, v206 : t54(Record)
-  v208 = load-field v207 : t133(Map)
-  v209 = alloc-object v204 : t55(Message)
+  v206 = list-create v205 : t39(List)
+  v207 = copy-managed v203, v206 : t244(Record)
+  v208 = load-field v207 : t322(Map)
+  v209 = alloc-object v204 : t245(Message)
   v210 = const-null : t4(Null)
   v211 = runtime-string-create value="value=" : t3(String)
   v212 = runtime-string-format v210 : t3(String)
@@ -122,8 +122,8 @@ bb16(v177:t3(String), v178:t0(Int), v179:t2(Bool), v180:t2(Bool), v181:t3(String
   v214 = const-null : t4(Null)
   v215 = compare v210, v214 : t2(Bool)
   v216 = const-bool value=true : t2(Bool)
-  v217 = call-direct v216 : t141(Result)
-  v218 = call-direct v217 : t141(Result)
+  v217 = call-direct v216 : t107(Result)
+  v218 = call-direct v217 : t107(Result)
   v219 = result-tag v217 : t2(Bool)
   cond-br v219 bb17(), bb18()
 bb17():
@@ -139,7 +139,7 @@ bb19():
 bb20():
   v224 = const-int value=0 : t0(Int)
   br bb21(v177, v178, v179, v180, v181, v182, v183, v184, v185, v186, v187, v188, v189, v190, v191, v192, v193, v194, v195, v196, v197, v203, v204, v207, v208, v209, v210, v213, v215, v217, v218)
-bb21(v225:t3(String), v226:t0(Int), v227:t2(Bool), v228:t2(Bool), v229:t3(String), v230:t0(Int), v231:t0(Int), v232:t3(String), v233:t0(Int), v234:t0(Int), v235:t0(Int), v236:t0(Int), v237:t0(Int), v238:t0(Int), v239:t0(Int), v240:t129(List), v241:t0(Int), v242:t0(Int), v243:t133(Map), v244:t3(String), v245:t0(Int), v246:t54(Record), v247:t129(List), v248:t54(Record), v249:t133(Map), v250:t55(Message), v251:t4(Null), v252:t3(String), v253:t2(Bool), v254:t141(Result), v255:t141(Result)):
+bb21(v225:t3(String), v226:t0(Int), v227:t2(Bool), v228:t2(Bool), v229:t3(String), v230:t0(Int), v231:t0(Int), v232:t3(String), v233:t0(Int), v234:t0(Int), v235:t0(Int), v236:t0(Int), v237:t0(Int), v238:t0(Int), v239:t0(Int), v240:t39(List), v241:t0(Int), v242:t0(Int), v243:t322(Map), v244:t3(String), v245:t0(Int), v246:t244(Record), v247:t39(List), v248:t244(Record), v249:t322(Map), v250:t245(Message), v251:t4(Null), v252:t3(String), v253:t2(Bool), v254:t107(Result), v255:t107(Result)):
   v256 = const-null : t4(Null)
   v257 = compare v251, v256 : t2(Bool)
   cond-br v257 bb22(), bb23()
@@ -149,22 +149,22 @@ bb22():
 bb23():
   v259 = const-bool value=false : t2(Bool)
   br bb24(v225, v226, v227, v228, v229, v230, v231, v232, v233, v234, v235, v236, v237, v238, v239, v240, v241, v242, v243, v244, v245, v246, v247, v248, v249, v250, v251, v252, v253, v254, v255)
-bb24(v260:t3(String), v261:t0(Int), v262:t2(Bool), v263:t2(Bool), v264:t3(String), v265:t0(Int), v266:t0(Int), v267:t3(String), v268:t0(Int), v269:t0(Int), v270:t0(Int), v271:t0(Int), v272:t0(Int), v273:t0(Int), v274:t0(Int), v275:t129(List), v276:t0(Int), v277:t0(Int), v278:t133(Map), v279:t3(String), v280:t0(Int), v281:t54(Record), v282:t129(List), v283:t54(Record), v284:t133(Map), v285:t55(Message), v286:t4(Null), v287:t3(String), v288:t2(Bool), v289:t141(Result), v290:t141(Result)):
+bb24(v260:t3(String), v261:t0(Int), v262:t2(Bool), v263:t2(Bool), v264:t3(String), v265:t0(Int), v266:t0(Int), v267:t3(String), v268:t0(Int), v269:t0(Int), v270:t0(Int), v271:t0(Int), v272:t0(Int), v273:t0(Int), v274:t0(Int), v275:t39(List), v276:t0(Int), v277:t0(Int), v278:t322(Map), v279:t3(String), v280:t0(Int), v281:t244(Record), v282:t39(List), v283:t244(Record), v284:t322(Map), v285:t245(Message), v286:t4(Null), v287:t3(String), v288:t2(Bool), v289:t107(Result), v290:t107(Result)):
   return
-function f1 instance=1 kind=0 symbol=22 signature=t53(Function) entry=bb25 effects=0
+function f1 instance=1 kind=0 symbol=85 signature=t243(Function) entry=bb25 effects=0
 bb25(v291:t0(Int), v292:t0(Int)):
   v293 = int-add-checked v291, v292 : t0(Int)
   return v293
-function f2 instance=2 kind=0 symbol=24 signature=t157(Function) entry=bb26 effects=0
-bb26(v294:t123(Function), v295:t0(Int)):
+function f2 instance=2 kind=0 symbol=87 signature=t345(Function) entry=bb26 effects=0
+bb26(v294:t313(Function), v295:t0(Int)):
   v296 = call-indirect v294, v295 : t0(Int)
   return v296
-function f3 instance=3 kind=0 symbol=23 signature=t123(Function) entry=bb27 effects=0
+function f3 instance=3 kind=0 symbol=86 signature=t313(Function) entry=bb27 effects=0
 bb27(v297:t0(Int)):
   v298 = const-int value=1 : t0(Int)
   v299 = int-add-checked v297, v298 : t0(Int)
   return v299
-function f4 instance=4 kind=0 symbol=25 signature=t124(Function) entry=bb28 effects=1
+function f4 instance=4 kind=0 symbol=88 signature=t314(Function) entry=bb28 effects=1
 bb28(v300:t2(Bool), v301:t0(Int), v302:t0(Int)):
   v303 = const-int value=0 : t0(Int)
   cond-br v300 bb29(), bb30()
@@ -174,7 +174,7 @@ bb30():
   br bb31(v300, v301, v302, v302)
 bb31(v304:t2(Bool), v305:t0(Int), v306:t0(Int), v307:t0(Int)):
   return v307
-function f5 instance=5 kind=0 symbol=26 signature=t125(Function) entry=bb32 effects=0
+function f5 instance=5 kind=0 symbol=89 signature=t315(Function) entry=bb32 effects=0
 bb32(v308:t2(Bool)):
   cond-br v308 bb33(), bb34()
 bb33():
@@ -183,7 +183,7 @@ bb33():
 bb34():
   v310 = const-int value=2 : t0(Int)
   return v310
-function f6 instance=6 kind=0 symbol=27 signature=t125(Function) entry=bb35 effects=0
+function f6 instance=6 kind=0 symbol=90 signature=t315(Function) entry=bb35 effects=0
 bb35(v311:t2(Bool)):
   cond-br v311 bb36(), bb37()
 bb36():
@@ -192,7 +192,7 @@ bb36():
 bb37():
   v313 = const-int value=2 : t0(Int)
   return v313
-function f7 instance=7 kind=0 symbol=28 signature=t123(Function) entry=bb38 effects=1
+function f7 instance=7 kind=0 symbol=91 signature=t313(Function) entry=bb38 effects=1
 bb38(v314:t0(Int)):
   v315 = const-int value=0 : t0(Int)
   v316 = const-int value=0 : t0(Int)
@@ -207,7 +207,7 @@ bb40():
   br bb39(v317, v323, v321)
 bb41(v324:t0(Int), v325:t0(Int), v326:t0(Int)):
   return v326
-function f8 instance=8 kind=0 symbol=29 signature=t123(Function) entry=bb42 effects=1
+function f8 instance=8 kind=0 symbol=92 signature=t313(Function) entry=bb42 effects=1
 bb42(v327:t0(Int)):
   v328 = const-int value=0 : t0(Int)
   v329 = const-int value=1 : t0(Int)
@@ -237,7 +237,7 @@ bb49(v341:t0(Int), v342:t0(Int), v343:t0(Int)):
   br bb43(v341, v342, v344)
 bb50(v345:t0(Int), v346:t0(Int)):
   return v346
-function f9 instance=9 kind=0 symbol=30 signature=t126(Function) entry=bb51 effects=1
+function f9 instance=9 kind=0 symbol=93 signature=t316(Function) entry=bb51 effects=1
 bb51():
   v347 = const-int value=0 : t0(Int)
   v348 = const-int value=5 : t0(Int)
@@ -269,7 +269,7 @@ bb58(v361:t0(Int), v362:t0(Int)):
   br bb52(v361, v363)
 bb59(v364:t0(Int)):
   return v364
-function f10 instance=10 kind=0 symbol=31 signature=t53(Function) entry=bb60 effects=1
+function f10 instance=10 kind=0 symbol=94 signature=t243(Function) entry=bb60 effects=1
 bb60(v365:t0(Int), v366:t0(Int)):
   v367 = const-int value=0 : t0(Int)
   v368 = const-int value=1 : t0(Int)
@@ -298,19 +298,19 @@ bb67(v380:t0(Int), v381:t0(Int), v382:t0(Int), v383:t0(Int)):
   br bb61(v380, v381, v382, v384)
 bb68(v385:t0(Int), v386:t0(Int), v387:t0(Int)):
   return v387
-function f11 instance=11 kind=0 symbol=32 signature=t142(Function) entry=bb69 effects=0
+function f11 instance=11 kind=0 symbol=95 signature=t330(Function) entry=bb69 effects=0
 bb69(v388:t2(Bool)):
   cond-br v388 bb70(), bb71()
 bb70():
   v389 = const-int value=7 : t0(Int)
-  v390 = result-make-ok v389 : t141(Result)
+  v390 = result-make-ok v389 : t107(Result)
   return v390
 bb71():
   v391 = runtime-string-create value="bad" : t3(String)
-  v392 = result-make-error v391 : t141(Result)
+  v392 = result-make-error v391 : t107(Result)
   return v392
-function f12 instance=12 kind=0 symbol=33 signature=t158(Function) entry=bb72 effects=0
-bb72(v393:t141(Result)):
+function f12 instance=12 kind=0 symbol=96 signature=t346(Function) entry=bb72 effects=0
+bb72(v393:t107(Result)):
   v394 = result-tag v393 : t2(Bool)
   cond-br v394 bb73(), bb74()
 bb73():
@@ -318,8 +318,8 @@ bb73():
   br bb75(v395)
 bb74():
   v396 = result-error-payload v393 : t3(String)
-  v397 = result-make-error v396 : t141(Result)
+  v397 = result-make-error v396 : t107(Result)
   return v397
 bb75(v398:t0(Int)):
-  v399 = result-make-ok v398 : t141(Result)
+  v399 = result-make-ok v398 : t107(Result)
   return v399

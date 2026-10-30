@@ -4,7 +4,7 @@ ACTOR File_Client
     RECEIVE File_Write_Completed(outcome)
         SELECT outcome
         CASE Error(problem)
-            print("storage-error")
+            print(problem)
             STOP
         CASE Ok(done)
             print("unexpected-write-success")

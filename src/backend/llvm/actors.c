@@ -152,7 +152,16 @@ Om_Status emit_actor_instruction(Om_Llvm_Backend_Context *backend,
             || (instruction->integer_value != OM_SYSTEM_ACTOR_REF_CONSOLE
                 && instruction->integer_value != OM_SYSTEM_ACTOR_REF_TIMER
                 && instruction->integer_value
-                    != OM_SYSTEM_ACTOR_REF_FILE_SYSTEM)) {
+                    != OM_SYSTEM_ACTOR_REF_FILE_SYSTEM
+                && instruction->integer_value != OM_SYSTEM_ACTOR_REF_CLOCK
+                && instruction->integer_value
+                    != OM_SYSTEM_ACTOR_REF_SECURE_RANDOM
+                && instruction->integer_value
+                    != OM_SYSTEM_ACTOR_REF_LOGGER
+                && instruction->integer_value
+                    != OM_SYSTEM_ACTOR_REF_NETWORK
+                && instruction->integer_value
+                    != OM_SYSTEM_ACTOR_REF_PROCESS)) {
             return OM_STATUS_INVALID_ARGUMENT;
         }
         *result = LLVMConstInt(backend->i64_type,

@@ -1,6 +1,10 @@
 #include "ombasic/runtime/abi/json.h"
 
 #include <string.h>
+#include <errno.h>
+#include <inttypes.h>
+#include <math.h>
+#include <stdlib.h>
 
 #include "ombasic/foundation/memory.h"
 #include "ombasic/foundation/slice.h"
@@ -856,6 +860,178 @@ char *om_runtime_json_object_get(const char *source, const char *key)
     Json_Span item = {0};
     return get_object_item(source, key, &item)
         ? compact_span(source, item.start, item.end) : NULL;
+}
+
+char *om_runtime_json_string_value(const char *source)
+{
+    Json_Parser parser = {0};
+    Json_Span root = {0};
+    if (!parse_root(source, &parser, &root)
+        || root.kind != OM_RUNTIME_JSON_KIND_STRING) {
+        return NULL;
+    }
+    parser.offset = root.start;
+    char *decoded = NULL;
+    size_t decoded_length = 0;
+    if (!parse_json_string(&parser, &decoded, &decoded_length)) {
+        return NULL;
+    }
+    (void)decoded_length;
+    return decoded;
+}
+
+int64_t om_runtime_json_object_length(const char *source)
+{
+    Json_Parser parser = {0};
+    Json_Span root = {0};
+    if (!parse_root(source, &parser, &root)
+        || root.kind != OM_RUNTIME_JSON_KIND_OBJECT) {
+        return -1;
+    }
+    parser.offset = root.start + 1;
+    skip_whitespace(&parser);
+    int64_t count = 0;
+    while (parser.offset < root.end && parser.source[parser.offset] != '}') {
+        char *key = NULL;
+        size_t key_length = 0;
+        Json_Span value = {0};
+        if (!parse_json_string(&parser, &key, &key_length)) {
+            return -1;
+        }
+        (void)key_length;
+        om_free(key);
+        skip_whitespace(&parser);
+        if (parser.offset >= parser.length || parser.source[parser.offset++] != ':') {
+            return -1;
+        }
+        if (!parse_value(&parser, &value) || count == INT64_MAX) {
+            return -1;
+        }
+        ++count;
+        skip_whitespace(&parser);
+        if (parser.offset < parser.length && parser.source[parser.offset] == ',') {
+            ++parser.offset;
+            skip_whitespace(&parser);
+        }
+    }
+    return count;
+}
+
+char *om_runtime_json_object_keys(const char *source)
+{
+    Json_Parser parser = {0};
+    Json_Span root = {0};
+    if (!parse_root(source, &parser, &root)
+        || root.kind != OM_RUNTIME_JSON_KIND_OBJECT) {
+        return NULL;
+    }
+    char *output = om_alloc(root.end - root.start + 3);
+    if (output == NULL) {
+        return NULL;
+    }
+    size_t output_length = 0;
+    output[output_length++] = '[';
+    parser.offset = root.start + 1;
+    skip_whitespace(&parser);
+    bool first = true;
+    while (parser.offset < root.end && parser.source[parser.offset] != '}') {
+        const size_t key_start = parser.offset;
+        if (!parse_json_string(&parser, NULL, NULL)) {
+            om_free(output);
+            return NULL;
+        }
+        const size_t key_end = parser.offset;
+        if (!first) {
+            output[output_length++] = ',';
+        }
+        const size_t key_length = key_end - key_start;
+        (void)memcpy(output + output_length, parser.source + key_start,
+                     key_length);
+        output_length += key_length;
+        first = false;
+        skip_whitespace(&parser);
+        if (parser.offset >= parser.length || parser.source[parser.offset++] != ':') {
+            om_free(output);
+            return NULL;
+        }
+        Json_Span value = {0};
+        if (!parse_value(&parser, &value)) {
+            om_free(output);
+            return NULL;
+        }
+        skip_whitespace(&parser);
+        if (parser.offset < parser.length && parser.source[parser.offset] == ',') {
+            ++parser.offset;
+            skip_whitespace(&parser);
+        }
+    }
+    output[output_length++] = ']';
+    output[output_length] = '\0';
+    return output;
+}
+
+bool om_runtime_json_int64_valid(const char *source)
+{
+    Json_Parser parser = {0};
+    Json_Span root = {0};
+    if (!parse_root(source, &parser, &root)
+        || root.kind != OM_RUNTIME_JSON_KIND_NUMBER) {
+        return false;
+    }
+    for (size_t index = root.start; index < root.end; ++index) {
+        if (source[index] == '.' || source[index] == 'e' || source[index] == 'E') {
+            return false;
+        }
+    }
+    errno = 0;
+    char *end = NULL;
+    (void)strtoimax(source + root.start, &end, 10);
+    return errno != ERANGE && end == source + root.end;
+}
+
+int64_t om_runtime_json_int64_value(const char *source)
+{
+    Json_Parser parser = {0};
+    Json_Span root = {0};
+    if (!parse_root(source, &parser, &root)
+        || root.kind != OM_RUNTIME_JSON_KIND_NUMBER) {
+        return 0;
+    }
+    errno = 0;
+    char *end = NULL;
+    const intmax_t value = strtoimax(source + root.start, &end, 10);
+    if (errno == ERANGE || end != source + root.end
+        || value < INT64_MIN || value > INT64_MAX) {
+        return 0;
+    }
+    return (int64_t)value;
+}
+
+bool om_runtime_json_float64_valid(const char *source)
+{
+    Json_Parser parser = {0};
+    Json_Span root = {0};
+    if (!parse_root(source, &parser, &root)
+        || root.kind != OM_RUNTIME_JSON_KIND_NUMBER) {
+        return false;
+    }
+    errno = 0;
+    char *end = NULL;
+    const double value = strtod(source + root.start, &end);
+    return errno != ERANGE && end == source + root.end && isfinite(value);
+}
+
+double om_runtime_json_float64_value(const char *source)
+{
+    Json_Parser parser = {0};
+    Json_Span root = {0};
+    if (!parse_root(source, &parser, &root)
+        || root.kind != OM_RUNTIME_JSON_KIND_NUMBER) {
+        return 0.0;
+    }
+    char *end = NULL;
+    const double value = strtod(source + root.start, &end);
+    return end == source + root.end && isfinite(value) ? value : 0.0;
 }
 
 void om_runtime_json_release(void *value)

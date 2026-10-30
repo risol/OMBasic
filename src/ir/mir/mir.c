@@ -394,7 +394,7 @@ Om_Status om_mir_set_system_message_id(
     Om_Mir_Storage *storage = storage_of(project);
     if (storage == NULL || symbol_id.value == UINT32_MAX
         || (system_message_id != OM_SYSTEM_MESSAGE_ID_NONE
-            && (system_message_id > OM_SYSTEM_MESSAGE_ID_TIMER_AFTER
+            && (system_message_id > OM_SYSTEM_MESSAGE_ID_UDP_CLOSE_COMPLETED
                 && system_message_id != OM_SYSTEM_MESSAGE_ID_ANY))) {
         return OM_STATUS_INVALID_ARGUMENT;
     }
@@ -1433,10 +1433,68 @@ static Om_Status verify_instruction(const Om_Mir_Project *project,
                 ((nominal->system_message_id
                       == OM_SYSTEM_MESSAGE_ID_CONSOLE_WRITE
                   || nominal->system_message_id
-                      == OM_SYSTEM_MESSAGE_ID_FILE_READ)
+                      == OM_SYSTEM_MESSAGE_ID_FILE_READ
+                  || nominal->system_message_id
+                      == OM_SYSTEM_MESSAGE_ID_FILE_EXISTS
+                  || nominal->system_message_id
+                      == OM_SYSTEM_MESSAGE_ID_FILE_DELETE
+                  || nominal->system_message_id
+                      == OM_SYSTEM_MESSAGE_ID_DIRECTORY_CREATE
+                  || nominal->system_message_id
+                      == OM_SYSTEM_MESSAGE_ID_DIRECTORY_LIST
+                  || nominal->system_message_id
+                      == OM_SYSTEM_MESSAGE_ID_FILE_STAT)
                  && index == 1)
+                || ((nominal->system_message_id
+                        == OM_SYSTEM_MESSAGE_ID_CLOCK_MONOTONIC_NOW
+                    || nominal->system_message_id
+                        == OM_SYSTEM_MESSAGE_ID_CLOCK_UTC_NOW)
+                    && index == 0)
+                || (nominal->system_message_id
+                        == OM_SYSTEM_MESSAGE_ID_SECURE_RANDOM_BYTES
+                    && index == 1)
+                || (nominal->system_message_id
+                        == OM_SYSTEM_MESSAGE_ID_LOGGER_WRITE && index == 1)
+                || (nominal->system_message_id
+                        == OM_SYSTEM_MESSAGE_ID_LOGGER_FLUSH && index == 0)
+                || (nominal->system_message_id
+                        == OM_SYSTEM_MESSAGE_ID_TCP_LISTEN && index == 3)
+                || (nominal->system_message_id
+                        == OM_SYSTEM_MESSAGE_ID_TCP_CONNECT && index == 2)
+                || (nominal->system_message_id
+                        == OM_SYSTEM_MESSAGE_ID_TCP_ACCEPT && index == 1)
+                || (nominal->system_message_id
+                        == OM_SYSTEM_MESSAGE_ID_TCP_SEND && index == 2)
+                || (nominal->system_message_id
+                        == OM_SYSTEM_MESSAGE_ID_TCP_RECEIVE && index == 2)
+                || (nominal->system_message_id
+                        == OM_SYSTEM_MESSAGE_ID_TCP_CLOSE && index == 1)
+                || (nominal->system_message_id
+                        == OM_SYSTEM_MESSAGE_ID_PROCESS_SPAWN && index == 5)
+                || (nominal->system_message_id
+                        == OM_SYSTEM_MESSAGE_ID_PROCESS_WRITE_STDIN && index == 2)
+                || (nominal->system_message_id
+                        == OM_SYSTEM_MESSAGE_ID_PROCESS_READ_STDOUT && index == 2)
+                || (nominal->system_message_id
+                        == OM_SYSTEM_MESSAGE_ID_PROCESS_READ_STDERR && index == 2)
+                || ((nominal->system_message_id
+                        == OM_SYSTEM_MESSAGE_ID_PROCESS_CLOSE_STDIN
+                    || nominal->system_message_id
+                        == OM_SYSTEM_MESSAGE_ID_PROCESS_TERMINATE
+                    || nominal->system_message_id
+                        == OM_SYSTEM_MESSAGE_ID_PROCESS_WAIT) && index == 1)
+                || (nominal->system_message_id
+                        == OM_SYSTEM_MESSAGE_ID_UDP_CONNECT && index == 3)
+                || ((nominal->system_message_id
+                        == OM_SYSTEM_MESSAGE_ID_UDP_SEND
+                    || nominal->system_message_id
+                        == OM_SYSTEM_MESSAGE_ID_UDP_RECEIVE) && index == 2)
+                || (nominal->system_message_id
+                        == OM_SYSTEM_MESSAGE_ID_UDP_CLOSE && index == 1)
                 || (nominal->system_message_id
                         == OM_SYSTEM_MESSAGE_ID_FILE_WRITE && index == 2)
+                || (nominal->system_message_id
+                        == OM_SYSTEM_MESSAGE_ID_FILE_APPEND && index == 2)
                 || (nominal->system_message_id
                         == OM_SYSTEM_MESSAGE_ID_TIMER_AFTER && index == 2);
             const bool any_message = nominal->system_message_id
@@ -1827,7 +1885,13 @@ static Om_Status verify_instruction(const Om_Mir_Project *project,
         if (instruction->integer_value != OM_SYSTEM_ACTOR_REF_CONSOLE
             && instruction->integer_value != OM_SYSTEM_ACTOR_REF_TIMER
             && instruction->integer_value
-                != OM_SYSTEM_ACTOR_REF_FILE_SYSTEM) {
+                != OM_SYSTEM_ACTOR_REF_FILE_SYSTEM
+            && instruction->integer_value != OM_SYSTEM_ACTOR_REF_CLOCK
+            && instruction->integer_value
+                != OM_SYSTEM_ACTOR_REF_SECURE_RANDOM
+            && instruction->integer_value != OM_SYSTEM_ACTOR_REF_LOGGER
+            && instruction->integer_value != OM_SYSTEM_ACTOR_REF_NETWORK
+            && instruction->integer_value != OM_SYSTEM_ACTOR_REF_PROCESS) {
             return add_diagnostic(diagnostics, OM_MIR_DIAGNOSTIC_E1101,
                 function->id, block->id, result->id, instruction->span);
         }

@@ -1,14 +1,14 @@
 module 0 path="scopes/siblings.bas"
-  entity 0 kind=1 symbol=19 related=4294967295 name="main" span=0:0-98
+  entity 0 kind=1 symbol=82 related=4294967295 name="main" span=0:0-98
 node 0 module=0 kind=program op=none type=4294967295 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:0-98 children=0:1
-node 1 module=0 kind=action op=none type=53 symbol=19 related=4294967295 effects=0 flags=0 span=0:0-98 children=1:1 name="main"
+node 1 module=0 kind=action op=none type=243 symbol=82 related=4294967295 effects=0 flags=0 span=0:0-98 children=1:1 name="main"
 node 2 module=0 kind=block op=none type=5 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:18-87 children=2:1
 node 3 module=0 kind=if op=none type=5 symbol=4294967295 related=4294967295 effects=0 flags=2 span=0:18-87 children=3:2
 node 4 module=0 kind=if-arm op=none type=5 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:21-49 children=5:2
 node 5 module=0 kind=boolean op=none type=2 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:21-25 children=7:0 name="TRUE"
 node 6 module=0 kind=block op=none type=5 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:39-49 children=7:1
-node 7 module=0 kind=bind op=none type=0 symbol=20 related=4294967295 effects=0 flags=0 span=0:39-48 children=8:1 name="value"
+node 7 module=0 kind=bind op=none type=0 symbol=83 related=4294967295 effects=0 flags=0 span=0:39-48 children=8:1 name="value"
 node 8 module=0 kind=integer op=none type=0 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:47-48 children=9:0 name="1" magnitude=1
 node 9 module=0 kind=block op=none type=5 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:66-76 children=9:1
-node 10 module=0 kind=bind op=none type=0 symbol=21 related=4294967295 effects=0 flags=0 span=0:66-75 children=10:1 name="value"
+node 10 module=0 kind=bind op=none type=0 symbol=84 related=4294967295 effects=0 flags=0 span=0:66-75 children=10:1 name="value"
 node 11 module=0 kind=integer op=none type=0 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:74-75 children=11:0 name="2" magnitude=2

@@ -327,6 +327,7 @@ add_library(ombasic_runtime STATIC
     src/runtime/core/value.c
     src/runtime/data/list.c
     src/runtime/data/json_native.c
+    src/runtime/data/math_native.c
     src/runtime/data/map.c
     src/runtime/data/native_pointer.c
     src/runtime/data/record.c
@@ -350,6 +351,11 @@ target_link_libraries(ombasic_runtime
     PUBLIC ombasic::foundation
     PRIVATE Threads::Threads ombasic_warnings ombasic_sanitizers
 )
+if(UNIX)
+    target_link_libraries(ombasic_runtime PUBLIC m)
+elseif(WIN32)
+    target_link_libraries(ombasic_runtime PRIVATE bcrypt ws2_32)
+endif()
 
 add_library(ombasic_runtime_services STATIC
     src/runtime/system_actor/blocking_pool.c

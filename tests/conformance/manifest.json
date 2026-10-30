@@ -38,7 +38,27 @@
         "compiles": true,
         "run": {
           "exit_code": 0,
-          "stdout": "café 東京|true|true|false|true|3|true|true|5|é東|one||東京||é界\n|||true||é界|true\n"
+          "stdout": "café 東京|true|true|false|true|3|true|true|5|é東|one||東京||é界\n|||true||é界|true\n東京-a-東京|unchanged\né東京|é |é\n"
+        }
+      }
+    },
+    {
+      "id": "sdk-stdlib-collections-list-facade",
+      "rules": [
+        "OM-21.18",
+        "OM-06.03"
+      ],
+      "kind": "run",
+      "source": "06_modules/std-collections/main.bas",
+      "tags": [
+        "module",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "length=3\nempty=false\ncontains=true\nindex=2\nconcat=4\nreverse=3\nmap-length=2\nmap-empty=false\nmap-has=true\nmap-keys=alpha|beta\nmap-get=2\nmap-default=9\n"
         }
       }
     },
@@ -58,7 +78,7 @@
         "compiles": true,
         "run": {
           "exit_code": 0,
-          "stdout": "{\"large\":123456789012345678901234567890.00e+0,\"items\":[true,null,\"é\"]}\nobject\nitems=3\n\"é\"\nduplicate=5\ninvalid=1:1\n{\"label\":\"café\",\"n\":1.2300e+5}\n{}\n[]\n"
+          "stdout": "object-count=2\nkeys=large:items\nentries=large:123456789012345678901234567890.00e+0|items:[true,null,\"é\"]\nhas-items=true\nhas-missing=false\n{\"large\":123456789012345678901234567890.00e+0,\"items\":[true,null,\"é\"]}\nobject\nitems=3\n\"é\"\nduplicate=5\ninvalid=1:1\n{\"label\":\"café\",\"n\":1.2300e+5}\n{}\nempty-entries=0\n[]\ndecoded=line\né\nboolean=true\nis-null=true\ndecoded-keys=a:b\nint64=9223372036854775807\nfraction-rejected=6\nfloat64=125\nfloat64-overflow=6\nfloat64-underflow=6\n"
         }
       },
       "include_interfaces": true,
@@ -123,7 +143,7 @@
         "compiles": true,
         "run": {
           "exit_code": 0,
-          "stdout": "true|true|false\na/b/../file.txt|/rooted\nfile.tar.gz|a/b|.|\n.gz||\n"
+          "stdout": "true|true|false\na/b/../file.txt|/rooted\nfile.tar.gz|a/b|.|\n.gz||\nfile.tar|a/file.tar.txt|a/file.tar.json|a/file.tar\na/trailing.txt\n"
         }
       }
     },
@@ -169,6 +189,124 @@
         "run": {
           "exit_code": 70,
           "stderr": "@std/math/integer.bas:7:16: runtime fault: integer overflow\n"
+        }
+      }
+    },
+    {
+      "id": "stdlib-math-sign",
+      "rules": [
+        "OM-21.18"
+      ],
+      "kind": "run",
+      "source": "06_modules/math_sign.bas",
+      "tags": [
+        "module",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "-1|0|1\ntrue|true|false\n"
+        }
+      }
+    },
+    {
+      "id": "stdlib-math-float-facade",
+      "rules": [
+        "OM-21.18"
+      ],
+      "kind": "run",
+      "source": "06_modules/math_float.bas",
+      "tags": [
+        "module",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "sqrt=3\nsin=0\nround=-2\ndomain=true\nfinite=false\ntrig=1:0:0:0:0\nquadrant=true\nexp-log=1:0:2\nrounding=-2:-1:-1\n"
+        }
+      }
+    },
+    {
+      "id": "stdlib-time-duration-facade",
+      "rules": [
+        "OM-21.18",
+        "OM-09.01"
+      ],
+      "kind": "run",
+      "source": "06_modules/time_duration.bas",
+      "tags": [
+        "module",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "sum=1000\ndifference=1400\ncompare=1\n"
+        }
+      }
+    },
+    {
+      "id": "stdlib-time-datetime-utc-conversions",
+      "rules": [
+        "OM-06.03",
+        "OM-09.01"
+      ],
+      "kind": "run",
+      "source": "06_modules/time_datetime.bas",
+      "tags": [
+        "type",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "epoch=1970-1-1\nbefore=1969-12-31 23:59:59.999\nroundtrip=-1\nleap=2000-2-29\ninvalid=out_of_range\nminimum=1-1-1\nminimum-roundtrip=-62135596800000\nmaximum=9999-12-31 23:59:59.999\nmaximum-roundtrip=253402300799999\n"
+        }
+      }
+    },
+    {
+      "id": "stdlib-time-monotonic-instant-arithmetic",
+      "rules": [
+        "OM-06.03",
+        "OM-09.01"
+      ],
+      "kind": "run",
+      "source": "06_modules/time_instant.bas",
+      "tags": [
+        "type",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "instant=1200|-1|500\n"
+        }
+      }
+    },
+    {
+      "id": "stdlib-random-reproducible-prng",
+      "rules": [
+        "OM-21.18",
+        "OM-09.01"
+      ],
+      "kind": "run",
+      "source": "06_modules/random_prng.bas",
+      "tags": [
+        "module",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "first=16807\nsecond=282475249\nreproducible=true\nin-range=true\nnegative-seed=2147466840\n"
         }
       }
     },
@@ -524,6 +662,46 @@
       ],
       "expect": {
         "compiles": true
+      }
+    },
+    {
+      "id": "stdlib-logging-pure-formatting",
+      "rules": [
+        "OM-21.18"
+      ],
+      "kind": "run",
+      "source": "06_modules/logging_format.bas",
+      "tags": [
+        "module",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "1234|info|server|started\\r\\n\\u{0001}ready|user=ada|detail=first\\nsecond\\tend\\\\\n\n0|debug||\n\n"
+        }
+      }
+    },
+    {
+      "id": "higher-order-function-values-specialize-by-use",
+      "rules": [
+        "OM-08.07",
+        "OM-08.08"
+      ],
+      "kind": "run",
+      "source": "06_modules/higher_order_function.bas",
+      "tags": [
+        "semantic",
+        "type",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "int=42\ntext=true\n"
+        }
       }
     },
     {
@@ -1195,6 +1373,126 @@
       }
     },
     {
+      "id": "system-clock-monotonic-and-utc-now",
+      "rules": [
+        "OM-17.03",
+        "OM-17.04"
+      ],
+      "kind": "run",
+      "source": "17_actors/system_clock_now.bas",
+      "tags": [
+        "actor",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "monotonic=ok\nutc=ok\n"
+        }
+      }
+    },
+    {
+      "id": "system-secure-random-boundaries",
+      "rules": [
+        "OM-17.03",
+        "OM-21.18"
+      ],
+      "kind": "run",
+      "source": "17_actors/system_secure_random.bas",
+      "tags": [
+        "actor",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "length=32\nrange=true\nempty=0\nnegative=invalid_length\noversized=resource_exhausted\n"
+        }
+      }
+    },
+    {
+      "id": "system-logger-write-flush-order",
+      "rules": [
+        "OM-17.03",
+        "OM-17.04"
+      ],
+      "kind": "run",
+      "source": "17_actors/system_logger.bas",
+      "tags": [
+        "actor",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "first\nsecond\nflushed\n"
+        }
+      }
+    },
+    {
+      "id": "system-network-tcp-loopback",
+      "rules": [
+        "OM-17.03",
+        "OM-17.04"
+      ],
+      "kind": "run",
+      "source": "17_actors/system_network_tcp.bas",
+      "tags": [
+        "actor",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "received=65,66,67,68\n"
+        }
+      }
+    },
+    {
+      "id": "system-network-udp-loopback",
+      "rules": [
+        "OM-17.03",
+        "OM-17.04"
+      ],
+      "kind": "run",
+      "source": "17_actors/system_network_udp.bas",
+      "tags": [
+        "actor",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "received=65,66,67,68\n"
+        }
+      }
+    },
+    {
+      "id": "system-network-udp-datagram-boundaries",
+      "rules": [
+        "OM-17.03",
+        "OM-17.04"
+      ],
+      "kind": "run",
+      "source": "17_actors/system_network_udp_boundaries.bas",
+      "tags": [
+        "actor",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "oversized-datagram=rejected\nempty-datagram=preserved\n"
+        }
+      }
+    },
+    {
       "id": "system-timer-respects-mailbox-order",
       "rules": [
         "OM-17.01",
@@ -1235,6 +1533,106 @@
       }
     },
     {
+      "id": "system-file-append",
+      "rules": [
+        "OM-17.03",
+        "OM-17.04"
+      ],
+      "kind": "run",
+      "source": "17_actors/system_file_append.bas",
+      "tags": [
+        "actor",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "start tail\n"
+        }
+      }
+    },
+    {
+      "id": "system-file-exists",
+      "rules": [
+        "OM-17.03",
+        "OM-17.04"
+      ],
+      "kind": "run",
+      "source": "17_actors/system_file_exists.bas",
+      "tags": [
+        "actor",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "exists=true\nexists=false\n"
+        }
+      }
+    },
+    {
+      "id": "system-file-delete",
+      "rules": [
+        "OM-17.03",
+        "OM-17.04"
+      ],
+      "kind": "run",
+      "source": "17_actors/system_file_delete.bas",
+      "tags": [
+        "actor",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "delete-succeeded\n"
+        }
+      }
+    },
+    {
+      "id": "system-directory-create",
+      "rules": [
+        "OM-17.03",
+        "OM-17.04"
+      ],
+      "kind": "run",
+      "source": "17_actors/system_directory_create.bas",
+      "tags": [
+        "actor",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "directory=a.txt|z.txt\nstat=file|1\n"
+        }
+      }
+    },
+    {
+      "id": "system-file-stat-directory",
+      "rules": [
+        "OM-17.03",
+        "OM-17.04"
+      ],
+      "kind": "run",
+      "source": "17_actors/system_file_stat_directory.bas",
+      "tags": [
+        "actor",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "stat-directory=directory\n"
+        }
+      }
+    },
+    {
       "id": "system-file-missing-file-error",
       "rules": [
         "OM-17.03",
@@ -1250,7 +1648,7 @@
         "compiles": true,
         "run": {
           "exit_code": 0,
-          "stdout": "missing-file-error\n"
+          "stdout": "not_found\n"
         }
       }
     },
@@ -1270,7 +1668,7 @@
         "compiles": true,
         "run": {
           "exit_code": 0,
-          "stdout": "invalid-utf8-error\n"
+          "stdout": "invalid_utf8\n"
         }
       }
     },
@@ -1290,7 +1688,7 @@
         "compiles": true,
         "run": {
           "exit_code": 0,
-          "stdout": "directory-target-error\n"
+          "stdout": "is_directory\n"
         }
       }
     },
@@ -1314,7 +1712,7 @@
         "compiles": true,
         "run": {
           "exit_code": 0,
-          "stdout": "permission-error\n"
+          "stdout": "permission_denied\n"
         }
       }
     },
@@ -1338,7 +1736,7 @@
         "compiles": true,
         "run": {
           "exit_code": 0,
-          "stdout": "storage-error\n"
+          "stdout": "resource_exhausted\n"
         }
       }
     },
@@ -1412,6 +1810,182 @@
       ],
       "expect": {
         "exit_code": 0
+      }
+    },
+    {
+      "id": "console-read-line-input-contract",
+      "rules": [
+        "OM-17.03"
+      ],
+      "kind": "multi_process",
+      "scenario": "runner/scenarios/console_read_line.py",
+      "timeout_seconds": 90,
+      "tags": [
+        "runtime",
+        "actor"
+      ],
+      "expect": {
+        "exit_code": 0
+      }
+    },
+    {
+      "id": "system-process-argv-and-exit",
+      "rules": [
+        "OM-17.03"
+      ],
+      "kind": "run",
+      "source": "17_actors/system_process_linux.bas",
+      "platforms": [
+        "linux"
+      ],
+      "tags": [
+        "runtime",
+        "actor",
+        "linux"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "stdout=65,59,66,32,67\nexit=0\n"
+        }
+      }
+    },
+    {
+      "id": "system-process-stdin-write-and-close",
+      "rules": [
+        "OM-17.03"
+      ],
+      "kind": "run",
+      "source": "17_actors/system_process_stdin_linux.bas",
+      "platforms": [
+        "linux"
+      ],
+      "tags": [
+        "runtime",
+        "actor",
+        "linux"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "stdout=65,66\nexit=0\n"
+        }
+      }
+    },
+    {
+      "id": "system-process-resource-limit",
+      "rules": [
+        "OM-17.03"
+      ],
+      "kind": "run",
+      "source": "17_actors/system_process_resource_limit_linux.bas",
+      "platforms": [
+        "linux"
+      ],
+      "tags": [
+        "runtime",
+        "actor",
+        "linux"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "spawned=64,rejected=1,waited=64\n"
+        }
+      }
+    },
+    {
+      "id": "system-process-environment-replacement",
+      "rules": [
+        "OM-17.03"
+      ],
+      "kind": "run",
+      "source": "17_actors/system_process_environment_linux.bas",
+      "platforms": [
+        "linux"
+      ],
+      "tags": [
+        "runtime",
+        "actor",
+        "linux"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "environment=replaced\n"
+        }
+      }
+    },
+    {
+      "id": "system-process-linux-shutdown-reaps-child",
+      "rules": [
+        "OM-17.03"
+      ],
+      "kind": "run",
+      "source": "17_actors/system_process_shutdown_linux.bas",
+      "platforms": [
+        "linux"
+      ],
+      "tags": [
+        "runtime",
+        "actor",
+        "linux"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "spawned\n"
+        }
+      }
+    },
+    {
+      "id": "system-process-windows-shutdown-reaps-child",
+      "rules": [
+        "OM-17.03"
+      ],
+      "kind": "run",
+      "source": "17_actors/system_process_shutdown_windows.bas",
+      "platforms": [
+        "windows"
+      ],
+      "tags": [
+        "runtime",
+        "actor",
+        "windows"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "spawned\n"
+        }
+      }
+    },
+    {
+      "id": "system-process-windows-stdio-and-exit",
+      "rules": [
+        "OM-17.03"
+      ],
+      "kind": "run",
+      "source": "17_actors/system_process_windows.bas",
+      "platforms": [
+        "windows"
+      ],
+      "tags": [
+        "runtime",
+        "actor"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "exit=0\nstdout-received\n"
+        }
       }
     },
     {
@@ -1906,6 +2480,85 @@
       "expect": {
         "compiles": false,
         "project_error": "invalid argument"
+      }
+    },
+    {
+      "id": "sdk-stdlib-encoding-hex-base64",
+      "rules": [
+        "OM-21.18",
+        "OM-06.03"
+      ],
+      "kind": "run",
+      "source": "06_modules/encoding.bas",
+      "tags": [
+        "module",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "hex=666f6f\nbase64=Zm9v\nroundtrip=666f6f\nhex-decode=0|175\ninvalid-hex=invalid_character|1\ninvalid-base64=non_canonical|1\none-byte=102\ntwo-bytes=102|111\nempty=0\none-encoded=Zg==\ntwo-encoded=Zm8=\nempty-encoded=\ninvalid-base64-length=invalid_length|1\ninvalid-base64-padding=invalid_padding|2\ninvalid-base64-character=invalid_character|2\nmultibyte-hex=invalid_length|4\nmultibyte-base64=invalid_length|6\ninvalid-byte=invalid_byte|0\nnegative-byte=invalid_byte|1\nforged-buffer=invalid_buffer\n"
+        }
+      }
+    },
+    {
+      "id": "sdk-stdlib-process-buffer-facade",
+      "rules": [
+        "OM-21.18"
+      ],
+      "kind": "run",
+      "source": "06_modules/process_facade.bas",
+      "tags": [
+        "module",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "bytes=65,66\n"
+        }
+      }
+    },
+    {
+      "id": "sdk-stdlib-text-scalar-and-byte-length",
+      "rules": [
+        "OM-06.03",
+        "OM-21.18"
+      ],
+      "kind": "run",
+      "source": "06_modules/text_byte_length.bas",
+      "tags": [
+        "module",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "scalar=7\nbytes=12\n"
+        }
+      }
+    },
+    {
+      "id": "buffer-record-actor-message-clone",
+      "rules": [
+        "OM-18.01",
+        "OM-17.03"
+      ],
+      "kind": "run",
+      "source": "18_serialization/buffer_actor_transfer.bas",
+      "tags": [
+        "runtime",
+        "actor"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "bytes=0|127|255\n"
+        }
       }
     }
   ]

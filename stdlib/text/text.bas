@@ -16,6 +16,10 @@ EXPORT FUNCTION length(value)
     RETURN scalar_length(value)
 END FUNCTION
 
+EXPORT FUNCTION byte_length(value)
+    RETURN scalar_byte_length(value)
+END FUNCTION
+
 EXPORT FUNCTION starts_with(value, prefix)
     RETURN scalar_starts_with(value, prefix)
 END FUNCTION
@@ -38,6 +42,18 @@ END FUNCTION
 
 EXPORT FUNCTION slice(value, start_index, scalar_count)
     RETURN scalar_slice(value, start_index, scalar_count)
+END FUNCTION
+
+EXPORT FUNCTION trim(value)
+    RETURN scalar_trim(value, 0)
+END FUNCTION
+
+EXPORT FUNCTION trim_start(value)
+    RETURN scalar_trim(value, 1)
+END FUNCTION
+
+EXPORT FUNCTION trim_end(value)
+    RETURN scalar_trim(value, 2)
 END FUNCTION
 
 EXPORT FUNCTION split(value, separator)
@@ -76,5 +92,27 @@ EXPORT FUNCTION join(values, separator)
     END IF
     separator_length = length(separator)
     RETURN slice(joined_text, 0, length(joined_text) - separator_length)
+END FUNCTION
+
+' Replaces non-overlapping matches from left to right; an empty needle is a no-op.
+EXPORT FUNCTION replace(value, needle, replacement)
+    IF is_empty(needle) THEN
+        RETURN value + ""
+    END IF
+    VAR output = ""
+    VAR cursor = 0
+    VAR match_index = -1
+    VAR needle_length = length(needle)
+    VAR value_length = length(value)
+    WHILE cursor <= value_length
+        match_index = find_from(value, needle, cursor)
+        IF match_index < 0 THEN
+            RETURN output + slice(value, cursor, value_length - cursor)
+        END IF
+        output = output + slice(value, cursor, match_index - cursor)
+        output = output + replacement
+        cursor = match_index + needle_length
+    END WHILE
+    RETURN output
 END FUNCTION
 

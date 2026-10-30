@@ -61,3 +61,41 @@ EXPORT FUNCTION extension(value)
     END IF
     RETURN text.slice(value, dot, length - dot)
 END FUNCTION
+
+EXPORT FUNCTION stem(value)
+    name = basename(value)
+    suffix = extension(name)
+    IF suffix = "" THEN
+        RETURN name
+    END IF
+    RETURN text.slice(name, 0, text.length(name) - text.length(suffix))
+END FUNCTION
+
+' Replaces the final extension. A leading dot in the new extension is optional.
+EXPORT FUNCTION change_extension(value, new_extension)
+    old_suffix = extension(value)
+    IF old_suffix = "" THEN
+        IF new_extension = "" THEN
+            RETURN value
+        END IF
+        IF text.slice(value, text.length(value) - 1, 1) = "." THEN
+            prefix = text.slice(value, 0, text.length(value) - 1)
+            IF text.slice(new_extension, 0, 1) = "." THEN
+                RETURN prefix + new_extension
+            END IF
+            RETURN (prefix + ".") + new_extension
+        END IF
+        IF text.slice(new_extension, 0, 1) = "." THEN
+            RETURN value + new_extension
+        END IF
+        RETURN (value + ".") + new_extension
+    END IF
+    prefix = text.slice(value, 0, text.length(value) - text.length(old_suffix))
+    IF new_extension = "" THEN
+        RETURN prefix
+    END IF
+    IF text.slice(new_extension, 0, 1) = "." THEN
+        RETURN prefix + new_extension
+    END IF
+    RETURN (prefix + ".") + new_extension
+END FUNCTION

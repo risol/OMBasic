@@ -9,37 +9,35 @@ the MSVC ABI, UCRT, and system libraries; MinGW is not used. Linux needs the
 host system's C development headers and libraries. Clang must be available on
 `PATH` when using `ombasic bind`.
 
-From a Visual Studio Developer PowerShell, configure Windows with the installed
-LLVM CMake package:
+The shared CMake presets keep each platform, toolchain, and configuration in a stable directory. Set `LLVM_ROOT` to the LLVM 23 installation before configuring. On Windows, run from a Visual Studio Developer PowerShell:
 
 ```powershell
-cmake -S . -B build/windows -G Ninja `
-  -DCMAKE_C_COMPILER="F:/clang+llvm-23.1.4-x86_64-pc-windows-msvc/bin/clang-cl.exe" `
-  -DLLVM_DIR="F:/clang+llvm-23.1.4-x86_64-pc-windows-msvc/lib/cmake/llvm" `
-  -DOM_LLVM_TARGET_TRIPLE=x86_64-pc-windows-msvc
-cmake --build build/windows --parallel
-ctest --test-dir build/windows --output-on-failure
+cmake --preset windows-clang-cl-release
+cmake --build --preset windows-clang-cl-release
+ctest --preset windows-clang-cl-release
 ```
 
-On Linux, use Clang 23 and the matching LLVM CMake package:
+On Linux, set `LLVM_ROOT` to the LLVM 23 prefix (for example, `/opt/llvm-23`
+when the workstation toolchain is mounted in Docker), then use the matching
+preset:
 
 ```sh
-cmake -S . -B build/linux -G Ninja \
-  -DCMAKE_BUILD_TYPE=Debug \
-  -DCMAKE_C_COMPILER=clang-23 \
-  -DCMAKE_CXX_COMPILER=clang++-23 \
-  -DLLVM_DIR=/usr/lib/llvm-23/lib/cmake/llvm
-cmake --build build/linux --parallel
-ctest --test-dir build/linux --output-on-failure
+cmake --preset linux-clang-release
+cmake --build --preset linux-clang-release
+ctest --preset linux-clang-release
 ```
 
 Run `python tools/architecture_check/check.py --root .` and
 `python tools/spec_check/check.py --root .` for the fast architecture and
 language checks. See [Native Linkers and Build Toolchains](compiler/linking.md)
-for toolchain details. Sanitizer profiles are separate Linux Clang builds;
-set `OM_SANITIZER` to `address-undefined` or `thread`. TSan must run on a host
-whose address-space layout is compatible with its runtime; the CI gate provides
-that environment.
+for toolchain details. The Windows release preset uses clang-cl with
+`lld-link`; Linux presets use Clang with `ld.lld`. Linux ASan/UBSan, TSan, and
+fuzz builds use separate `RelWithDebInfo` directories and never serve as SDK
+release inputs. Run `linux-clang-asan-ubsan` for the full sanitizer suite,
+`linux-clang-tsan` for Runtime/Actor/Distribution concurrency tests, and
+`linux-clang-fuzz` for libFuzzer targets. TSan must run on a host whose
+address-space layout is compatible with its runtime; the CI gate provides that
+environment. Release presets are the only presets intended for SDK packaging.
 
 ## Make a change
 

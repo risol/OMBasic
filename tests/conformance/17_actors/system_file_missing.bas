@@ -4,7 +4,7 @@ ACTOR File_Client
         CASE Ok(contents)
             print("unexpected-read-success")
         CASE Error(problem)
-            print("missing-file-error")
+            print(problem)
         END SELECT
         STOP
     END RECEIVE

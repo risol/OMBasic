@@ -29,6 +29,47 @@ static bool scalar_offset(const char *value, size_t byte_length,
     return true;
 }
 
+static bool is_unicode_whitespace(uint32_t scalar)
+{
+    return (scalar >= UINT32_C(0x0009) && scalar <= UINT32_C(0x000d))
+        || scalar == UINT32_C(0x0020) || scalar == UINT32_C(0x0085)
+        || scalar == UINT32_C(0x00a0) || scalar == UINT32_C(0x1680)
+        || (scalar >= UINT32_C(0x2000) && scalar <= UINT32_C(0x200a))
+        || scalar == UINT32_C(0x2028) || scalar == UINT32_C(0x2029)
+        || scalar == UINT32_C(0x202f) || scalar == UINT32_C(0x205f)
+        || scalar == UINT32_C(0x3000);
+}
+
+char *om_runtime_text_trim(const char *value, int64_t mode)
+{
+    if (value == NULL || mode < 0 || mode > 2) return NULL;
+    const size_t byte_length = strlen(value);
+    size_t offset = 0;
+    size_t first_nonspace = byte_length;
+    size_t last_nonspace_end = 0;
+    while (offset < byte_length) {
+        const size_t scalar_start = offset;
+        uint32_t scalar = 0;
+        if (om_utf8_decode_next((Om_Const_Byte_Slice){
+                (const uint8_t *)value, byte_length}, &offset, &scalar)
+            != OM_STATUS_OK) {
+            return NULL;
+        }
+        if (!is_unicode_whitespace(scalar)) {
+            if (first_nonspace == byte_length) first_nonspace = scalar_start;
+            last_nonspace_end = offset;
+        }
+    }
+    const size_t start = mode == 2 ? 0 : first_nonspace;
+    const size_t end = mode == 1 ? byte_length : last_nonspace_end;
+    const size_t result_length = end >= start ? end - start : 0;
+    char *result = om_alloc(result_length + 1);
+    if (result == NULL) return NULL;
+    if (result_length != 0) (void)memcpy(result, value + start, result_length);
+    result[result_length] = '\0';
+    return result;
+}
+
 int64_t om_runtime_text_length(const char *value)
 {
     if (value == NULL) {
@@ -44,6 +85,13 @@ int64_t om_runtime_text_length(const char *value)
         ++count;
     }
     return count;
+}
+
+int64_t om_runtime_text_byte_length(const char *value)
+{
+    if (value == NULL) return -1;
+    const size_t length = strlen(value);
+    return length > (size_t)INT64_MAX ? -1 : (int64_t)length;
 }
 
 bool om_runtime_text_starts_with(const char *value, const char *prefix)

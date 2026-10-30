@@ -202,7 +202,7 @@ int om_linker_link_native(const Om_Linker_Request *request,
         || native_module_count > SIZE_MAX - library_directory_count) {
         return -1;
     }
-    const size_t argument_capacity = 36 + library_directory_count * 2
+    const size_t argument_capacity = 37 + library_directory_count * 2
         + native_module_count;
     if (library_directory_count > SIZE_MAX - native_module_count
         || (request->sysroot != NULL && !OM_NATIVE_LINK_DRIVER_STYLE_MSVC
@@ -343,6 +343,7 @@ int om_linker_link_native(const Om_Linker_Request *request,
     arguments[count++] = resources->runtime_archive;
     arguments[count++] = resources->runtime_services_archive;
     arguments[count++] = resources->foundation_archive;
+    arguments[count++] = "-lm";
 #endif
     for (size_t index = 0; index < native_module_count; ++index) {
         const Om_String_View library = libraries[index];

@@ -4,7 +4,7 @@ ACTOR File_Client
     RECEIVE File_Write_Completed(outcome)
         SELECT outcome
         CASE Error(problem)
-            print("directory-target-error")
+            print(problem)
             STOP
         END SELECT
     END RECEIVE

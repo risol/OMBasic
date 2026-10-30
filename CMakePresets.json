@@ -1,0 +1,92 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "windows-clang-cl-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "$env{LLVM_ROOT}/bin/clang-cl.exe",
+        "CMAKE_CXX_COMPILER": "$env{LLVM_ROOT}/bin/clang-cl.exe",
+        "LLVM_DIR": "$env{LLVM_ROOT}/lib/cmake/llvm",
+        "OM_LLVM_TARGET_TRIPLE": "x86_64-pc-windows-msvc"
+      }
+    },
+    {
+      "name": "windows-clang-cl-release",
+      "inherits": "windows-clang-cl-base",
+      "binaryDir": "${sourceDir}/build/windows/clang-cl/release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "linux-clang-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "$env{LLVM_ROOT}/bin/clang",
+        "CMAKE_CXX_COMPILER": "$env{LLVM_ROOT}/bin/clang++",
+        "LLVM_DIR": "$env{LLVM_ROOT}/lib/cmake/llvm",
+        "OM_LLVM_TARGET_TRIPLE": "x86_64-unknown-linux-gnu"
+      }
+    },
+    {
+      "name": "linux-clang-release",
+      "inherits": "linux-clang-base",
+      "binaryDir": "${sourceDir}/build/linux/clang/release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "linux-clang-asan-ubsan",
+      "inherits": "linux-clang-base",
+      "binaryDir": "${sourceDir}/build/linux/clang/asan-ubsan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "OM_SANITIZER": "address-undefined"
+      }
+    },
+    {
+      "name": "linux-clang-tsan",
+      "inherits": "linux-clang-base",
+      "binaryDir": "${sourceDir}/build/linux/clang/tsan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "OM_SANITIZER": "thread"
+      }
+    },
+    {
+      "name": "linux-clang-fuzz",
+      "inherits": "linux-clang-base",
+      "binaryDir": "${sourceDir}/build/linux/clang/fuzz",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "OM_SANITIZER": "address-undefined",
+        "OM_BUILD_FUZZERS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "windows-clang-cl-release", "configurePreset": "windows-clang-cl-release" },
+    { "name": "linux-clang-release", "configurePreset": "linux-clang-release" },
+    { "name": "linux-clang-asan-ubsan", "configurePreset": "linux-clang-asan-ubsan" },
+    { "name": "linux-clang-tsan", "configurePreset": "linux-clang-tsan" },
+    { "name": "linux-clang-fuzz", "configurePreset": "linux-clang-fuzz" }
+  ],
+  "testPresets": [
+    { "name": "windows-clang-cl-release", "configurePreset": "windows-clang-cl-release", "output": { "outputOnFailure": true } },
+    { "name": "linux-clang-release", "configurePreset": "linux-clang-release", "output": { "outputOnFailure": true } },
+    { "name": "linux-clang-asan-ubsan", "configurePreset": "linux-clang-asan-ubsan", "output": { "outputOnFailure": true } },
+    { "name": "linux-clang-tsan", "configurePreset": "linux-clang-tsan", "output": { "outputOnFailure": true } },
+    { "name": "linux-clang-fuzz", "configurePreset": "linux-clang-fuzz", "output": { "outputOnFailure": true } }
+  ]
+}

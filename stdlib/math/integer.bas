@@ -41,3 +41,21 @@ EXPORT FUNCTION clamp(value, lower, upper)
         END IF
     END IF
 END FUNCTION
+
+EXPORT FUNCTION sign(value)
+    IF value < 0 THEN
+        RETURN -1
+    END IF
+    IF value > 0 THEN
+        RETURN 1
+    END IF
+    RETURN 0
+END FUNCTION
+
+EXPORT FUNCTION is_even(value)
+    RETURN value % 2 = 0
+END FUNCTION
+
+EXPORT FUNCTION is_odd(value)
+    RETURN value % 2 <> 0
+END FUNCTION

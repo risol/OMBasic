@@ -35,6 +35,9 @@ typedef struct Om_Runtime_Ready_Actor {
     struct Om_Runtime_Ready_Actor *next;
 } Om_Runtime_Ready_Actor;
 
+struct Om_Runtime_Network_Resource;
+struct Om_Runtime_Process_Resource;
+
 typedef struct Om_Runtime_Actor_Thread {
 #if defined(_WIN32)
     HANDLE native;
@@ -84,23 +87,72 @@ struct Om_Runtime_Actor_System {
     Om_Runtime_Ready_Actor *ready_tail;
     uint64_t next_actor_id;
     size_t outstanding_messages;
+    uint64_t next_console_read_sequence;
+    uint64_t serving_console_read_sequence;
+    uint64_t next_logger_sequence;
+    uint64_t serving_logger_sequence;
+    size_t logger_pending_bytes;
+    struct Om_Runtime_Network_Resource *network_resources;
+    struct Om_Runtime_Process_Resource *process_resources;
+    uint64_t next_network_resource_id;
+    uint64_t next_process_resource_id;
+    size_t active_network_resources;
+    size_t pending_network_resources;
+    size_t active_process_resources;
+    size_t pending_process_resources;
+    bool network_initialized;
     size_t running_handlers;
     bool stopping;
     bool shutting_down;
     bool joined;
 };
 
+typedef struct Om_Runtime_System_Text_Item {
+    char *bytes;
+    size_t length;
+} Om_Runtime_System_Text_Item;
+
 typedef struct Om_Runtime_System_Task {
     Om_Runtime_Actor_System *system;
     Om_System_Message_Id operation;
     uint64_t recipient_id;
+    uint64_t sequence;
+    int64_t requested_length;
     char *path;
+    char *working_directory;
     uint8_t *input_bytes;
     size_t input_length;
+    bool input_oversized;
     uint8_t *result_bytes;
     size_t result_length;
+    size_t result_capacity;
+    uint8_t console_pending_bytes[4];
+    size_t console_pending_count;
+    size_t console_pending_index;
+    uint16_t console_pending_high_surrogate;
+    bool console_input;
+    const char *error_code;
+    bool result_boolean;
+    int64_t result_integer;
+    Om_Runtime_System_Text_Item *result_items;
+    size_t result_item_count;
+    size_t result_item_capacity;
+    size_t result_item_bytes;
     Om_Execution_Context *payload_context;
     void *payload_object;
+    struct Om_Runtime_Network_Resource *network_resource;
+    struct Om_Runtime_Network_Resource *network_listener;
+    struct Om_Runtime_Process_Resource *process_resource;
+    char **process_arguments;
+    size_t process_argument_count;
+    char **process_environment;
+    size_t process_environment_count;
+    bool process_replace_environment;
+    bool process_resource_is_new;
+    bool process_resource_registered;
+    bool network_resource_is_new;
+    bool network_resource_registered;
+    int network_backlog;
 } Om_Runtime_System_Task;
 
 void actor_mutex_lock(Om_Runtime_Actor_System *system);
@@ -146,5 +198,34 @@ Om_Status actor_send_timer_locked(
     Om_Execution_Context *source_context,
     const Om_Runtime_Type_Descriptor *message_type,
     const void *message_object);
+Om_Status actor_send_clock_locked(
+    Om_Runtime_Actor_System *system,
+    Om_Execution_Context *source_context,
+    const Om_Runtime_Type_Descriptor *message_type,
+    const void *message_object);
+Om_Status actor_send_secure_random_locked(
+    Om_Runtime_Actor_System *system,
+    Om_Execution_Context *source_context,
+    const Om_Runtime_Type_Descriptor *message_type,
+    const void *message_object);
+Om_Status actor_send_logger_locked(
+    Om_Runtime_Actor_System *system,
+    Om_Execution_Context *source_context,
+    const Om_Runtime_Type_Descriptor *message_type,
+    const void *message_object);
+Om_Status actor_send_network_locked(
+    Om_Runtime_Actor_System *system,
+    Om_Execution_Context *source_context,
+    const Om_Runtime_Type_Descriptor *message_type,
+    const void *message_object);
+Om_Status actor_send_process_locked(
+    Om_Runtime_Actor_System *system,
+    Om_Execution_Context *source_context,
+    const Om_Runtime_Type_Descriptor *message_type,
+    const void *message_object);
+void actor_network_shutdown_locked(Om_Runtime_Actor_System *system);
+void actor_network_destroy(Om_Runtime_Actor_System *system);
+void actor_process_shutdown_locked(Om_Runtime_Actor_System *system);
+void actor_process_destroy(Om_Runtime_Actor_System *system);
 
 #endif

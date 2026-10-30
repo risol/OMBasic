@@ -31,29 +31,25 @@ jobs:
           sudo apt-get install -y clang-23 lld-23 llvm-23-dev llvm-23-tools libclang-rt-23-dev libpolly-23-dev
           python -m pip install --upgrade "cmake>=4.2"
       - name: Configure Release build
-        run: >-
-          cmake -S . -B build/linux-release -G Ninja
-          -DCMAKE_BUILD_TYPE=Release
-          -DCMAKE_C_COMPILER=clang-23
-          -DCMAKE_CXX_COMPILER=clang++-23
-          -DLLVM_DIR=/usr/lib/llvm-23/lib/cmake/llvm
-          -DOM_LLVM_TARGET_TRIPLE=x86_64-unknown-linux-gnu
+        env:
+          LLVM_ROOT: /usr/lib/llvm-23
+        run: cmake --preset linux-clang-release
       - name: Build
-        run: cmake --build build/linux-release --parallel 2
+        run: cmake --build --preset linux-clang-release --parallel 2
       - name: Architecture and language checks
         run: |
           python tools/architecture_check/check.py --root .
           python tools/spec_check/check.py --root .
       - name: Run CTest release gates
-        run: ctest --test-dir build/linux-release --output-on-failure
+        run: ctest --preset linux-clang-release
       - name: Build and run Hello World
         run: |
-          build/linux-release/ombasic check examples/hello/main.bas
-          build/linux-release/ombasic build examples/hello/main.bas -o "$RUNNER_TEMP/hello"
+          build/linux/clang/release/ombasic check examples/hello/main.bas
+          build/linux/clang/release/ombasic build examples/hello/main.bas -o "$RUNNER_TEMP/hello"
           "$RUNNER_TEMP/hello"
       - name: Stage the SDK with build provenance
         run: |
-          cmake --install build/linux-release --prefix build/package/linux
+          cmake --install build/linux/clang/release --prefix build/package/linux
           python tools/release/write_provenance.py \
             --root . \
             --output build/package/linux/share/ombasic/release-provenance.json \

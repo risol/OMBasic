@@ -801,12 +801,16 @@ static Om_Status initialize_system_message_builtin(
     Om_Infer_Context *context,
     const Om_Symbol *symbol)
 {
-    Om_Type_Id parameters[3] = {OM_TYPE_ID_INVALID, OM_TYPE_ID_INVALID,
-                                OM_TYPE_ID_INVALID};
+    Om_Type_Id parameters[6] = {OM_TYPE_ID_INVALID, OM_TYPE_ID_INVALID,
+        OM_TYPE_ID_INVALID, OM_TYPE_ID_INVALID, OM_TYPE_ID_INVALID,
+        OM_TYPE_ID_INVALID};
     size_t parameter_count = 0;
     Om_Type_Id string_type = OM_TYPE_ID_INVALID;
     Om_Type_Id unit_type = OM_TYPE_ID_INVALID;
     Om_Type_Id int_type = OM_TYPE_ID_INVALID;
+    Om_Type_Id bool_type = OM_TYPE_ID_INVALID;
+    Om_Type_Id string_list_type = OM_TYPE_ID_INVALID;
+    Om_Type_Id integer_list_type = OM_TYPE_ID_INVALID;
     Om_Status status = get_primitive_type(context, OM_TYPE_STRING,
                                           &string_type);
     if (status == OM_STATUS_OK) {
@@ -815,13 +819,82 @@ static Om_Status initialize_system_message_builtin(
     if (status == OM_STATUS_OK) {
         status = get_primitive_type(context, OM_TYPE_INT, &int_type);
     }
+    if (status == OM_STATUS_OK) {
+        status = get_primitive_type(context, OM_TYPE_BOOL, &bool_type);
+    }
+    if (status == OM_STATUS_OK) {
+        status = om_type_store_list(&context->type_store, string_type,
+                                    &string_list_type);
+    }
+    if (status == OM_STATUS_OK) {
+        status = om_type_store_list(&context->type_store, int_type,
+                                    &integer_list_type);
+    }
 
     const bool console_write = symbol->builtin_id
         == OM_BUILTIN_SYSTEM_MESSAGE_CONSOLE_WRITE;
+    const bool console_read_line = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_CONSOLE_READ_LINE;
     const bool file_read = symbol->builtin_id
         == OM_BUILTIN_SYSTEM_MESSAGE_FILE_READ;
     const bool file_write = symbol->builtin_id
         == OM_BUILTIN_SYSTEM_MESSAGE_FILE_WRITE;
+    const bool file_append = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_FILE_APPEND;
+    const bool file_exists = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_FILE_EXISTS;
+    const bool file_delete = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_FILE_DELETE;
+    const bool directory_create = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_DIRECTORY_CREATE;
+    const bool directory_list = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_DIRECTORY_LIST;
+    const bool clock_monotonic = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_CLOCK_MONOTONIC_NOW;
+    const bool clock_utc = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_CLOCK_UTC_NOW;
+    const bool secure_random_bytes = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_SECURE_RANDOM_BYTES;
+    const bool logger_write = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_LOGGER_WRITE;
+    const bool logger_flush = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_LOGGER_FLUSH;
+    const bool tcp_listen = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_TCP_LISTEN;
+    const bool tcp_connect = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_TCP_CONNECT;
+    const bool tcp_accept = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_TCP_ACCEPT;
+    const bool tcp_send = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_TCP_SEND;
+    const bool tcp_receive = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_TCP_RECEIVE;
+    const bool tcp_close = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_TCP_CLOSE;
+    const bool process_spawn = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_PROCESS_SPAWN;
+    const bool process_write = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_PROCESS_WRITE_STDIN;
+    const bool process_close_stdin = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_PROCESS_CLOSE_STDIN;
+    const bool process_read_stdout = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_PROCESS_READ_STDOUT;
+    const bool process_read_stderr = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_PROCESS_READ_STDERR;
+    const bool process_terminate = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_PROCESS_TERMINATE;
+    const bool process_wait = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_PROCESS_WAIT;
+    const bool udp_connect = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_UDP_CONNECT;
+    const bool udp_send = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_UDP_SEND;
+    const bool udp_receive = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_UDP_RECEIVE;
+    const bool udp_close = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_UDP_CLOSE;
+    const bool file_stat = symbol->builtin_id
+        == OM_BUILTIN_SYSTEM_MESSAGE_FILE_STAT;
     const bool timer_after = symbol->builtin_id
         == OM_BUILTIN_SYSTEM_MESSAGE_TIMER_AFTER;
     const bool file_read_completed = symbol->builtin_id
@@ -829,7 +902,15 @@ static Om_Status initialize_system_message_builtin(
     Om_Type_Id reply_protocol = OM_TYPE_ID_INVALID;
     Om_Type_Id reply_ref = OM_TYPE_ID_INVALID;
     if (status == OM_STATUS_OK
-        && (console_write || file_read || file_write || timer_after)) {
+        && (console_write || console_read_line || file_read || file_write || file_append
+            || file_exists || file_delete || directory_create || directory_list
+            || file_stat || clock_monotonic || clock_utc
+            || secure_random_bytes || logger_write || logger_flush
+            || tcp_listen || tcp_connect || tcp_accept || tcp_send
+            || tcp_receive || tcp_close || process_spawn || process_write
+            || process_close_stdin || process_read_stdout || process_read_stderr
+            || process_terminate || process_wait || udp_connect || udp_send
+            || udp_receive || udp_close || timer_after)) {
         status = om_type_store_variable(&context->type_store, 1,
                                         &reply_protocol);
         if (status == OM_STATUS_OK) {
@@ -841,6 +922,9 @@ static Om_Status initialize_system_message_builtin(
         parameters[0] = string_type;
         parameters[1] = reply_ref;
         parameter_count = 2;
+    } else if (status == OM_STATUS_OK && console_read_line) {
+        parameters[0] = reply_ref;
+        parameter_count = 1;
     } else if (status == OM_STATUS_OK && file_read) {
         parameters[0] = string_type;
         parameters[1] = reply_ref;
@@ -850,6 +934,116 @@ static Om_Status initialize_system_message_builtin(
         parameters[1] = string_type;
         parameters[2] = reply_ref;
         parameter_count = 3;
+    } else if (status == OM_STATUS_OK && file_append) {
+        parameters[0] = string_type;
+        parameters[1] = string_type;
+        parameters[2] = reply_ref;
+        parameter_count = 3;
+    } else if (status == OM_STATUS_OK && file_exists) {
+        parameters[0] = string_type;
+        parameters[1] = reply_ref;
+        parameter_count = 2;
+    } else if (status == OM_STATUS_OK && file_delete) {
+        parameters[0] = string_type;
+        parameters[1] = reply_ref;
+        parameter_count = 2;
+    } else if (status == OM_STATUS_OK && directory_create) {
+        parameters[0] = string_type;
+        parameters[1] = reply_ref;
+        parameter_count = 2;
+    } else if (status == OM_STATUS_OK && directory_list) {
+        parameters[0] = string_type;
+        parameters[1] = reply_ref;
+        parameter_count = 2;
+    } else if (status == OM_STATUS_OK && file_stat) {
+        parameters[0] = string_type;
+        parameters[1] = reply_ref;
+        parameter_count = 2;
+    } else if (status == OM_STATUS_OK && (clock_monotonic || clock_utc)) {
+        parameters[0] = reply_ref;
+        parameter_count = 1;
+    } else if (status == OM_STATUS_OK && secure_random_bytes) {
+        parameters[0] = int_type;
+        parameters[1] = reply_ref;
+        parameter_count = 2;
+    } else if (status == OM_STATUS_OK && logger_write) {
+        parameters[0] = string_type;
+        parameters[1] = reply_ref;
+        parameter_count = 2;
+    } else if (status == OM_STATUS_OK && logger_flush) {
+        parameters[0] = reply_ref;
+        parameter_count = 1;
+    } else if (status == OM_STATUS_OK && tcp_listen) {
+        parameters[0] = string_type;
+        parameters[1] = int_type;
+        parameters[2] = int_type;
+        parameters[3] = reply_ref;
+        parameter_count = 4;
+    } else if (status == OM_STATUS_OK && tcp_connect) {
+        parameters[0] = string_type;
+        parameters[1] = int_type;
+        parameters[2] = reply_ref;
+        parameter_count = 3;
+    } else if (status == OM_STATUS_OK && tcp_accept) {
+        parameters[0] = int_type;
+        parameters[1] = reply_ref;
+        parameter_count = 2;
+    } else if (status == OM_STATUS_OK && tcp_send) {
+        parameters[0] = int_type;
+        parameters[1] = integer_list_type;
+        parameters[2] = reply_ref;
+        parameter_count = 3;
+    } else if (status == OM_STATUS_OK && tcp_receive) {
+        parameters[0] = int_type;
+        parameters[1] = int_type;
+        parameters[2] = reply_ref;
+        parameter_count = 3;
+    } else if (status == OM_STATUS_OK && tcp_close) {
+        parameters[0] = int_type;
+        parameters[1] = reply_ref;
+        parameter_count = 2;
+    } else if (status == OM_STATUS_OK && process_spawn) {
+        parameters[0] = string_type;
+        parameters[1] = string_list_type;
+        parameters[2] = bool_type;
+        parameters[3] = string_list_type;
+        parameters[4] = string_type;
+        parameters[5] = reply_ref;
+        parameter_count = 6;
+    } else if (status == OM_STATUS_OK && process_write) {
+        parameters[0] = int_type;
+        parameters[1] = integer_list_type;
+        parameters[2] = reply_ref;
+        parameter_count = 3;
+    } else if (status == OM_STATUS_OK && (process_close_stdin || process_terminate || process_wait)) {
+        parameters[0] = int_type;
+        parameters[1] = reply_ref;
+        parameter_count = 2;
+    } else if (status == OM_STATUS_OK && (process_read_stdout || process_read_stderr)) {
+        parameters[0] = int_type;
+        parameters[1] = int_type;
+        parameters[2] = reply_ref;
+        parameter_count = 3;
+    } else if (status == OM_STATUS_OK && udp_connect) {
+        parameters[0] = string_type;
+        parameters[1] = int_type;
+        parameters[2] = int_type;
+        parameters[3] = reply_ref;
+        parameter_count = 4;
+    } else if (status == OM_STATUS_OK && udp_send) {
+        parameters[0] = int_type;
+        parameters[1] = integer_list_type;
+        parameters[2] = reply_ref;
+        parameter_count = 3;
+    } else if (status == OM_STATUS_OK && udp_receive) {
+        parameters[0] = int_type;
+        parameters[1] = int_type;
+        parameters[2] = reply_ref;
+        parameter_count = 3;
+    } else if (status == OM_STATUS_OK && udp_close) {
+        parameters[0] = int_type;
+        parameters[1] = reply_ref;
+        parameter_count = 2;
     } else if (status == OM_STATUS_OK && timer_after) {
         Om_Type_Id message_type = OM_TYPE_ID_INVALID;
         status = om_type_store_variable(&context->type_store, 1,
@@ -869,8 +1063,52 @@ static Om_Status initialize_system_message_builtin(
         parameter_count = 3;
     } else if (status == OM_STATUS_OK) {
         Om_Type_Id result_type = OM_TYPE_ID_INVALID;
-        Om_Type_Id result_value = file_read_completed
-            ? string_type : unit_type;
+        const bool file_exists_completed = symbol->builtin_id
+            == OM_BUILTIN_SYSTEM_MESSAGE_FILE_EXISTS_COMPLETED;
+        const bool directory_list_completed = symbol->builtin_id
+            == OM_BUILTIN_SYSTEM_MESSAGE_DIRECTORY_LIST_COMPLETED;
+        const bool file_stat_completed = symbol->builtin_id
+            == OM_BUILTIN_SYSTEM_MESSAGE_FILE_STAT_COMPLETED;
+        const bool console_read_line_completed = symbol->builtin_id
+            == OM_BUILTIN_SYSTEM_MESSAGE_CONSOLE_READ_LINE_COMPLETED;
+        const bool secure_random_bytes_completed = symbol->builtin_id
+            == OM_BUILTIN_SYSTEM_MESSAGE_SECURE_RANDOM_BYTES_COMPLETED;
+        const bool tcp_receive_completed = symbol->builtin_id
+            == OM_BUILTIN_SYSTEM_MESSAGE_TCP_RECEIVE_COMPLETED;
+        const bool tcp_handle_completed = symbol->builtin_id
+            == OM_BUILTIN_SYSTEM_MESSAGE_TCP_LISTEN_COMPLETED
+            || symbol->builtin_id
+                == OM_BUILTIN_SYSTEM_MESSAGE_TCP_CONNECT_COMPLETED
+            || symbol->builtin_id
+                == OM_BUILTIN_SYSTEM_MESSAGE_TCP_ACCEPT_COMPLETED
+            || symbol->builtin_id
+                == OM_BUILTIN_SYSTEM_MESSAGE_TCP_SEND_COMPLETED;
+        const bool process_integer_completed = symbol->builtin_id
+            == OM_BUILTIN_SYSTEM_MESSAGE_PROCESS_SPAWN_COMPLETED
+            || symbol->builtin_id == OM_BUILTIN_SYSTEM_MESSAGE_PROCESS_WRITE_STDIN_COMPLETED
+            || symbol->builtin_id == OM_BUILTIN_SYSTEM_MESSAGE_PROCESS_WAIT_COMPLETED;
+        const bool process_bytes_completed = symbol->builtin_id
+            == OM_BUILTIN_SYSTEM_MESSAGE_PROCESS_READ_STDOUT_COMPLETED
+            || symbol->builtin_id == OM_BUILTIN_SYSTEM_MESSAGE_PROCESS_READ_STDERR_COMPLETED;
+        const bool udp_receive_completed = symbol->builtin_id
+            == OM_BUILTIN_SYSTEM_MESSAGE_UDP_RECEIVE_COMPLETED;
+        const bool udp_integer_completed = symbol->builtin_id
+            == OM_BUILTIN_SYSTEM_MESSAGE_UDP_CONNECT_COMPLETED
+            || symbol->builtin_id == OM_BUILTIN_SYSTEM_MESSAGE_UDP_SEND_COMPLETED;
+        const bool clock_completed = symbol->builtin_id
+            == OM_BUILTIN_SYSTEM_MESSAGE_CLOCK_MONOTONIC_NOW_COMPLETED
+            || symbol->builtin_id
+                == OM_BUILTIN_SYSTEM_MESSAGE_CLOCK_UTC_NOW_COMPLETED;
+        Om_Type_Id result_value = file_read_completed || console_read_line_completed
+            ? string_type
+            : secure_random_bytes_completed ? integer_list_type
+            : tcp_receive_completed || process_bytes_completed || udp_receive_completed ? integer_list_type
+            : process_integer_completed || udp_integer_completed ? int_type
+            : tcp_handle_completed ? int_type
+            : file_exists_completed ? bool_type
+            : clock_completed ? int_type
+            : directory_list_completed || file_stat_completed
+                ? string_list_type : unit_type;
         status = make_system_result_type(context, result_value, &result_type);
         parameters[0] = result_type;
         parameter_count = 1;

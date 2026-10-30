@@ -47,3 +47,31 @@ END FUNCTION
 EXPORT FUNCTION object_get(source, key)
     RETURN json_object_get(source, key)
 END FUNCTION
+
+EXPORT FUNCTION string_value(source)
+    RETURN json_string_value(source)
+END FUNCTION
+
+EXPORT FUNCTION object_length(source)
+    RETURN json_object_length(source)
+END FUNCTION
+
+EXPORT FUNCTION object_keys(source)
+    RETURN json_object_keys(source)
+END FUNCTION
+
+EXPORT FUNCTION int64_valid(source)
+    RETURN json_int64_valid(source)
+END FUNCTION
+
+EXPORT FUNCTION int64_value(source)
+    RETURN json_int64_value(source)
+END FUNCTION
+
+EXPORT FUNCTION float64_valid(source)
+    RETURN json_float64_valid(source)
+END FUNCTION
+
+EXPORT FUNCTION float64_value(source)
+    RETURN json_float64_value(source)
+END FUNCTION

@@ -5,6 +5,12 @@ FUNCTION scalar_length(value: CString BORROWED): CInt64
     NONBLOCKING
 END FUNCTION
 
+FUNCTION scalar_byte_length(value: CString BORROWED): CInt64
+    SYMBOL "om_runtime_text_byte_length"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
 FUNCTION scalar_starts_with(value: CString BORROWED, prefix: CString BORROWED): CBool
     SYMBOL "om_runtime_text_starts_with"
     EFFECT PURE
@@ -31,6 +37,13 @@ END FUNCTION
 
 FUNCTION scalar_slice(value: CString BORROWED, start_index: CInt64, scalar_count: CInt64): CString
     SYMBOL "om_runtime_text_slice"
+    EFFECT PURE
+    NONBLOCKING
+    RETURNS OWNED WITH release_text
+END FUNCTION
+
+FUNCTION scalar_trim(value: CString BORROWED, mode: CInt64): CString
+    SYMBOL "om_runtime_text_trim"
     EFFECT PURE
     NONBLOCKING
     RETURNS OWNED WITH release_text

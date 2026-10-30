@@ -1,0 +1,19 @@
+NATIVE "ombasic_runtime"
+FUNCTION math_float(operation: CInt64, x: CDouble, y: CDouble): CDouble
+    SYMBOL "om_runtime_math_float"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION math_is_finite(value: CDouble): CBool
+    SYMBOL "om_runtime_math_is_finite"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+
+FUNCTION math_is_nan(value: CDouble): CBool
+    SYMBOL "om_runtime_math_is_nan"
+    EFFECT PURE
+    NONBLOCKING
+END FUNCTION
+END NATIVE

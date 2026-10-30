@@ -38,6 +38,13 @@ bool om_runtime_json_array_index_valid(const char *source, int64_t index);
 char *om_runtime_json_array_get(const char *source, int64_t index);
 bool om_runtime_json_object_key_valid(const char *source, const char *key);
 char *om_runtime_json_object_get(const char *source, const char *key);
+char *om_runtime_json_string_value(const char *source);
+int64_t om_runtime_json_object_length(const char *source);
+char *om_runtime_json_object_keys(const char *source);
+bool om_runtime_json_int64_valid(const char *source);
+int64_t om_runtime_json_int64_value(const char *source);
+bool om_runtime_json_float64_valid(const char *source);
+double om_runtime_json_float64_value(const char *source);
 void om_runtime_json_release(void *value);
 
 #endif

@@ -13,8 +13,7 @@ ACTOR Writer
 END ACTOR
 
 ACTION main()
-    first_writer = SPAWN Writer
-    second_writer = SPAWN Writer
-    SEND Console, Console_Write(console_api.write_payload("console actor"), first_writer)
-    SEND Console, Console_Write(console_api.write_line_payload("console actor"), second_writer)
+    writer_ref = SPAWN Writer
+    payload = console_api.write_payload("console actor") + console_api.write_line_payload("console actor")
+    SEND Console, Console_Write(payload, writer_ref)
 END ACTION

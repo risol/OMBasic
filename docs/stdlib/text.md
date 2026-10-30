@@ -9,6 +9,7 @@ implemented safely with current OMBasic syntax:
 | `text.equals(left, right)` | Compares complete String values. |
 | `text.is_empty(value)` | Returns whether the value is the empty string. |
 | `text.length(value)` | Counts Unicode scalar values, not UTF-8 bytes or grapheme clusters. |
+| `text.byte_length(value)` | Counts the UTF-8 bytes used by the String. |
 | `text.starts_with(value, prefix)` | Tests an exact Unicode scalar prefix. |
 | `text.ends_with(value, suffix)` | Tests an exact Unicode scalar suffix. |
 | `text.find(value, needle)` | Returns the first scalar index, or `-1` if absent. An empty needle matches at index 0. |
@@ -16,6 +17,10 @@ implemented safely with current OMBasic syntax:
 | `text.slice(value, start_index, scalar_count)` | Copies the requested scalar range. Invalid ranges raise a recoverable Native runtime fault. |
 | `text.split(value, separator)` | Returns a `List<String>`, preserves empty fields, and splits into scalars when the separator is empty. |
 | `text.join(values, separator)` | Joins a `List<String>` with the separator between items; an empty list returns the empty string. |
+| `text.replace(value, needle, replacement)` | Replaces non-overlapping matches left to right; an empty needle leaves the value unchanged. |
+| `text.trim(value)` | Removes Unicode White_Space scalars from both ends. |
+| `text.trim_start(value)` | Removes Unicode White_Space scalars from the start. |
+| `text.trim_end(value)` | Removes Unicode White_Space scalars from the end. |
 
 Splitting on an empty separator returns one String per Unicode scalar; splitting
 an empty value on a non-empty separator returns one empty field. Repeated and
@@ -29,8 +34,9 @@ Float, Bool, String, and Null using the rules in Language Standard §37.
 
 ## Current String and Native boundary
 
-OMBasic String values contain valid UTF-8. Text indexes count Unicode scalar
-values; they do not count UTF-8 bytes or grapheme clusters. The API does not
+OMBasic String values contain valid UTF-8. `text.length` and text indexes count
+Unicode scalar values; `text.byte_length` counts UTF-8 bytes. Neither count is
+a grapheme-cluster count. The API does not
 normalize strings, so canonically equivalent but differently encoded scalar
 sequences compare and search as distinct values.
 
