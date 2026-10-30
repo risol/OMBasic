@@ -887,12 +887,32 @@ bool om_runtime_test_lists(void)
         RUNTIME_ASSERT(value.integer == expected_top[index]);
     }
     RUNTIME_ASSERT(om_runtime_list_stable_order(context, roots[0],
+        integer_keys, 1, 0, 0, &roots[8]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_length(context, roots[8], &length)
+                   == OM_STATUS_OK && length == 0);
+    RUNTIME_ASSERT(om_runtime_list_stable_order(context, roots[0],
         integer_keys, 1, UINT64_C(1), INT64_MAX, &roots[3]) == OM_STATUS_OK);
     const int64_t expected_descending[] = {4, 2, 3, 2, 2};
     for (size_t index = 0; index < 5; ++index) {
         RUNTIME_ASSERT(om_runtime_list_get(context, roots[3], index, &value)
                        == OM_STATUS_OK);
         RUNTIME_ASSERT(value.integer == expected_descending[index]);
+    }
+    RUNTIME_ASSERT(om_runtime_list_stable_order(context, roots[0],
+        integer_keys, 1, 0, INT64_MAX, &roots[9]) == OM_STATUS_OK);
+    for (int64_t take = 0; take <= 5; ++take) {
+        RUNTIME_ASSERT(om_runtime_list_stable_order(context, roots[0],
+            integer_keys, 1, 0, take, &roots[8]) == OM_STATUS_OK);
+        RUNTIME_ASSERT(om_runtime_list_length(context, roots[8], &length)
+                       == OM_STATUS_OK && length == (size_t)take);
+        for (size_t index = 0; index < (size_t)take; ++index) {
+            Om_Runtime_Value expected = {0};
+            RUNTIME_ASSERT(om_runtime_list_get(context, roots[9], index,
+                &expected) == OM_STATUS_OK);
+            RUNTIME_ASSERT(om_runtime_list_get(context, roots[8], index,
+                &value) == OM_STATUS_OK);
+            RUNTIME_ASSERT(value.integer == expected.integer);
+        }
     }
     RUNTIME_ASSERT(om_runtime_list_create(context, &TEST_STRING_LIST_TYPE,
         &roots[4]) == OM_STATUS_OK);

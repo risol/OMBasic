@@ -35,6 +35,8 @@ def expected_diagnostic_matches(actual: dict[str, Any],
                                 expected: dict[str, Any]) -> bool:
     if actual.get("code") != expected.get("code"):
         return False
+    if "message" in expected and actual.get("message") != expected["message"]:
+        return False
     span = expected.get("primary_span", {})
     actual_range = actual.get("range", {})
     actual_start = actual_range.get("start", {})

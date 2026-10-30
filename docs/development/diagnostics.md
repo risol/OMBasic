@@ -27,6 +27,11 @@ Diagnostics are part of the compiler's public behavior. Invalid source must prod
 | E0206 | A comparison expression chains more than one comparison operator. |
 | E0207 | A standalone expression statement is not a call. |
 | E0208 | Parsing hit its recovery or nesting safety limit. |
+| E0209 | A Query ended without its required `SELECT` clause. |
+| E0210 | Query clauses appear outside the required fixed order. |
+| E0211 | A Query contains more than one `ORDER BY` clause. |
+| E0212 | A Query contains more than one `TAKE` clause. |
+| E0213 | A Query order key omits its required direction. |
 | E0301 | A name or qualified module member cannot be resolved. |
 | E0302 | An imported module member exists but is private. |
 | E0303 | A declaration repeats a name in the same scope. |
@@ -41,6 +46,10 @@ Diagnostics are part of the compiler's public behavior. Invalid source must prod
 | E0501 | A Function or Actor state initializer has a forbidden effect, or WATCH/STOP appears outside an Actor receive handler. |
 | E0601 | A SEND target has an unknown Actor protocol or does not accept the Message. |
 | E0701 | A Message payload contains a value that cannot be serialized. |
+| E1201 | A Query source does not have type `List<T>`. |
+| E1202 | A Query `WHERE` expression does not have type `Bool`. |
+| E1203 | A Query `TAKE` expression does not have type `Int`. |
+| E1204 | A Query `ORDER BY` key does not have a supported ordering type (`Int` or `String`). |
 
 Code ranges are grouped by compiler stage. A code is never reused for a different meaning. Wording may improve while code and primary-span behavior remain stable.
 

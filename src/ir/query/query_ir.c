@@ -166,7 +166,7 @@ Om_Status om_query_plan_verify(const Om_Hir_Project *hir,
 {
     if (hir == NULL || plan == NULL || hir->owned_storage == NULL
         || plan->owned_storage == NULL || plan->operators == NULL
-        || plan->operator_count < 3) {
+        || plan->operator_count < 2) {
         return OM_STATUS_INVALID_ARGUMENT;
     }
     const Om_Hir_Node *query = query_node(hir, plan->query_node_id);
@@ -192,23 +192,48 @@ Om_Status om_query_plan_verify(const Om_Hir_Project *hir,
             return OM_STATUS_INVALID_ARGUMENT;
         }
         if (operation->kind == OM_QUERY_OPERATOR_FILTER) {
-            if (phase != 0 || operation_node->kind != OM_HIR_QUERY_WHERE) {
+            const Om_Hir_Node *operand = operation_node->child_count == 1
+                ? om_hir_child_at(hir, operation_node, 0) : NULL;
+            if (phase != 0 || operation_node->kind != OM_HIR_QUERY_WHERE
+                || operand == NULL
+                || operand->id.value != operation->expression_id.value
+                || operation->descending) {
                 return OM_STATUS_INVALID_ARGUMENT;
             }
         } else if (operation->kind == OM_QUERY_OPERATOR_ORDER_KEY) {
-            if (phase > 1 || operation_node->kind != OM_HIR_QUERY_ORDER_KEY) {
+            const Om_Hir_Node *operand = operation_node->child_count == 1
+                ? om_hir_child_at(hir, operation_node, 0) : NULL;
+            const bool descending = (operation_node->flags
+                & OM_HIR_FLAG_QUERY_DESCENDING) != 0;
+            if (phase > 1 || operation_node->kind != OM_HIR_QUERY_ORDER_KEY
+                || operand == NULL
+                || operand->id.value != operation->expression_id.value
+                || operation->descending != descending) {
                 return OM_STATUS_INVALID_ARGUMENT;
             }
             phase = 1;
             saw_order = true;
         } else if (operation->kind == OM_QUERY_OPERATOR_TAKE) {
-            if (phase > 2 || saw_take || operation_node->kind != OM_HIR_QUERY_TAKE) {
+            const Om_Hir_Node *operand = operation_node->child_count == 1
+                ? om_hir_child_at(hir, operation_node, 0) : NULL;
+            if (phase > 2 || saw_take
+                || operation_node->kind != OM_HIR_QUERY_TAKE
+                || operand == NULL
+                || operand->id.value != operation->expression_id.value
+                || operation->descending) {
                 return OM_STATUS_INVALID_ARGUMENT;
             }
             phase = 2;
             saw_take = true;
         } else if (operation->kind == OM_QUERY_OPERATOR_PROJECT) {
-            if (phase > 3 || operation_node->kind != OM_HIR_QUERY_SELECT) {
+            const Om_Hir_Node *operand = operation_node->child_count == 1
+                ? om_hir_child_at(hir, operation_node, 0) : NULL;
+            if (phase > 3 || operation_node->kind != OM_HIR_QUERY_SELECT
+                || operand == NULL
+                || operand->id.value != operation->expression_id.value
+                || operation->expression_id.value
+                    != plan->select_expression_id.value
+                || operation->descending) {
                 return OM_STATUS_INVALID_ARGUMENT;
             }
             phase = 3;

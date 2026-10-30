@@ -42,6 +42,9 @@ typedef struct Om_Cli_Diagnostic_List {
     Om_Tooling_Diagnostic *items;
     size_t length;
     size_t capacity;
+    char **owned_messages;
+    size_t owned_message_count;
+    size_t owned_message_capacity;
 } Om_Cli_Diagnostic_List;
 
 static Om_Status read_stdin_source(uint8_t **bytes, size_t *length)
@@ -648,6 +651,30 @@ static Om_Status push_diagnostic(Om_Cli_Diagnostic_List *list,
     return OM_STATUS_OK;
 }
 
+static Om_Status own_diagnostic_message(Om_Cli_Diagnostic_List *list,
+                                        char *message)
+{
+    if (list == NULL || message == NULL) {
+        return OM_STATUS_INVALID_ARGUMENT;
+    }
+    if (list->owned_message_count == list->owned_message_capacity) {
+        const size_t capacity = list->owned_message_capacity == 0
+            ? 8 : list->owned_message_capacity * 2;
+        if (capacity < list->owned_message_capacity) {
+            return OM_STATUS_OVERFLOW;
+        }
+        char **messages = om_realloc_array(list->owned_messages, capacity,
+                                           sizeof(*messages));
+        if (messages == NULL) {
+            return OM_STATUS_OUT_OF_MEMORY;
+        }
+        list->owned_messages = messages;
+        list->owned_message_capacity = capacity;
+    }
+    list->owned_messages[list->owned_message_count++] = message;
+    return OM_STATUS_OK;
+}
+
 static const char *lex_message(Om_Lex_Diagnostic_Code code)
 {
     switch (code) {
@@ -681,6 +708,16 @@ static const char *parse_message(Om_Parse_Diagnostic_Code code)
         return "A standalone expression statement must be a call.";
     case OM_PARSE_DIAGNOSTIC_E0208:
         return "Parser recovery or nesting safety limit was reached.";
+    case OM_PARSE_DIAGNOSTIC_E0209:
+        return "Query requires exactly one SELECT clause before END QUERY.";
+    case OM_PARSE_DIAGNOSTIC_E0210:
+        return "Query clauses must follow WHERE*, ORDER BY?, TAKE?, SELECT.";
+    case OM_PARSE_DIAGNOSTIC_E0211:
+        return "Query can contain only one ORDER BY clause.";
+    case OM_PARSE_DIAGNOSTIC_E0212:
+        return "Query can contain only one TAKE clause.";
+    case OM_PARSE_DIAGNOSTIC_E0213:
+        return "Every Query ORDER BY key must specify ASCENDING or DESCENDING.";
     default:
         return "Syntax error.";
     }
@@ -721,9 +758,72 @@ static const char *type_message(Om_Type_Inference_Diagnostic_Code code)
         return "Native callback must bind to a unique Message with matching fields and be registered inside an Actor RECEIVE.";
     case OM_TYPE_INFERENCE_DIAGNOSTIC_E0404:
         return "Result type parameters cannot be inferred from this context.";
+    case OM_TYPE_INFERENCE_DIAGNOSTIC_QUERY_SOURCE_NOT_LIST:
+        return "Query source must have type List<T>.";
+    case OM_TYPE_INFERENCE_DIAGNOSTIC_QUERY_WHERE_NOT_BOOL:
+        return "Query WHERE expression must have type Bool.";
+    case OM_TYPE_INFERENCE_DIAGNOSTIC_QUERY_TAKE_NOT_INT:
+        return "Query TAKE expression must have type Int.";
+    case OM_TYPE_INFERENCE_DIAGNOSTIC_QUERY_ORDER_TYPE_UNSUPPORTED:
+        return "Query ORDER BY keys must have type Int or String.";
     default:
         return "Type inference error.";
     }
+}
+
+static Om_Status detailed_type_message(Om_Cli_Diagnostic_List *list,
+                                       const Om_Type_Inference_Result *result,
+                                       const Om_Resolution_Result *resolution,
+                                       const Om_Type_Inference_Diagnostic *item,
+                                       Om_String_View *message)
+{
+    const char *format = NULL;
+    const char *fallback = type_message(item->code);
+    switch (item->code) {
+    case OM_TYPE_INFERENCE_DIAGNOSTIC_QUERY_SOURCE_NOT_LIST:
+        format = "Query source has type %s; expected List<T>.";
+        break;
+    case OM_TYPE_INFERENCE_DIAGNOSTIC_QUERY_WHERE_NOT_BOOL:
+        format = "Query WHERE expression has type %s; expected Bool.";
+        break;
+    case OM_TYPE_INFERENCE_DIAGNOSTIC_QUERY_TAKE_NOT_INT:
+        format = "Query TAKE expression has type %s; expected Int.";
+        break;
+    case OM_TYPE_INFERENCE_DIAGNOSTIC_QUERY_ORDER_TYPE_UNSUPPORTED:
+        format = "Query ORDER BY key has type %s; expected Int or String.";
+        break;
+    default:
+        *message = literal_view(fallback);
+        return OM_STATUS_OK;
+    }
+
+    Om_Tooling_String actual = {0};
+    Om_Status status = om_tooling_type_to_string(&result->type_store,
+                                                 resolution,
+                                                 item->actual_type, &actual);
+    if (status != OM_STATUS_OK) {
+        *message = literal_view(fallback);
+        return OM_STATUS_OK;
+    }
+    const int length = snprintf(NULL, 0, format, actual.data);
+    if (length < 0 || (size_t)length == SIZE_MAX) {
+        om_tooling_string_destroy(&actual);
+        return OM_STATUS_OVERFLOW;
+    }
+    char *owned = om_alloc((size_t)length + 1);
+    if (owned == NULL) {
+        om_tooling_string_destroy(&actual);
+        return OM_STATUS_OUT_OF_MEMORY;
+    }
+    (void)snprintf(owned, (size_t)length + 1, format, actual.data);
+    om_tooling_string_destroy(&actual);
+    status = own_diagnostic_message(list, owned);
+    if (status != OM_STATUS_OK) {
+        om_free(owned);
+        return status;
+    }
+    *message = (Om_String_View){owned, (size_t)length};
+    return OM_STATUS_OK;
 }
 
 static const char *semantic_message(Om_Semantic_Analysis_Diagnostic_Code code)
@@ -810,6 +910,7 @@ static Om_Status collect_resolution_diagnostics(Om_Cli_Diagnostic_List *list,
 
 static Om_Status collect_type_diagnostics(Om_Cli_Diagnostic_List *list,
                                           const Om_Module_Project *project,
+                                          const Om_Resolution_Result *resolution,
                                           const Om_Type_Inference_Result *result)
 {
     Om_Status status = OM_STATUS_OK;
@@ -820,10 +921,16 @@ static Om_Status collect_type_diagnostics(Om_Cli_Diagnostic_List *list,
         if (source == NULL) {
             return OM_STATUS_INVALID_ARGUMENT;
         }
+        Om_String_View message = {0};
+        status = detailed_type_message(list, result, resolution, item,
+                                        &message);
+        if (status != OM_STATUS_OK) {
+            return status;
+        }
         status = push_diagnostic(list, (Om_Tooling_Diagnostic){
             .stage = {"type", 4},
             .code = literal_view(om_type_inference_diagnostic_code_name(item->code)),
-            .message = literal_view(type_message(item->code)),
+            .message = message,
             .source = source,
             .span = item->span
         });
@@ -1668,7 +1775,8 @@ int om_cli_compile_command(int argc, char **argv, const char *command)
                                            &resolution, &inference);
         }
         if (status == OM_STATUS_OK && resolution.diagnostic_count == 0) {
-            status = collect_type_diagnostics(&diagnostics, &project, &inference);
+            status = collect_type_diagnostics(&diagnostics, &project,
+                                             &resolution, &inference);
         }
         if (status == OM_STATUS_OK && resolution.diagnostic_count == 0
             && inference.diagnostic_count == 0) {
@@ -1721,6 +1829,10 @@ cleanup:
     om_free(all_native_imports);
     om_free(module_native_imports);
     om_free(entry_source);
+    for (size_t index = 0; index < diagnostics.owned_message_count; ++index) {
+        om_free(diagnostics.owned_messages[index]);
+    }
+    om_free(diagnostics.owned_messages);
     om_free(diagnostics.items);
     om_interface_cache_destroy(&interfaces);
     om_semantic_analysis_result_destroy(&semantic);

@@ -368,17 +368,16 @@ Om_Status om_runtime_list_stable_order(
     const size_t count = values->length;
     const size_t requested = take_count <= 0 ? 0
         : (uint64_t)take_count < (uint64_t)count ? (size_t)take_count : count;
-    size_t *indices = count == 0 ? NULL
-        : om_alloc_array(count, sizeof(*indices));
-    size_t *scratch = count == 0 ? NULL
-        : om_alloc_array(count, sizeof(*scratch));
-    if (count != 0 && (indices == NULL || scratch == NULL)) {
+    const bool use_top_k = requested != 0 && requested < count;
+    const size_t ordering_capacity = requested;
+    size_t *indices = ordering_capacity == 0 ? NULL
+        : om_alloc_array(ordering_capacity, sizeof(*indices));
+    size_t *scratch = ordering_capacity == 0 ? NULL
+        : om_alloc_array(ordering_capacity, sizeof(*scratch));
+    if (ordering_capacity != 0 && (indices == NULL || scratch == NULL)) {
         status = OM_STATUS_OUT_OF_MEMORY;
     }
-    for (size_t index = 0; status == OM_STATUS_OK && index < count; ++index) {
-        indices[index] = index;
-    }
-    if (status == OM_STATUS_OK && requested != 0 && requested < count) {
+    if (status == OM_STATUS_OK && use_top_k) {
         size_t heap_count = 0;
         for (size_t index = 0; status == OM_STATUS_OK && index < count; ++index) {
             status = top_k_indices(&order, indices, &heap_count, requested, index);
@@ -387,7 +386,12 @@ Om_Status om_runtime_list_stable_order(
             status = stable_merge_indices(&order, indices, scratch, heap_count);
         }
     } else if (status == OM_STATUS_OK && requested > 1) {
-        status = stable_merge_indices(&order, indices, scratch, count);
+        for (size_t index = 0; status == OM_STATUS_OK && index < requested; ++index) {
+            indices[index] = index;
+        }
+        status = stable_merge_indices(&order, indices, scratch, requested);
+    } else if (status == OM_STATUS_OK && requested == 1) {
+        indices[0] = 0;
     }
     if (status == OM_STATUS_OK) {
         status = om_runtime_list_create(context, values_object->fields.type,

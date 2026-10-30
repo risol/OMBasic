@@ -45,6 +45,10 @@ int main(void)
         "ELSE\r\n"
         "RETURN -b\r\n"
         "END IF\r\n"
+        "selected=QUERY item IN [1,2]\r\n"
+        "WHERE item>0\r\n"
+        "SELECT item\r\n"
+        "END QUERY\r\n"
         "END FUNCTION";
     static const char expected_fragment[] =
         "''' doc for main\n"
@@ -55,6 +59,10 @@ int main(void)
         "    ELSE\n"
         "        RETURN -b\n"
         "    END IF\n"
+        "    selected = QUERY item IN [1, 2]\n"
+        "        WHERE item > 0\n"
+        "        SELECT item\n"
+        "    END QUERY\n"
         "END FUNCTION\n";
     Om_Source_Text first_source = {0};
     Om_Source_Text second_source = {0};

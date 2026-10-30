@@ -961,12 +961,12 @@ static Om_Status parse_query_expression(Om_Parser *parser,
             break;
         }
         if (at_keyword(parser, OM_KEYWORD_END)) {
-            (void)advance(parser);
+            const Om_Token *end_clause = advance(parser);
             end = peek(parser);
             status = expect_keyword(parser, OM_KEYWORD_QUERY);
             if (status == OM_STATUS_OK && !saw_select) {
-                status = add_diagnostic(parser, OM_PARSE_DIAGNOSTIC_E0202,
-                    end->span, OM_TOKEN_KEYWORD, OM_KEYWORD_SELECT);
+                status = add_diagnostic(parser, OM_PARSE_DIAGNOSTIC_E0209,
+                    end_clause->span, OM_TOKEN_KEYWORD, OM_KEYWORD_SELECT);
             }
             if (status == OM_STATUS_OK) {
                 saw_end = true;
@@ -976,7 +976,7 @@ static Om_Status parse_query_expression(Om_Parser *parser,
         if (at_keyword(parser, OM_KEYWORD_WHERE)) {
             const Om_Token *clause = advance(parser);
             if (phase > 0 || saw_select) {
-                status = add_diagnostic(parser, OM_PARSE_DIAGNOSTIC_E0202,
+                status = add_diagnostic(parser, OM_PARSE_DIAGNOSTIC_E0210,
                     clause->span, OM_TOKEN_KEYWORD, OM_KEYWORD_ORDER);
             }
             Om_Ast_Node_Id expression = OM_AST_NODE_ID_INVALID;
@@ -1006,8 +1006,11 @@ static Om_Status parse_query_expression(Om_Parser *parser,
         if (at_keyword(parser, OM_KEYWORD_ORDER)) {
             const Om_Token *clause = advance(parser);
             if (phase > 1 || saw_order || saw_select) {
-                status = add_diagnostic(parser, OM_PARSE_DIAGNOSTIC_E0202,
-                    clause->span, OM_TOKEN_KEYWORD, OM_KEYWORD_TAKE);
+                status = add_diagnostic(parser,
+                    saw_order ? OM_PARSE_DIAGNOSTIC_E0211
+                              : OM_PARSE_DIAGNOSTIC_E0210,
+                    clause->span, OM_TOKEN_KEYWORD,
+                    saw_order ? OM_KEYWORD_TAKE : OM_KEYWORD_ORDER);
             }
             if (status == OM_STATUS_OK) {
                 status = expect_keyword(parser, OM_KEYWORD_BY);
@@ -1037,7 +1040,7 @@ static Om_Status parse_query_expression(Om_Parser *parser,
                 } else if (match_keyword(parser, OM_KEYWORD_DESCENDING)) {
                     key_flags |= OM_AST_FLAG_QUERY_DESCENDING;
                 } else {
-                    status = add_diagnostic(parser, OM_PARSE_DIAGNOSTIC_E0202,
+                    status = add_diagnostic(parser, OM_PARSE_DIAGNOSTIC_E0213,
                         peek(parser)->span, OM_TOKEN_KEYWORD,
                         OM_KEYWORD_ASCENDING);
                 }
@@ -1088,8 +1091,11 @@ static Om_Status parse_query_expression(Om_Parser *parser,
         if (at_keyword(parser, OM_KEYWORD_TAKE)) {
             const Om_Token *clause = advance(parser);
             if (phase > 2 || saw_take || saw_select) {
-                status = add_diagnostic(parser, OM_PARSE_DIAGNOSTIC_E0202,
-                    clause->span, OM_TOKEN_KEYWORD, OM_KEYWORD_SELECT);
+                status = add_diagnostic(parser,
+                    saw_take ? OM_PARSE_DIAGNOSTIC_E0212
+                             : OM_PARSE_DIAGNOSTIC_E0210,
+                    clause->span, OM_TOKEN_KEYWORD,
+                    saw_take ? OM_KEYWORD_SELECT : OM_KEYWORD_TAKE);
             }
             if (status == OM_STATUS_OK) {
                 phase = 2;
@@ -1122,7 +1128,7 @@ static Om_Status parse_query_expression(Om_Parser *parser,
         if (at_keyword(parser, OM_KEYWORD_SELECT)) {
             const Om_Token *clause = advance(parser);
             if (phase > 3 || saw_select) {
-                status = add_diagnostic(parser, OM_PARSE_DIAGNOSTIC_E0202,
+                status = add_diagnostic(parser, OM_PARSE_DIAGNOSTIC_E0210,
                     clause->span, OM_TOKEN_KEYWORD, OM_KEYWORD_END);
             }
             phase = 3;
@@ -1152,7 +1158,7 @@ static Om_Status parse_query_expression(Om_Parser *parser,
             continue;
         }
 
-        status = add_diagnostic(parser, OM_PARSE_DIAGNOSTIC_E0202,
+        status = add_diagnostic(parser, OM_PARSE_DIAGNOSTIC_E0210,
             peek(parser)->span, OM_TOKEN_KEYWORD, OM_KEYWORD_END);
         if (status == OM_STATUS_OK) {
             while (!at_kind(parser, OM_TOKEN_NEWLINE)
@@ -2307,6 +2313,11 @@ const char *om_parse_diagnostic_code_name(Om_Parse_Diagnostic_Code code)
     case OM_PARSE_DIAGNOSTIC_E0206: return "E0206";
     case OM_PARSE_DIAGNOSTIC_E0207: return "E0207";
     case OM_PARSE_DIAGNOSTIC_E0208: return "E0208";
+    case OM_PARSE_DIAGNOSTIC_E0209: return "E0209";
+    case OM_PARSE_DIAGNOSTIC_E0210: return "E0210";
+    case OM_PARSE_DIAGNOSTIC_E0211: return "E0211";
+    case OM_PARSE_DIAGNOSTIC_E0212: return "E0212";
+    case OM_PARSE_DIAGNOSTIC_E0213: return "E0213";
     default: return "E0000";
     }
 }

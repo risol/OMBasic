@@ -187,8 +187,11 @@ static bool needs_space_before(const Om_Lexer_Result *lexed, size_t index)
         }
         return false;
     }
-    if (current->kind == OM_TOKEN_LEFT_BRACKET
-        || current->kind == OM_TOKEN_LEFT_BRACE
+    if (current->kind == OM_TOKEN_LEFT_BRACKET) {
+        return previous->kind == OM_TOKEN_KEYWORD
+            && previous->keyword == OM_KEYWORD_IN;
+    }
+    if (current->kind == OM_TOKEN_LEFT_BRACE
         || current->kind == OM_TOKEN_INTERPOLATION_START) {
         return false;
     }
@@ -255,7 +258,8 @@ static bool line_opens_block(const Om_Token *first, const Om_Token *second)
                || head->keyword == OM_KEYWORD_IF
                || head->keyword == OM_KEYWORD_WHILE
                || head->keyword == OM_KEYWORD_FOR
-               || head->keyword == OM_KEYWORD_SELECT);
+               || head->keyword == OM_KEYWORD_SELECT
+               || head->keyword == OM_KEYWORD_QUERY);
 }
 
 static Om_Status append_gap_comment(Om_Format_Buffer *output,
@@ -304,6 +308,7 @@ Om_Status om_formatter_format(
     Om_Format_Buffer output = {0};
     Om_Status status = OM_STATUS_OK;
     size_t indentation = 0;
+    size_t query_depth = 0;
     size_t consecutive_newlines = 0;
     bool line_started = false;
     bool current_line_opens = false;
@@ -394,6 +399,24 @@ Om_Status om_formatter_format(
         if (line_first != token && line_second == NULL) {
             line_second = token;
             current_line_opens = line_opens_block(line_first, line_second);
+            if (query_depth != 0 && line_first->kind == OM_TOKEN_KEYWORD
+                && line_first->keyword == OM_KEYWORD_SELECT) {
+                current_line_opens = false;
+            }
+        }
+        if (token->kind == OM_TOKEN_KEYWORD
+            && token->keyword == OM_KEYWORD_QUERY) {
+            if (index != 0 && lexed->tokens[index - 1].kind == OM_TOKEN_KEYWORD
+                && lexed->tokens[index - 1].keyword == OM_KEYWORD_END) {
+                if (query_depth != 0) --query_depth;
+            } else if (query_depth != SIZE_MAX) {
+                ++query_depth;
+            }
+        }
+        if (token->kind == OM_TOKEN_KEYWORD
+            && token->keyword == OM_KEYWORD_QUERY && index != 0
+            && lexed->tokens[index - 1].kind == OM_TOKEN_EQUAL) {
+            current_line_opens = true;
         }
         if (token->kind == OM_TOKEN_DOC_COMMENT) {
             status = append_bytes(&output, token->lexeme.data, token->lexeme.length);

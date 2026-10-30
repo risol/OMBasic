@@ -74,6 +74,13 @@ static Om_Status unify_at(Om_Infer_Context *context,
                           Om_Source_Span span,
                           Om_Type_Id expected,
                           Om_Type_Id actual);
+static Om_Status unify_query_at(
+    Om_Infer_Context *context,
+    Om_Type_Inference_Diagnostic_Code code,
+    Om_Module_Id module,
+    Om_Source_Span span,
+    Om_Type_Id expected,
+    Om_Type_Id actual);
 static Om_Status add_type_diagnostic(Om_Infer_Context *context,
                                      Om_Type_Inference_Diagnostic_Code code,
                                      Om_Module_Id module,
@@ -126,7 +133,7 @@ static Om_Status infer_query(Om_Infer_Context *context,
         }
     } else if (status == OM_STATUS_OK) {
         status = add_type_diagnostic(context,
-            OM_TYPE_INFERENCE_DIAGNOSTIC_E0401, module,
+            OM_TYPE_INFERENCE_DIAGNOSTIC_QUERY_SOURCE_NOT_LIST, module,
             source_node != NULL ? source_node->span : node->span,
             OM_TYPE_ID_INVALID, source_type);
         if (status == OM_STATUS_OK) {
@@ -164,7 +171,9 @@ static Om_Status infer_query(Om_Infer_Context *context,
                                       &expression_type);
             if (status == OM_STATUS_OK
                 && clause->kind == OM_AST_QUERY_WHERE) {
-                status = unify_at(context, module,
+                status = unify_query_at(context,
+                    OM_TYPE_INFERENCE_DIAGNOSTIC_QUERY_WHERE_NOT_BOOL,
+                    module,
                     expression != NULL ? expression->span : clause->span,
                     context->type_store.primitive_types[OM_TYPE_BOOL],
                     expression_type);
@@ -174,7 +183,9 @@ static Om_Status infer_query(Om_Infer_Context *context,
                 }
             } else if (status == OM_STATUS_OK
                        && clause->kind == OM_AST_QUERY_TAKE) {
-                status = unify_at(context, module,
+                status = unify_query_at(context,
+                    OM_TYPE_INFERENCE_DIAGNOSTIC_QUERY_TAKE_NOT_INT,
+                    module,
                     expression != NULL ? expression->span : clause->span,
                     context->type_store.primitive_types[OM_TYPE_INT],
                     expression_type);
@@ -226,7 +237,8 @@ static Om_Status infer_query(Om_Infer_Context *context,
                     && key_view.kind != OM_TYPE_INT
                     && key_view.kind != OM_TYPE_STRING) {
                     status = add_type_diagnostic(context,
-                        OM_TYPE_INFERENCE_DIAGNOSTIC_E0401, module,
+                        OM_TYPE_INFERENCE_DIAGNOSTIC_QUERY_ORDER_TYPE_UNSUPPORTED,
+                        module,
                         expression != NULL ? expression->span : key->span,
                         OM_TYPE_ID_INVALID, key_type);
                 }
@@ -328,6 +340,24 @@ static Om_Status set_unit_node_type(Om_Infer_Context *context,
 {
     const Om_Type_Id unit = context->type_store.primitive_types[OM_TYPE_UNIT];
     return set_node_type(context, module, node_id, unit);
+}
+
+static Om_Status unify_query_at(
+    Om_Infer_Context *context,
+    Om_Type_Inference_Diagnostic_Code code,
+    Om_Module_Id module,
+    Om_Source_Span span,
+    Om_Type_Id expected,
+    Om_Type_Id actual)
+{
+    bool unified = false;
+    Om_Status status = om_type_store_unify(&context->type_store,
+                                           expected, actual, &unified);
+    if (status == OM_STATUS_OK && !unified) {
+        status = add_type_diagnostic(context, code, module, span,
+                                     expected, actual);
+    }
+    return status;
 }
 
 static bool block_guarantees_return(const Om_Infer_Context *context,
@@ -4048,6 +4078,10 @@ const char *om_type_inference_diagnostic_code_name(
     case OM_TYPE_INFERENCE_DIAGNOSTIC_E0402: return "E0402";
     case OM_TYPE_INFERENCE_DIAGNOSTIC_E0403: return "E0403";
     case OM_TYPE_INFERENCE_DIAGNOSTIC_E0404: return "E0404";
+    case OM_TYPE_INFERENCE_DIAGNOSTIC_QUERY_SOURCE_NOT_LIST: return "E1201";
+    case OM_TYPE_INFERENCE_DIAGNOSTIC_QUERY_WHERE_NOT_BOOL: return "E1202";
+    case OM_TYPE_INFERENCE_DIAGNOSTIC_QUERY_TAKE_NOT_INT: return "E1203";
+    case OM_TYPE_INFERENCE_DIAGNOSTIC_QUERY_ORDER_TYPE_UNSUPPORTED: return "E1204";
     default: return "E0000";
     }
 }

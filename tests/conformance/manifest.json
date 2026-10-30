@@ -3095,9 +3095,31 @@
       }
     },
     {
+      "id": "query-actor-receive-state-read",
+      "rules": [
+        "OM-12.04",
+        "OM-12.03",
+        "OM-17.01"
+      ],
+      "kind": "run",
+      "source": "24_query/actor_receive.bas",
+      "tags": [
+        "type",
+        "runtime",
+        "actor"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "selected=4|count=2\n"
+        }
+      }
+    },
+    {
       "id": "query-fused-scan-filter-take",
       "rules": [
-        "OM-12.01",
+        "OM-12.04",
         "OM-12.03"
       ],
       "kind": "run",
@@ -3110,7 +3132,115 @@
         "compiles": true,
         "run": {
           "exit_code": 0,
-          "stdout": "selected=4|empty=0|order=4,2,2,3|count=4\n"
+          "stdout": "identity=1|selected=4|empty=0|order=4,2,2,3|count=4|projected=5\n"
+        }
+      }
+    },
+    {
+      "id": "query-ordered-projection-gc-roots",
+      "rules": ["OM-12.04"],
+      "kind": "run",
+      "source": "24_query/gc_roots.bas",
+      "tags": ["type", "runtime"],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "count=96|first=127|last=32\n"
+        }
+      }
+    },
+    {
+      "id": "query-source-must-be-list",
+      "rules": ["OM-12.04"],
+      "kind": "compile",
+      "source": "24_query/source_not_list.bas",
+      "tags": ["type", "diagnostic"],
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E1201",
+          "message": "Query source has type Int; expected List<T>.",
+          "primary_span": {
+            "line": 2,
+            "start_byte_column": 29,
+            "end_byte_column": 30
+          }
+        }
+      }
+    },
+    {
+      "id": "query-where-must-be-bool",
+      "rules": ["OM-12.04"],
+      "kind": "compile",
+      "source": "24_query/where_not_bool.bas",
+      "tags": ["type", "diagnostic"],
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E1202",
+          "message": "Query WHERE expression has type Int; expected Bool.",
+          "primary_span": {
+            "line": 4,
+            "start_byte_column": 15,
+            "end_byte_column": 19
+          }
+        }
+      }
+    },
+    {
+      "id": "query-take-must-be-int",
+      "rules": ["OM-12.04"],
+      "kind": "compile",
+      "source": "24_query/take_not_int.bas",
+      "tags": ["type", "diagnostic"],
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E1203",
+          "message": "Query TAKE expression has type Float; expected Int.",
+          "primary_span": {
+            "line": 4,
+            "start_byte_column": 14,
+            "end_byte_column": 17
+          }
+        }
+      }
+    },
+    {
+      "id": "query-order-key-type-supported",
+      "rules": ["OM-12.04"],
+      "kind": "compile",
+      "source": "24_query/order_type_unsupported.bas",
+      "tags": ["type", "diagnostic"],
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E1204",
+          "message": "Query ORDER BY key has type Bool; expected Int or String.",
+          "primary_span": {
+            "line": 4,
+            "start_byte_column": 18,
+            "end_byte_column": 26
+          }
+        }
+      }
+    },
+    {
+      "id": "query-effects-must-be-pure",
+      "rules": ["OM-12.04"],
+      "kind": "compile",
+      "source": "24_query/effect_not_allowed.bas",
+      "tags": ["effect", "diagnostic"],
+      "expect": {
+        "compiles": false,
+        "diagnostic": {
+          "code": "E0501",
+          "primary_span": {
+            "line": 4,
+            "start_byte_column": 9,
+            "end_byte_column": 27
+          }
         }
       }
     },

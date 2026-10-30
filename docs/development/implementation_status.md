@@ -1,5 +1,23 @@
 # Native AOT implementation status
 
+## Query v0.1 — implementation in progress
+
+- The compiler supports eager `List<T>` Query expressions with ordered clauses,
+  Query-local range bindings, typed filters/take/order/projection, purity checks,
+  typed HIR, a verified temporary QIR plan, fused scan lowering, stable ordering,
+  bounded Top-K selection, and delayed ordered projection. Query expressions
+  compile inside Actor `RECEIVE` handlers without scheduler changes.
+- Query diagnostics E1201–E1204 identify invalid source, WHERE, TAKE, and order
+  key types and include actual/expected types. Language semantics and Actor
+  responsiveness guidance are in `docs/language/query.md`, ADR-0042, and the
+  language standard.
+- Windows Release Query runtime conformance, all Linux Release CTest cases
+  except the pre-fix reserved-keyword audit, and the targeted Windows/Linux
+  syntax, semantic, HIR, MIR, runtime-list, and formatter tests have passed.
+  The reserved-keyword audit now passes after adding the Query keywords to the
+  language-standard table. Sanitizer, parser-fuzzer, and performance benchmark
+  gates remain outstanding; this feature is not yet complete.
+
 ## Foundation libraries — implementation in progress
 
 - Added Number parsing/formatting, UTF-8 String/Buffer conversion, binary File

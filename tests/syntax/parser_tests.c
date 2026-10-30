@@ -735,6 +735,70 @@ bool om_test_parser_query_expression(void)
                   && (ascending->flags & OM_AST_FLAG_QUERY_DESCENDING) == 0);
     PARSER_ASSERT(ast_child_node(&parsed.ast, query, 4)->kind == OM_AST_QUERY_TAKE);
     PARSER_ASSERT(ast_child_node(&parsed.ast, query, 5)->kind == OM_AST_QUERY_SELECT);
+    om_parser_result_destroy(&parsed);
+    om_lexer_result_destroy(&lexed);
+    om_source_text_destroy(&source);
+    static const char *const invalid_queries[] = {
+        "ACTION main()\n"
+        "    result = QUERY item IN items\n"
+        "        WHERE item > 0\n"
+        "    END QUERY\n"
+        "END ACTION\n",
+        "ACTION main()\n"
+        "    result = QUERY item IN items\n"
+        "        ORDER BY item\n"
+        "        SELECT item\n"
+        "    END QUERY\n"
+        "END ACTION\n",
+        "ACTION main()\n"
+        "    result = QUERY item IN items\n"
+        "        SELECT item\n"
+        "        TAKE 1\n"
+        "    END QUERY\n"
+        "END ACTION\n",
+        "ACTION main()\n"
+        "    result = QUERY item IN items\n"
+        "        ORDER BY item ASCENDING\n"
+        "        ORDER BY item DESCENDING\n"
+        "        SELECT item\n"
+        "    END QUERY\n"
+        "END ACTION\n",
+        "ACTION main()\n"
+        "    result = QUERY item IN items\n"
+        "        TAKE 1\n"
+        "        TAKE 2\n"
+        "        SELECT item\n"
+        "    END QUERY\n"
+        "END ACTION\n",
+        "ACTION main()\n"
+        "    result = QUERY item IN items\n"
+        "        TAKE 1\n"
+        "        ORDER BY item ASCENDING\n"
+        "        SELECT item\n"
+        "    END QUERY\n"
+        "END ACTION\n",
+    };
+    static const Om_Parse_Diagnostic_Code expected_codes[] = {
+        OM_PARSE_DIAGNOSTIC_E0209,
+        OM_PARSE_DIAGNOSTIC_E0213,
+        OM_PARSE_DIAGNOSTIC_E0210,
+        OM_PARSE_DIAGNOSTIC_E0211,
+        OM_PARSE_DIAGNOSTIC_E0212,
+        OM_PARSE_DIAGNOSTIC_E0210,
+    };
+    for (size_t index = 0;
+         index < sizeof(invalid_queries) / sizeof(invalid_queries[0]);
+         ++index) {
+        const size_t length = strlen(invalid_queries[index]);
+        PARSER_ASSERT(scan_and_parse(&source, &lexed, &parsed,
+            (const uint8_t *)invalid_queries[index], length,
+            (uint32_t)(42 + index)));
+        PARSER_ASSERT(parsed.diagnostic_count == 1
+            && parsed.diagnostics[0].code == expected_codes[index]);
+        om_parser_result_destroy(&parsed);
+        om_lexer_result_destroy(&lexed);
+        om_source_text_destroy(&source);
+    }
     passed = true;
 cleanup:
     om_parser_result_destroy(&parsed);

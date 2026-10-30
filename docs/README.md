@@ -3,6 +3,7 @@
 ## Language and development
 
 - [Language standard](../OMBasic-Language-Standard.md)
+- [Query expressions](language/query.md)
 - [Native AOT refactor plan](../OMBasic-Native-AOT-Refactor-Plan.md)
 - [Contribution guide](contributing.md)
 - [Testing strategy](development/testing_strategy.md)

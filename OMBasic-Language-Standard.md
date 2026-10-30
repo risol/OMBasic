@@ -479,8 +479,11 @@ ACTION
 ACTOR
 AND
 AT
+ASCENDING
+BY
 BREAK
 CASE
+DESCENDING
 CONTINUE
 ELSE
 END
@@ -497,6 +500,8 @@ NATIVE
 NOT
 NULL
 OR
+ORDER
+QUERY
 RECORD
 RECEIVE
 RETURN
@@ -505,6 +510,7 @@ SELF
 SEND
 SPAWN
 STOP
+TAKE
 STEP
 THEN
 TO
@@ -512,6 +518,7 @@ TRUE
 TRY
 VAR
 WATCH
+WHERE
 WHILE
 WITH
 ```
@@ -1028,6 +1035,17 @@ Map 的 key/value 类型必须静态确定。
 普通 List/Map 值默认不可变。
 
 允许实现提供局部可变容器，但必须通过显式可变构造或 `VAR` 能力暴露，且不得跨 Actor 共享普通可变容器。
+
+### 12.4 Query 表达式
+**OM-12.04 — Query 表达式**
+
+`QUERY item IN source` 只接受 `List<T>`，并立即同步计算出新的 `List<R>`。Source expression 恰好求值一次。Query 固定使用零个或多个 `WHERE`、可选的 `ORDER BY`、可选的 `TAKE`，最后一个必需的 `SELECT`，并以 `END QUERY` 结束。`WHERE` 必须为 `Bool`，`TAKE` 必须为 `Int`，排序键仅支持 `Int` 和 `String`，且每个排序键必须写明 `ASCENDING` 或 `DESCENDING`。
+
+多个 `WHERE` 按源码顺序执行，不得重排。无排序时保留源顺序，`TAKE` 返回最先通过过滤的项目；`TAKE` 小于或等于零得到空列表。排序为稳定排序，同键项目保持源顺序。带排序的 `TAKE` 必须与稳定全排序后取前 K 项的结果相同。带排序的 Query 在最终行顺序确定后才计算 `SELECT`；排序键在每个通过所有过滤的项目上求值。
+
+Query 是 eager、同步、纯数据计算，不创建迭代器、不挂起、不调度 Actor 工作。Clause expressions 可读取词法绑定和当前 Actor 的状态，但不得修改状态、发送消息、创建 Actor、执行 I/O、调用 Action 或挂起。Query 在当前函数或 Actor handler 中运行；长 Query 会占用该执行上下文。
+
+Query 的 compiler plan 引用 typed HIR expressions，不回转为 AST。无排序 Query 将过滤融合到一次扫描中；`ORDER BY ... TAKE K` 使用有界 Top-K 选择，再对入选项稳定排序。
 
 ---
 

@@ -70,6 +70,7 @@ set_property(CACHE OM_SANITIZER PROPERTY STRINGS none address-undefined thread m
 option(OM_BUILD_FUZZERS
     "Build Clang libFuzzer targets (requires OM_SANITIZER=address-undefined)"
     OFF)
+option(OM_BUILD_BENCHMARKS "Build manual performance benchmark executables" OFF)
 
 include(CTest)
 include(cmake/Warnings.cmake)
@@ -1074,6 +1075,14 @@ if(BUILD_TESTING)
                 "${CMAKE_C_COMPILER}"
                 "$<TARGET_FILE_DIR:ombasic_test_native_math>")
     set_tests_properties(install_sdk_relocation PROPERTIES TIMEOUT 180)
+endif()
+
+if(OM_BUILD_BENCHMARKS)
+    add_executable(ombasic_query_order_benchmark
+        tests/bench/query_order_benchmark.c)
+    target_link_libraries(ombasic_query_order_benchmark PRIVATE
+        ombasic::runtime ombasic::runtime_services
+        ombasic_warnings ombasic_sanitizers)
 endif()
 
 if(OM_BUILD_FUZZERS)

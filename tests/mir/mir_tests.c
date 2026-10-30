@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "ombasic/ir/hir.h"
+#include "ombasic/ir/query_ir.h"
 #include "ombasic/ir/specialize.h"
 #include "ombasic/module_graph/module_loader.h"
 #include "ombasic/native/metadata/omi.h"
@@ -926,6 +927,117 @@ cleanup:
     return passed;
 }
 
+static bool test_query_plan_dump_is_deterministic(void)
+{
+    static const char fixture_root[] = OM_MIR_TEST_FIXTURE_ROOT;
+    static const char entry_path[] = "query.bas";
+    Om_Source_Root root = {0};
+    Om_Module_Project source_project = {0};
+    Om_Lexer_Result lexed = {0};
+    Om_Parser_Result parsed = {0};
+    Om_Resolution_Result resolution = {0};
+    Om_Type_Inference_Result inference = {0};
+    Om_Semantic_Analysis_Result semantic = {0};
+    Om_Hir_Project hir = {0};
+    Om_Hir_Specialization specialization = {0};
+    Om_Mir_Project mir = {0};
+    Om_Mir_Lowering_Result lowering = {0};
+    Om_Mir_Verification_Result verification = {0};
+    Om_Query_Plan plan = {0};
+    Om_Query_Text first_dump = {0};
+    Om_Query_Text second_dump = {0};
+    Om_Mir_Text mir_dump = {0};
+    bool passed = true;
+
+    MIR_ASSERT(om_source_root_init(&root,
+        (Om_String_View){fixture_root, sizeof(fixture_root) - 1})
+        == OM_STATUS_OK);
+    MIR_ASSERT(om_module_project_load(&root,
+        (Om_String_View){entry_path, sizeof(entry_path) - 1}, 65536,
+        &source_project) == OM_STATUS_OK);
+    MIR_ASSERT(om_lexer_scan(om_module_project_source(&source_project,
+        (Om_Module_Id){0}), &lexed) == OM_STATUS_OK);
+    MIR_ASSERT(lexed.diagnostic_count == 0);
+    MIR_ASSERT(om_parser_parse(&lexed, &parsed) == OM_STATUS_OK);
+    MIR_ASSERT(parsed.diagnostic_count == 0);
+    MIR_ASSERT(om_name_resolve_project(&source_project, &parsed, 1, NULL,
+        &resolution) == OM_STATUS_OK);
+    MIR_ASSERT(resolution.diagnostic_count == 0);
+    MIR_ASSERT(om_type_infer_project(&source_project, &parsed, 1, &resolution,
+        &inference) == OM_STATUS_OK);
+    MIR_ASSERT(inference.diagnostic_count == 0);
+    MIR_ASSERT(om_semantic_analyze_project(&source_project, &parsed, 1,
+        &resolution, &inference, &semantic) == OM_STATUS_OK);
+    MIR_ASSERT(semantic.diagnostic_count == 0);
+    MIR_ASSERT(om_hir_lower_project(&source_project, &parsed, 1, &resolution,
+        &inference, &semantic, &hir) == OM_STATUS_OK);
+
+    const Om_Hir_Node *query = NULL;
+    for (size_t index = 0; index < hir.node_count; ++index) {
+        if (hir.nodes[index].kind == OM_HIR_QUERY) {
+            query = &hir.nodes[index];
+            break;
+        }
+    }
+    MIR_ASSERT(query != NULL);
+    MIR_ASSERT(om_query_plan_build(&hir, query->id, &plan) == OM_STATUS_OK);
+    MIR_ASSERT(plan.physical_kind == OM_QUERY_PHYSICAL_STABLE_TOP_K);
+    MIR_ASSERT(om_query_plan_verify(&hir, &plan) == OM_STATUS_OK);
+    MIR_ASSERT(om_query_plan_dump(&hir, &plan, &first_dump) == OM_STATUS_OK);
+    MIR_ASSERT(om_query_plan_dump(&hir, &plan, &second_dump) == OM_STATUS_OK);
+    MIR_ASSERT(first_dump.length == second_dump.length
+        && memcmp(first_dump.data, second_dump.data, first_dump.length) == 0);
+    MIR_ASSERT(strstr(first_dump.data, "physical=stable-top-k") != NULL);
+    MIR_ASSERT(strstr(first_dump.data, "op0 scan") != NULL);
+    MIR_ASSERT(strstr(first_dump.data, "op1 filter") != NULL);
+    MIR_ASSERT(strstr(first_dump.data, "op2 filter") != NULL);
+    MIR_ASSERT(strstr(first_dump.data, "op3 order-key") != NULL);
+    MIR_ASSERT(strstr(first_dump.data, "op4 take") != NULL);
+    MIR_ASSERT(strstr(first_dump.data, "op5 project") != NULL);
+
+    MIR_ASSERT(om_hir_specialize_project(&hir, &inference.type_store,
+        &specialization) == OM_STATUS_OK);
+    MIR_ASSERT(specialization.diagnostic_count == 0);
+    MIR_ASSERT(om_mir_lower_project(&hir, &specialization, &mir, &lowering)
+               == OM_STATUS_OK);
+    MIR_ASSERT(lowering.diagnostic_count == 0);
+    MIR_ASSERT(om_mir_verify_project(&mir, &verification) == OM_STATUS_OK);
+    MIR_ASSERT(verification.diagnostic_count == 0);
+    MIR_ASSERT(om_mir_dump(&mir, &mir_dump) == OM_STATUS_OK);
+    size_t list_create_count = 0;
+    size_t stable_order_count = 0;
+    size_t direct_call_count = 0;
+    for (size_t index = 0; index < mir.instruction_count; ++index) {
+        list_create_count += mir.instructions[index].opcode == OM_MIR_LIST_CREATE;
+        stable_order_count += mir.instructions[index].opcode
+            == OM_MIR_LIST_STABLE_ORDER;
+        direct_call_count += mir.instructions[index].opcode == OM_MIR_CALL_DIRECT;
+    }
+    MIR_ASSERT(list_create_count == 4);
+    MIR_ASSERT(stable_order_count == 1);
+    MIR_ASSERT(direct_call_count == 1);
+    MIR_ASSERT(strstr(mir_dump.data, "list-stable-order") != NULL);
+
+cleanup:
+    om_mir_text_destroy(&mir_dump);
+    om_query_text_destroy(&second_dump);
+    om_query_text_destroy(&first_dump);
+    om_query_plan_destroy(&plan);
+    om_mir_verification_result_destroy(&verification);
+    om_mir_lowering_result_destroy(&lowering);
+    om_mir_project_destroy(&mir);
+    om_hir_specialization_destroy(&specialization);
+    om_hir_project_destroy(&hir);
+    om_semantic_analysis_result_destroy(&semantic);
+    om_type_inference_result_destroy(&inference);
+    om_resolution_result_destroy(&resolution);
+    om_parser_result_destroy(&parsed);
+    om_lexer_result_destroy(&lexed);
+    om_module_project_destroy(&source_project);
+    om_source_root_destroy(&root);
+    return passed;
+}
+
 int main(int argc, char **argv)
 {
     if (argc == 2 && strcmp(argv[1], "--update-goldens") == 0) {
@@ -944,7 +1056,8 @@ int main(int argc, char **argv)
         && test_verifier_rejects_blocking_native_handler()
         && test_verifier_rejects_unresolved_function_type()
         && test_hir_lowering_to_verified_mir()
-        && test_actor_hir_lowering_to_verified_mir();
+        && test_actor_hir_lowering_to_verified_mir()
+        && test_query_plan_dump_is_deterministic();
     (void)fprintf(stdout, "MIR construction and verifier tests: %s\n",
                   passed ? "passed" : "failed");
     return passed ? 0 : 1;

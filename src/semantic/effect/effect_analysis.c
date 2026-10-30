@@ -504,6 +504,70 @@ static Om_Status validate_state_initializers(Om_Effect_Scan *scan)
     return OM_STATUS_OK;
 }
 
+static Om_Status validate_query_effects_in_tree(Om_Effect_Scan *scan,
+                                                Om_Module_Id module,
+                                                Om_Ast_Node_Id node_id,
+                                                size_t depth)
+{
+    if (depth >= 256) return OM_STATUS_OVERFLOW;
+    const Om_Ast_Node *node = om_semantic_node(scan->context, module, node_id);
+    if (node == NULL) return OM_STATUS_INVALID_ARGUMENT;
+    if (node->kind == OM_AST_QUERY) {
+        uint32_t effects = (uint32_t)OM_EFFECT_NONE;
+        Om_Status status = compute_tree_effects(scan, module, node_id, true, 0,
+                                                &effects);
+        const uint32_t forbidden = effects
+            & ~((uint32_t)OM_EFFECT_READS_ACTOR_STATE);
+        if (status == OM_STATUS_OK && forbidden != (uint32_t)OM_EFFECT_NONE) {
+            Om_Source_Span effect_span = node->span;
+            bool found_effect_span = false;
+            for (size_t index = 0; !found_effect_span
+                 && index < node->child_count; ++index) {
+                uint32_t child_effects = (uint32_t)OM_EFFECT_NONE;
+                const Om_Ast_Node_Id child_id = om_semantic_child(
+                    scan->context, module, node, index);
+                status = compute_tree_effects(scan, module, child_id, true, 0,
+                                              &child_effects);
+                if (status != OM_STATUS_OK) break;
+                if ((child_effects
+                    & ~((uint32_t)OM_EFFECT_READS_ACTOR_STATE))
+                    != (uint32_t)OM_EFFECT_NONE) {
+                    const Om_Ast_Node *child = om_semantic_node(
+                        scan->context, module, child_id);
+                    if (child != NULL) effect_span = child->span;
+                    found_effect_span = true;
+                }
+            }
+            if (status == OM_STATUS_OK) {
+                status = om_semantic_add_diagnostic(
+                    scan->context, OM_SEMANTIC_ANALYSIS_DIAGNOSTIC_E0501,
+                    module, effect_span, OM_SYMBOL_ID_INVALID);
+            }
+        }
+        if (status != OM_STATUS_OK) return status;
+    }
+    for (size_t index = 0; index < node->child_count; ++index) {
+        const Om_Status status = validate_query_effects_in_tree(
+            scan, module, om_semantic_child(scan->context, module, node, index),
+            depth + 1);
+        if (status != OM_STATUS_OK) return status;
+    }
+    return OM_STATUS_OK;
+}
+
+static Om_Status validate_query_effects(Om_Effect_Scan *scan)
+{
+    for (size_t index = 0; index < scan->context->module_count; ++index) {
+        const Om_Module_Id module = {(uint32_t)index};
+        const Om_Ast *ast = om_semantic_module_ast(scan->context, module);
+        if (ast == NULL) return OM_STATUS_INVALID_ARGUMENT;
+        const Om_Status status = validate_query_effects_in_tree(
+            scan, module, ast->root, 0);
+        if (status != OM_STATUS_OK) return status;
+    }
+    return OM_STATUS_OK;
+}
+
 Om_Status om_effect_analyze_internal(Om_Semantic_Analysis_Context *context)
 {
     if (context == NULL) {
@@ -534,6 +598,9 @@ Om_Status om_effect_analyze_internal(Om_Semantic_Analysis_Context *context)
     }
     if (status == OM_STATUS_OK) {
         status = validate_state_initializers(&scan);
+    }
+    if (status == OM_STATUS_OK) {
+        status = validate_query_effects(&scan);
     }
     om_free(scan.symbol_effects);
     om_vector_destroy(&scan.edges);

@@ -14,6 +14,10 @@ The compression decoder target exercises bounded gzip and zlib-wrapped
 DEFLATE parsing, including gzip optional-header handling and both checksum
 paths.
 
+The syntax parser corpus includes Query v0.1 seeds for the complete clause
+sequence and invalid clause ordering. Run the general syntax fuzzer with this
+corpus so mutations exercise Query-specific parser recovery.
+
 Build with Clang and ASan/UBSan:
 
 ```sh
@@ -30,7 +34,7 @@ Run a fuzzer for a bounded local smoke pass, or give it a saved corpus and a
 longer time budget:
 
 ```sh
-./build/fuzz/ombasic_fuzz_syntax -runs=10000
+./build/fuzz/ombasic_fuzz_syntax tests/fuzz/corpus/syntax -runs=10000
 ./build/fuzz/ombasic_fuzz_metadata -runs=10000
 ./build/fuzz/ombasic_fuzz_import_path -runs=10000
 ./build/fuzz/ombasic_fuzz_distribution -runs=10000
