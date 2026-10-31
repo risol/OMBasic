@@ -1088,6 +1088,14 @@ if(OM_BUILD_BENCHMARKS)
     target_link_libraries(ombasic_query_order_benchmark PRIVATE
         ombasic::runtime ombasic::runtime_services
         ombasic_warnings ombasic_sanitizers)
+
+    add_executable(ombasic_list_update_benchmark
+        tests/bench/list_update_benchmark.c)
+    target_include_directories(ombasic_list_update_benchmark PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/core")
+    target_link_libraries(ombasic_list_update_benchmark PRIVATE
+        ombasic::runtime ombasic::runtime_services
+        ombasic_warnings ombasic_sanitizers)
 endif()
 
 if(OM_BUILD_FUZZERS)

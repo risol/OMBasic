@@ -1032,9 +1032,14 @@ Map 的 key/value 类型必须静态确定。
 **OM-12.03 — 默认不可变**
 
 
-普通 List/Map 值默认不可变。
+List、Map、String 和 Buffer 在语言层具有不可变值语义。程序不能修改已
+存在的集合值；产生更新值的操作返回新的不可变值。OMBasic 0.1 不提供
+公开的可变集合或 builder 类型。
 
-允许实现提供局部可变容器，但必须通过显式可变构造或 `VAR` 能力暴露，且不得跨 Actor 共享普通可变容器。
+实现可以在构造集合时共享、复制、复用或修改尚未发布的内部存储，只要
+程序无法观察到与不可变值语义的差异。存储 identity、地址和 capacity
+不可观察。内部 transient storage 必须在返回、传给调用或放入 Message
+之前 seal。
 
 ### 12.4 Query 表达式
 **OM-12.04 — Query 表达式**
@@ -1046,6 +1051,24 @@ Map 的 key/value 类型必须静态确定。
 Query 是 eager、同步、纯数据计算，不创建迭代器、不挂起、不调度 Actor 工作。Clause expressions 可读取词法绑定和当前 Actor 的状态，但不得修改状态、发送消息、创建 Actor、执行 I/O、调用 Action 或挂起。Query 在当前函数或 Actor handler 中运行；长 Query 会占用该执行上下文。
 
 Query 的 compiler plan 引用 typed HIR expressions，不回转为 AST。无排序 Query 将过滤融合到一次扫描中；`ORDER BY ... TAKE K` 使用有界 Top-K 选择，再对入选项稳定排序。
+
+Query 对外仍然消费 `List<T>` 并产生 `List<R>`。Transient builder、排序候选
+存储和 Top-K 工作区不属于 Query 的公开类型或语义。
+
+### 12.5 不可变 List 更新
+**OM-12.06 — 不可变 List 更新**
+
+`list_set(values, index, replacement)` 返回一个新 List，将指定的零基索引
+替换为 `replacement`。`values` 保持不变。index 必须位于 `0` 到
+`length(values) - 1`；否则触发 List index runtime fault。
+
+`set_range(values, start_index, replacements)` 在新 List 中以
+`replacements` 覆盖等长区间；替换值必须全部位于原 List 的边界内。
+`fill_range(values, start_index, count, replacement)` 在新 List 中重复写入
+`replacement` 共 `count` 次。`replace_range(values, start_index,
+remove_count, replacements)` 从新结果中移除指定区间，并在该位置插入
+`replacements`。三者均要求索引和计数非负，所选源区间必须位于 List 范围内；
+越界时触发 List index runtime fault。它们均保持输入 List 不变。
 
 ---
 

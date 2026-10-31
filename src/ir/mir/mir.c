@@ -1003,11 +1003,222 @@ static const Om_Mir_Function *function_for_instance(
     return NULL;
 }
 
+static bool actor_state_list_load_is_unique(
+    const Om_Mir_Project *project,
+    const Om_Mir_Function *function,
+    const Om_Mir_Instruction *producer)
+{
+    if (project == NULL || function == NULL || producer == NULL
+        || function->kind != OM_MIR_RECEIVE
+        || producer->opcode != OM_MIR_LOAD_FIELD
+        || producer->operand_count != 1
+        || producer->operand_start >= project->operand_count
+        || function->entry_block_id.value >= project->block_count) {
+        return false;
+    }
+    const Om_Mir_Block *entry = &project->blocks[
+        function->entry_block_id.value];
+    if (entry->parameter_count == 0
+        || entry->parameter_start >= project->value_count) {
+        return false;
+    }
+    const Om_Mir_Value_Id state_value_id = {entry->parameter_start};
+    if (project->operands[producer->operand_start].value
+        != state_value_id.value) {
+        return false;
+    }
+    const Om_Mir_Value *state_value = value_at_const(project, state_value_id);
+    Om_Type_Id state_type_id = OM_TYPE_ID_INVALID;
+    Om_Type_View state_type = {0};
+    if (state_value == NULL
+        || resolve_type(project->type_store, state_value->type_id,
+                        &state_type_id) != OM_STATUS_OK
+        || om_type_store_get(project->type_store, state_type_id,
+                             &state_type) != OM_STATUS_OK
+        || state_type.kind != OM_TYPE_RECORD) {
+        return false;
+    }
+    const Om_Mir_Nominal_Descriptor *state_nominal = nominal_for_symbol(
+        project, state_type.nominal_symbol, OM_TYPE_RECORD);
+    if (state_nominal == NULL
+        || !range_is_valid(state_nominal->field_start,
+                           state_nominal->field_count, project->field_count)) {
+        return false;
+    }
+    const Om_Mir_Field_Descriptor *state_field = field_for_symbol(project,
+        state_nominal, producer->symbol_id);
+    Om_Type_Id field_type_id = OM_TYPE_ID_INVALID;
+    Om_Type_View field_type = {0};
+    if (state_field == NULL
+        || resolve_type(project->type_store, state_field->type_id,
+                        &field_type_id) != OM_STATUS_OK
+        || om_type_store_get(project->type_store, field_type_id,
+                             &field_type) != OM_STATUS_OK
+        || field_type.kind != OM_TYPE_LIST) {
+        return false;
+    }
+    size_t load_count = 0;
+    for (size_t index = 0; index < project->instruction_count; ++index) {
+        const Om_Mir_Instruction *instruction = &project->instructions[index];
+        if (instruction->opcode != OM_MIR_LOAD_FIELD
+            || instruction->operand_count != 1
+            || instruction->operand_start >= project->operand_count
+            || instruction->symbol_id.value != producer->symbol_id.value
+            || instruction->block_id.value >= project->block_count) {
+            continue;
+        }
+        const Om_Mir_Block *block = &project->blocks[
+            instruction->block_id.value];
+        if (block->function_id.value == function->id.value
+            && project->operands[instruction->operand_start].value
+                == state_value_id.value) {
+            ++load_count;
+            if (load_count > 1) return false;
+        }
+    }
+    return load_count == 1;
+}
+
+static bool value_producer_is_fresh_list(
+    const Om_Mir_Project *project,
+    const Om_Mir_Function *function,
+    const Om_Mir_Instruction *producer)
+{
+    if (producer == NULL) return false;
+    switch (producer->opcode) {
+    case OM_MIR_LIST_CREATE:
+    case OM_MIR_LIST_BUILDER_SEAL:
+    case OM_MIR_LIST_SET_COPY:
+    case OM_MIR_LIST_SET_CONSUME:
+    case OM_MIR_LIST_SET_RANGE_COPY:
+    case OM_MIR_LIST_FILL_RANGE_COPY:
+    case OM_MIR_LIST_REPLACE_RANGE_COPY:
+    case OM_MIR_LIST_CONCAT:
+    case OM_MIR_LIST_REVERSE_COPY:
+    case OM_MIR_LIST_SLICE_COPY:
+    case OM_MIR_LIST_STABLE_ORDER:
+    case OM_MIR_STRING_SPLIT_LIST:
+        return true;
+    case OM_MIR_LOAD_FIELD:
+        return actor_state_list_load_is_unique(project, function, producer);
+    default:
+        return false;
+    }
+}
+
+static bool list_consume_ownership_is_valid(
+    const Om_Mir_Project *project,
+    const Om_Mir_Function *function,
+    const Om_Mir_Instruction *instruction,
+    const size_t *use_counts)
+{
+    if (project == NULL || instruction == NULL || use_counts == NULL
+        || instruction->operand_count != 3
+        || instruction->operand_start >= project->operand_count) {
+        return false;
+    }
+    const Om_Mir_Value_Id source_id =
+        project->operands[instruction->operand_start];
+    const Om_Mir_Value *source = value_at_const(project, source_id);
+    if (source == NULL || use_counts[source_id.value] != 1
+        || source->is_block_parameter
+        || source->defining_instruction_id.value >= project->instruction_count) {
+        return false;
+    }
+    const Om_Mir_Instruction *producer = &project->instructions[
+        source->defining_instruction_id.value];
+    return producer->result_id.value == source_id.value
+        && producer->block_id.value == instruction->block_id.value
+        && producer->id.value < instruction->id.value
+        && value_producer_is_fresh_list(project, function, producer);
+}
+
+static Om_Status build_mir_use_counts(const Om_Mir_Project *project,
+                                      size_t **out_use_counts)
+{
+    if (project == NULL || out_use_counts == NULL) {
+        return OM_STATUS_INVALID_ARGUMENT;
+    }
+    *out_use_counts = project->value_count == 0 ? NULL
+        : om_alloc_array(project->value_count, sizeof(**out_use_counts));
+    if (project->value_count != 0 && *out_use_counts == NULL) {
+        return OM_STATUS_OUT_OF_MEMORY;
+    }
+    if (*out_use_counts != NULL) {
+        (void)memset(*out_use_counts, 0,
+            project->value_count * sizeof(**out_use_counts));
+    }
+    for (size_t index = 0; index < project->instruction_count; ++index) {
+        const Om_Mir_Instruction *instruction = &project->instructions[index];
+        if (instruction->operand_start > project->operand_count
+            || instruction->operand_count
+                > project->operand_count - instruction->operand_start) {
+            return OM_STATUS_INVALID_ARGUMENT;
+        }
+        for (size_t operand_index = 0;
+             operand_index < instruction->operand_count; ++operand_index) {
+            const Om_Mir_Value_Id value_id = project->operands[
+                instruction->operand_start + operand_index];
+            if (value_id.value >= project->value_count) {
+                return OM_STATUS_INVALID_ARGUMENT;
+            }
+            if ((*out_use_counts)[value_id.value] == SIZE_MAX) {
+                return OM_STATUS_OVERFLOW;
+            }
+            ++(*out_use_counts)[value_id.value];
+        }
+    }
+    for (size_t block_index = 0; block_index < project->block_count;
+         ++block_index) {
+        const Om_Mir_Block *block = &project->blocks[block_index];
+        if (!block->has_terminator
+            || block->terminator.edge_start > project->edge_count
+            || block->terminator.edge_count
+                > project->edge_count - block->terminator.edge_start) {
+            return OM_STATUS_INVALID_ARGUMENT;
+        }
+        if (block->terminator.value_id.value != UINT32_MAX) {
+            const Om_Mir_Value_Id value_id = block->terminator.value_id;
+            if (value_id.value >= project->value_count) {
+                return OM_STATUS_INVALID_ARGUMENT;
+            }
+            if ((*out_use_counts)[value_id.value] == SIZE_MAX) {
+                return OM_STATUS_OVERFLOW;
+            }
+            ++(*out_use_counts)[value_id.value];
+        }
+        for (size_t edge_offset = 0;
+             edge_offset < block->terminator.edge_count; ++edge_offset) {
+            const Om_Mir_Edge *edge = &project->edges[
+                block->terminator.edge_start + edge_offset];
+            if (edge->argument_start > project->edge_argument_count
+                || edge->argument_count
+                    > project->edge_argument_count - edge->argument_start) {
+                return OM_STATUS_INVALID_ARGUMENT;
+            }
+            for (size_t argument_index = 0;
+                 argument_index < edge->argument_count; ++argument_index) {
+                const Om_Mir_Value_Id value_id = project->edge_arguments[
+                    edge->argument_start + argument_index];
+                if (value_id.value >= project->value_count) {
+                    return OM_STATUS_INVALID_ARGUMENT;
+                }
+                if ((*out_use_counts)[value_id.value] == SIZE_MAX) {
+                    return OM_STATUS_OVERFLOW;
+                }
+                ++(*out_use_counts)[value_id.value];
+            }
+        }
+    }
+    return OM_STATUS_OK;
+}
+
 static Om_Status verify_instruction(const Om_Mir_Project *project,
                                     Om_Vector *diagnostics,
                                     const Om_Mir_Function *function,
                                     const Om_Mir_Block *block,
-                                    const Om_Mir_Instruction *instruction)
+                                    const Om_Mir_Instruction *instruction,
+                                    const size_t *use_counts)
 {
     if (instruction->operand_start > project->operand_count
         || instruction->operand_count
@@ -1130,6 +1341,223 @@ static Om_Status verify_instruction(const Om_Mir_Project *project,
             }
         }
         break;
+    case OM_MIR_RUNTIME_STRING_CONCAT_MANY:
+        if (operand_count < 1) {
+            return add_diagnostic(diagnostics, OM_MIR_DIAGNOSTIC_E1102,
+                function->id, block->id, result->id, instruction->span);
+        }
+        MIR_EXPECT_RESULT(OM_TYPE_STRING);
+        for (size_t index = 0; index < operand_count; ++index) {
+            Om_Type_Kind input_kind = OM_TYPE_VARIABLE;
+            status = value_type_kind(project, operands[index], &input_kind);
+            if (status != OM_STATUS_OK || input_kind != OM_TYPE_STRING) {
+                return add_diagnostic(diagnostics, OM_MIR_DIAGNOSTIC_E1102,
+                    function->id, block->id, operands[index], instruction->span);
+            }
+        }
+        break;
+    case OM_MIR_STRING_REPLACE:
+        MIR_EXPECT_OPERANDS(3);
+        MIR_EXPECT_RESULT(OM_TYPE_STRING);
+        for (size_t index = 0; index < operand_count; ++index) {
+            Om_Type_Kind input_kind = OM_TYPE_VARIABLE;
+            status = value_type_kind(project, operands[index], &input_kind);
+            if (status != OM_STATUS_OK || input_kind != OM_TYPE_STRING) {
+                return add_diagnostic(diagnostics, OM_MIR_DIAGNOSTIC_E1102,
+                    function->id, block->id, operands[index], instruction->span);
+            }
+        }
+        break;
+    case OM_MIR_STRING_UTF8_BYTES: {
+        MIR_EXPECT_OPERANDS(1);
+        MIR_EXPECT_RESULT(OM_TYPE_LIST);
+        Om_Type_Kind input_kind = OM_TYPE_VARIABLE;
+        status = value_type_kind(project, operands[0], &input_kind);
+        Om_Type_Id result_type = OM_TYPE_ID_INVALID;
+        Om_Type_View result_view = {0};
+        if (status == OM_STATUS_OK) {
+            status = resolve_type(project->type_store, result->type_id,
+                                  &result_type);
+        }
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_get(project->type_store, result_type,
+                                       &result_view);
+        }
+        Om_Type_Id element_type = OM_TYPE_ID_INVALID;
+        Om_Type_View element_view = {0};
+        if (status == OM_STATUS_OK && result_view.kind == OM_TYPE_LIST
+            && result_view.child_count == 1) {
+            status = om_type_store_child_at(project->type_store, result_type,
+                                            0, &element_type);
+        }
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_get(project->type_store, element_type,
+                                       &element_view);
+        }
+        if (status != OM_STATUS_OK || input_kind != OM_TYPE_STRING
+            || result_view.kind != OM_TYPE_LIST
+            || element_view.kind != OM_TYPE_INT) {
+            return add_diagnostic(diagnostics, OM_MIR_DIAGNOSTIC_E1102,
+                function->id, block->id, result->id, instruction->span);
+        }
+        break;
+    }
+    case OM_MIR_LIST_COMPACT_BYTES:
+    case OM_MIR_STRING_HEX_DECODE_BYTES: {
+        MIR_EXPECT_OPERANDS(1);
+        MIR_EXPECT_RESULT(OM_TYPE_LIST);
+        Om_Type_Kind input_kind = OM_TYPE_VARIABLE;
+        status = value_type_kind(project, operands[0], &input_kind);
+        Om_Type_Id result_type = OM_TYPE_ID_INVALID;
+        Om_Type_View result_view = {0};
+        if (status == OM_STATUS_OK) {
+            status = resolve_type(project->type_store, result->type_id,
+                                  &result_type);
+        }
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_get(project->type_store, result_type,
+                                       &result_view);
+        }
+        Om_Type_Id element_type = OM_TYPE_ID_INVALID;
+        Om_Type_View element_view = {0};
+        if (status == OM_STATUS_OK && result_view.kind == OM_TYPE_LIST
+            && result_view.child_count == 1) {
+            status = om_type_store_child_at(project->type_store, result_type,
+                                            0, &element_type);
+        }
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_get(project->type_store, element_type,
+                                       &element_view);
+        }
+        if (status != OM_STATUS_OK || result_view.kind != OM_TYPE_LIST
+            || element_view.kind != OM_TYPE_INT) {
+            return add_diagnostic(diagnostics, OM_MIR_DIAGNOSTIC_E1102,
+                function->id, block->id, result->id, instruction->span);
+        }
+        if (instruction->opcode == OM_MIR_LIST_COMPACT_BYTES) {
+            status = verify_value_type(project, diagnostics, function->id,
+                block->id, operands[0], result->type_id, instruction->span);
+        } else if (input_kind != OM_TYPE_STRING) {
+            return add_diagnostic(diagnostics, OM_MIR_DIAGNOSTIC_E1102,
+                function->id, block->id, operands[0], instruction->span);
+        }
+        break;
+    }
+    case OM_MIR_STRING_HEX_ENCODE_BYTES: {
+        MIR_EXPECT_OPERANDS(1);
+        MIR_EXPECT_RESULT(OM_TYPE_STRING);
+        const Om_Mir_Value *input = value_at_const(project, operands[0]);
+        Om_Type_Id input_type = OM_TYPE_ID_INVALID;
+        Om_Type_View input_view = {0};
+        Om_Type_Id element_type = OM_TYPE_ID_INVALID;
+        Om_Type_View element_view = {0};
+        if (input == NULL) {
+            return add_diagnostic(diagnostics, OM_MIR_DIAGNOSTIC_E1102,
+                function->id, block->id, operands[0], instruction->span);
+        }
+        status = resolve_type(project->type_store, input->type_id,
+                              &input_type);
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_get(project->type_store, input_type,
+                                       &input_view);
+        }
+        if (status == OM_STATUS_OK && input_view.kind == OM_TYPE_LIST
+            && input_view.child_count == 1) {
+            status = om_type_store_child_at(project->type_store, input_type,
+                                            0, &element_type);
+        }
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_get(project->type_store, element_type,
+                                       &element_view);
+        }
+        if (status != OM_STATUS_OK || input_view.kind != OM_TYPE_LIST
+            || element_view.kind != OM_TYPE_INT) {
+            return add_diagnostic(diagnostics, OM_MIR_DIAGNOSTIC_E1102,
+                function->id, block->id, operands[0], instruction->span);
+        }
+        break;
+    }
+    case OM_MIR_STRING_JOIN_LIST: {
+        MIR_EXPECT_OPERANDS(2);
+        MIR_EXPECT_RESULT(OM_TYPE_STRING);
+        Om_Type_Kind list_kind = OM_TYPE_VARIABLE;
+        Om_Type_Kind separator_kind = OM_TYPE_VARIABLE;
+        status = value_type_kind(project, operands[0], &list_kind);
+        if (status == OM_STATUS_OK) {
+            status = value_type_kind(project, operands[1], &separator_kind);
+        }
+        Om_Type_Id list_type = OM_TYPE_ID_INVALID;
+        Om_Type_View list_view = {0};
+        if (status == OM_STATUS_OK) {
+            const Om_Mir_Value *list_value = value_at_const(project,
+                operands[0]);
+            status = list_value == NULL ? OM_STATUS_INVALID_ARGUMENT
+                : resolve_type(project->type_store, list_value->type_id,
+                               &list_type);
+        }
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_get(project->type_store, list_type,
+                                       &list_view);
+        }
+        Om_Type_Id string_type = OM_TYPE_ID_INVALID;
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_primitive(project->type_store,
+                OM_TYPE_STRING, &string_type);
+        }
+        Om_Type_Id element_type = OM_TYPE_ID_INVALID;
+        if (status == OM_STATUS_OK && list_view.kind == OM_TYPE_LIST
+            && list_view.child_count == 1) {
+            status = om_type_store_child_at(project->type_store, list_type, 0,
+                                            &element_type);
+        }
+        if (status != OM_STATUS_OK || list_kind != OM_TYPE_LIST
+            || separator_kind != OM_TYPE_STRING
+            || list_view.kind != OM_TYPE_LIST
+            || element_type.value != string_type.value) {
+            return add_diagnostic(diagnostics, OM_MIR_DIAGNOSTIC_E1102,
+                function->id, block->id, operands[0], instruction->span);
+        }
+        break;
+    }
+    case OM_MIR_STRING_SPLIT_LIST: {
+        MIR_EXPECT_OPERANDS(2);
+        MIR_EXPECT_RESULT(OM_TYPE_LIST);
+        Om_Type_Kind value_kind = OM_TYPE_VARIABLE;
+        Om_Type_Kind separator_kind = OM_TYPE_VARIABLE;
+        status = value_type_kind(project, operands[0], &value_kind);
+        if (status == OM_STATUS_OK) {
+            status = value_type_kind(project, operands[1], &separator_kind);
+        }
+        Om_Type_Id result_type = OM_TYPE_ID_INVALID;
+        Om_Type_View result_view = {0};
+        if (status == OM_STATUS_OK) {
+            status = resolve_type(project->type_store, result->type_id,
+                                  &result_type);
+        }
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_get(project->type_store, result_type,
+                                       &result_view);
+        }
+        Om_Type_Id element_type = OM_TYPE_ID_INVALID;
+        if (status == OM_STATUS_OK && result_view.kind == OM_TYPE_LIST
+            && result_view.child_count == 1) {
+            status = om_type_store_child_at(project->type_store, result_type, 0,
+                                            &element_type);
+        }
+        Om_Type_Id string_type = OM_TYPE_ID_INVALID;
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_primitive(project->type_store,
+                OM_TYPE_STRING, &string_type);
+        }
+        if (status != OM_STATUS_OK || value_kind != OM_TYPE_STRING
+            || separator_kind != OM_TYPE_STRING
+            || result_view.kind != OM_TYPE_LIST
+            || element_type.value != string_type.value) {
+            return add_diagnostic(diagnostics, OM_MIR_DIAGNOSTIC_E1102,
+                function->id, block->id, result->id, instruction->span);
+        }
+        break;
+    }
     case OM_MIR_LIST_CREATE: {
         MIR_EXPECT_RESULT(OM_TYPE_LIST);
         Om_Type_Id element_type = OM_TYPE_ID_INVALID;
@@ -1192,6 +1620,221 @@ static Om_Status verify_instruction(const Om_Mir_Project *project,
         if (status == OM_STATUS_OK) {
             status = verify_value_type(project, diagnostics, function->id,
                 block->id, operands[1], operand_type, instruction->span);
+        }
+        return status;
+    }
+    case OM_MIR_LIST_BUILDER_CREATE: {
+        MIR_EXPECT_OPERANDS(0);
+        MIR_EXPECT_RESULT(OM_TYPE_LIST);
+        Om_Type_Id list_type = OM_TYPE_ID_INVALID;
+        Om_Type_View list_view = {0};
+        status = resolve_type(project->type_store, result->type_id,
+                              &list_type);
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_get(project->type_store, list_type,
+                                       &list_view);
+        }
+        if (status != OM_STATUS_OK || list_view.kind != OM_TYPE_LIST
+            || list_view.child_count != 1) {
+            return add_diagnostic(diagnostics, OM_MIR_DIAGNOSTIC_E1102,
+                function->id, block->id, result->id, instruction->span);
+        }
+        return OM_STATUS_OK;
+    }
+    case OM_MIR_LIST_BUILDER_RESERVE: {
+        MIR_EXPECT_OPERANDS(3);
+        MIR_EXPECT_RESULT(OM_TYPE_LIST);
+        const Om_Mir_Value *builder = value_at_const(project, operands[0]);
+        if (builder == NULL) {
+            return add_diagnostic(diagnostics, OM_MIR_DIAGNOSTIC_E1102,
+                function->id, block->id, operands[0], instruction->span);
+        }
+        status = verify_value_type(project, diagnostics, function->id,
+            block->id, operands[0], result->type_id, instruction->span);
+        Om_Type_Id int_type = OM_TYPE_ID_INVALID;
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_primitive(project->type_store, OM_TYPE_INT,
+                                             &int_type);
+        }
+        for (size_t index = 1; status == OM_STATUS_OK && index < 3; ++index) {
+            status = verify_value_type(project, diagnostics, function->id,
+                block->id, operands[index], int_type, instruction->span);
+        }
+        return status;
+    }
+    case OM_MIR_LIST_BUILDER_APPEND: {
+        MIR_EXPECT_OPERANDS(2);
+        MIR_EXPECT_RESULT(OM_TYPE_LIST);
+        const Om_Mir_Value *builder = value_at_const(project, operands[0]);
+        Om_Type_Id list_type = OM_TYPE_ID_INVALID;
+        Om_Type_View list_view = {0};
+        if (builder == NULL) {
+            return add_diagnostic(diagnostics, OM_MIR_DIAGNOSTIC_E1102,
+                function->id, block->id, operands[0], instruction->span);
+        }
+        status = verify_value_type(project, diagnostics, function->id,
+            block->id, operands[0], result->type_id, instruction->span);
+        if (status == OM_STATUS_OK) {
+            status = resolve_type(project->type_store, result->type_id,
+                                  &list_type);
+        }
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_get(project->type_store, list_type,
+                                       &list_view);
+        }
+        if (status != OM_STATUS_OK || list_view.kind != OM_TYPE_LIST
+            || list_view.child_count != 1) {
+            return add_diagnostic(diagnostics, OM_MIR_DIAGNOSTIC_E1102,
+                function->id, block->id, result->id, instruction->span);
+        }
+        Om_Type_Id element_type = OM_TYPE_ID_INVALID;
+        status = om_type_store_child_at(project->type_store, list_type, 0,
+                                        &element_type);
+        if (status == OM_STATUS_OK) {
+            status = verify_value_type(project, diagnostics, function->id,
+                block->id, operands[1], element_type, instruction->span);
+        }
+        return status;
+    }
+    case OM_MIR_LIST_BUILDER_SEAL: {
+        MIR_EXPECT_OPERANDS(1);
+        MIR_EXPECT_RESULT(OM_TYPE_LIST);
+        return verify_value_type(project, diagnostics, function->id,
+            block->id, operands[0], result->type_id, instruction->span);
+    }
+    case OM_MIR_LIST_SET_COPY:
+    case OM_MIR_LIST_SET_CONSUME: {
+        MIR_EXPECT_OPERANDS(3);
+        MIR_EXPECT_RESULT(OM_TYPE_LIST);
+        Om_Type_Id list_type = OM_TYPE_ID_INVALID;
+        Om_Type_View list_view = {0};
+        status = resolve_type(project->type_store, result->type_id,
+                              &list_type);
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_get(project->type_store, list_type,
+                                       &list_view);
+        }
+        if (status != OM_STATUS_OK || list_view.kind != OM_TYPE_LIST
+            || list_view.child_count != 1) {
+            return add_diagnostic(diagnostics, OM_MIR_DIAGNOSTIC_E1102,
+                function->id, block->id, result->id, instruction->span);
+        }
+        status = verify_value_type(project, diagnostics, function->id,
+            block->id, operands[0], list_type, instruction->span);
+        Om_Type_Id int_type = OM_TYPE_ID_INVALID;
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_primitive(project->type_store, OM_TYPE_INT,
+                                             &int_type);
+        }
+        if (status == OM_STATUS_OK) {
+            status = verify_value_type(project, diagnostics, function->id,
+                block->id, operands[1], int_type, instruction->span);
+        }
+        Om_Type_Id element_type = OM_TYPE_ID_INVALID;
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_child_at(project->type_store, list_type, 0,
+                                            &element_type);
+        }
+        if (status == OM_STATUS_OK) {
+            status = verify_value_type(project, diagnostics, function->id,
+                block->id, operands[2], element_type, instruction->span);
+        }
+        if (status == OM_STATUS_OK
+            && instruction->opcode == OM_MIR_LIST_SET_CONSUME
+            && (instruction->flags
+                    != OM_MIR_INSTRUCTION_FLAG_OWNERSHIP_PROOF
+                || !list_consume_ownership_is_valid(project, function,
+                                                    instruction, use_counts))) {
+            return add_diagnostic(diagnostics, OM_MIR_DIAGNOSTIC_E1104,
+                function->id, block->id, operands[0], instruction->span);
+        }
+        return status;
+    }
+    case OM_MIR_LIST_SET_RANGE_COPY:
+    case OM_MIR_LIST_FILL_RANGE_COPY:
+    case OM_MIR_LIST_REPLACE_RANGE_COPY: {
+        const bool is_set_range = instruction->opcode
+            == OM_MIR_LIST_SET_RANGE_COPY;
+        const bool is_fill_range = instruction->opcode
+            == OM_MIR_LIST_FILL_RANGE_COPY;
+        MIR_EXPECT_OPERANDS(is_set_range ? 3 : 4);
+        MIR_EXPECT_RESULT(OM_TYPE_LIST);
+        Om_Type_Id list_type = OM_TYPE_ID_INVALID;
+        Om_Type_View list_view = {0};
+        status = resolve_type(project->type_store, result->type_id,
+                              &list_type);
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_get(project->type_store, list_type,
+                                       &list_view);
+        }
+        if (status != OM_STATUS_OK || list_view.kind != OM_TYPE_LIST
+            || list_view.child_count != 1) {
+            return add_diagnostic(diagnostics, OM_MIR_DIAGNOSTIC_E1102,
+                function->id, block->id, result->id, instruction->span);
+        }
+        status = verify_value_type(project, diagnostics, function->id,
+            block->id, operands[0], list_type, instruction->span);
+        Om_Type_Id int_type = OM_TYPE_ID_INVALID;
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_primitive(project->type_store, OM_TYPE_INT,
+                                             &int_type);
+        }
+        if (status == OM_STATUS_OK) {
+            status = verify_value_type(project, diagnostics, function->id,
+                block->id, operands[1], int_type, instruction->span);
+        }
+        if (status == OM_STATUS_OK && !is_set_range) {
+            status = verify_value_type(project, diagnostics, function->id,
+                block->id, operands[2], int_type, instruction->span);
+        }
+        if (status != OM_STATUS_OK) {
+            return status;
+        }
+        Om_Type_Id element_type = OM_TYPE_ID_INVALID;
+        status = om_type_store_child_at(project->type_store, list_type, 0,
+                                        &element_type);
+        const size_t replacement_index = is_set_range ? 2 : 3;
+        if (status == OM_STATUS_OK && is_fill_range) {
+            status = verify_value_type(project, diagnostics, function->id,
+                block->id, operands[replacement_index], element_type,
+                instruction->span);
+        } else if (status == OM_STATUS_OK) {
+            status = verify_value_type(project, diagnostics, function->id,
+                block->id, operands[replacement_index], list_type,
+                instruction->span);
+        }
+        return status;
+    }
+    case OM_MIR_LIST_REVERSE_COPY: {
+        MIR_EXPECT_OPERANDS(1);
+        MIR_EXPECT_RESULT(OM_TYPE_LIST);
+        Om_Type_Id list_type = OM_TYPE_ID_INVALID;
+        status = resolve_type(project->type_store, result->type_id,
+                              &list_type);
+        if (status == OM_STATUS_OK) {
+            status = verify_value_type(project, diagnostics, function->id,
+                block->id, operands[0], list_type, instruction->span);
+        }
+        return status;
+    }
+    case OM_MIR_LIST_SLICE_COPY: {
+        MIR_EXPECT_OPERANDS(3);
+        MIR_EXPECT_RESULT(OM_TYPE_LIST);
+        Om_Type_Id list_type = OM_TYPE_ID_INVALID;
+        status = resolve_type(project->type_store, result->type_id,
+                              &list_type);
+        if (status == OM_STATUS_OK) {
+            status = verify_value_type(project, diagnostics, function->id,
+                block->id, operands[0], list_type, instruction->span);
+        }
+        Om_Type_Id int_type = OM_TYPE_ID_INVALID;
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_primitive(project->type_store, OM_TYPE_INT,
+                                             &int_type);
+        }
+        for (size_t index = 1; status == OM_STATUS_OK && index < 3; ++index) {
+            status = verify_value_type(project, diagnostics, function->id,
+                block->id, operands[index], int_type, instruction->span);
         }
         return status;
     }
@@ -2110,7 +2753,11 @@ static Om_Status verify_instruction(const Om_Mir_Project *project,
     if ((instruction->effects & ~known_effects) != 0
         || (instruction->effects & ~function->effects) != 0
         || (instruction->flags
-            & ~(uint32_t)OM_MIR_INSTRUCTION_FLAG_NATIVE_BLOCKING) != 0) {
+            & ~((uint32_t)OM_MIR_INSTRUCTION_FLAG_NATIVE_BLOCKING
+                | (uint32_t)OM_MIR_INSTRUCTION_FLAG_OWNERSHIP_PROOF)) != 0
+        || ((instruction->flags
+             & OM_MIR_INSTRUCTION_FLAG_OWNERSHIP_PROOF) != 0
+            && instruction->opcode != OM_MIR_LIST_SET_CONSUME)) {
         return add_diagnostic(diagnostics, OM_MIR_DIAGNOSTIC_E1104,
                               function->id, block->id, result->id,
                               instruction->span);
@@ -2574,9 +3221,160 @@ static Om_Status verify_function_dominance(const Om_Mir_Project *project,
     return status;
 }
 
+static bool mir_list_builder_opcode(Om_Mir_Opcode opcode)
+{
+    return opcode == OM_MIR_LIST_BUILDER_RESERVE
+        || opcode == OM_MIR_LIST_BUILDER_APPEND
+        || opcode == OM_MIR_LIST_BUILDER_SEAL;
+}
+
+static Om_Status verify_list_builder_confinement(
+    const Om_Mir_Project *project,
+    Om_Vector *diagnostics,
+    const Om_Mir_Function *function)
+{
+    bool *builder_values = om_alloc_array(project->value_count,
+                                           sizeof(*builder_values));
+    if (project->value_count != 0 && builder_values == NULL) {
+        return OM_STATUS_OUT_OF_MEMORY;
+    }
+    if (project->value_count != 0) {
+        (void)memset(builder_values, 0,
+            project->value_count * sizeof(*builder_values));
+    }
+    for (size_t block_index = 0; block_index < project->block_count;
+         ++block_index) {
+        const Om_Mir_Block *block = &project->blocks[block_index];
+        if (block->function_id.value != function->id.value) continue;
+        for (size_t offset = 0; offset < block->instruction_count; ++offset) {
+            const Om_Mir_Instruction *instruction = &project->instructions[
+                block->instruction_start + offset];
+            if (instruction->opcode == OM_MIR_LIST_BUILDER_CREATE) {
+                builder_values[instruction->result_id.value] = true;
+            }
+        }
+    }
+
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (size_t block_index = 0; block_index < project->block_count;
+             ++block_index) {
+            const Om_Mir_Block *block = &project->blocks[block_index];
+            if (block->function_id.value != function->id.value) continue;
+            for (size_t offset = 0; offset < block->instruction_count; ++offset) {
+                const Om_Mir_Instruction *instruction = &project->instructions[
+                    block->instruction_start + offset];
+                if (!mir_list_builder_opcode(instruction->opcode)
+                    || instruction->opcode == OM_MIR_LIST_BUILDER_SEAL) {
+                    continue;
+                }
+                const Om_Mir_Value_Id input = project->operands[
+                    instruction->operand_start];
+                if (builder_values[input.value]
+                    && !builder_values[instruction->result_id.value]) {
+                    builder_values[instruction->result_id.value] = true;
+                    changed = true;
+                }
+            }
+            if (!block->has_terminator) continue;
+            const Om_Mir_Terminator *terminator = &block->terminator;
+            for (size_t edge_offset = 0; edge_offset < terminator->edge_count;
+                 ++edge_offset) {
+                const Om_Mir_Edge *edge = &project->edges[
+                    terminator->edge_start + edge_offset];
+                const Om_Mir_Block *target = &project->blocks[
+                    edge->target_block_id.value];
+                for (size_t argument_index = 0;
+                     argument_index < edge->argument_count; ++argument_index) {
+                    const Om_Mir_Value_Id argument = project->edge_arguments[
+                        edge->argument_start + argument_index];
+                    const Om_Mir_Value_Id parameter = {
+                        target->parameter_start + (uint32_t)argument_index,
+                    };
+                    if (builder_values[argument.value]
+                        && !builder_values[parameter.value]) {
+                        builder_values[parameter.value] = true;
+                        changed = true;
+                    }
+                }
+            }
+        }
+    }
+
+    Om_Status status = OM_STATUS_OK;
+    for (size_t block_index = 0; status == OM_STATUS_OK
+         && block_index < project->block_count; ++block_index) {
+        const Om_Mir_Block *block = &project->blocks[block_index];
+        if (block->function_id.value != function->id.value) continue;
+        for (size_t offset = 0; status == OM_STATUS_OK
+             && offset < block->instruction_count; ++offset) {
+            const Om_Mir_Instruction *instruction = &project->instructions[
+                block->instruction_start + offset];
+            if (mir_list_builder_opcode(instruction->opcode)) {
+                const Om_Mir_Value_Id builder = project->operands[
+                    instruction->operand_start];
+                if (!builder_values[builder.value]) {
+                    status = add_diagnostic(diagnostics,
+                        OM_MIR_DIAGNOSTIC_E1102, function->id, block->id,
+                        builder, instruction->span);
+                }
+            }
+            for (size_t operand_index = 0;
+                 status == OM_STATUS_OK
+                 && operand_index < instruction->operand_count;
+                 ++operand_index) {
+                const Om_Mir_Value_Id operand = project->operands[
+                    instruction->operand_start + operand_index];
+                if (builder_values[operand.value]
+                    && (!mir_list_builder_opcode(instruction->opcode)
+                        || operand_index != 0)) {
+                    status = add_diagnostic(diagnostics,
+                        OM_MIR_DIAGNOSTIC_E1102, function->id, block->id,
+                        operand, instruction->span);
+                }
+            }
+        }
+        if (status != OM_STATUS_OK || !block->has_terminator) continue;
+        const Om_Mir_Terminator *terminator = &block->terminator;
+        if (terminator->kind == OM_MIR_RETURN
+            && terminator->value_id.value != UINT32_MAX
+            && builder_values[terminator->value_id.value]) {
+            status = add_diagnostic(diagnostics, OM_MIR_DIAGNOSTIC_E1102,
+                function->id, block->id, terminator->value_id, function->span);
+            continue;
+        }
+        for (size_t edge_offset = 0; status == OM_STATUS_OK
+             && edge_offset < terminator->edge_count; ++edge_offset) {
+            const Om_Mir_Edge *edge = &project->edges[
+                terminator->edge_start + edge_offset];
+            const Om_Mir_Block *target = &project->blocks[
+                edge->target_block_id.value];
+            for (size_t argument_index = 0;
+                 status == OM_STATUS_OK && argument_index < edge->argument_count;
+                 ++argument_index) {
+                const Om_Mir_Value_Id argument = project->edge_arguments[
+                    edge->argument_start + argument_index];
+                const Om_Mir_Value_Id parameter = {
+                    target->parameter_start + (uint32_t)argument_index,
+                };
+                if (builder_values[argument.value]
+                    != builder_values[parameter.value]) {
+                    status = add_diagnostic(diagnostics,
+                        OM_MIR_DIAGNOSTIC_E1102, function->id, block->id,
+                        argument, function->span);
+                }
+            }
+        }
+    }
+    om_free(builder_values);
+    return status;
+}
+
 static Om_Status verify_function(const Om_Mir_Project *project,
                                  Om_Vector *diagnostics,
-                                 const Om_Mir_Function *function)
+                                 const Om_Mir_Function *function,
+                                 const size_t *use_counts)
 {
     if (function->instance_id.value == UINT32_MAX) {
         return add_diagnostic(diagnostics, OM_MIR_DIAGNOSTIC_E1105,
@@ -2858,11 +3656,15 @@ static Om_Status verify_function(const Om_Mir_Project *project,
             const Om_Mir_Instruction *instruction = &project->instructions[
                 block->instruction_start + instruction_offset];
             status = verify_instruction(project, diagnostics, function, block,
-                                        instruction);
+                                        instruction, use_counts);
         }
     }
     if (status == OM_STATUS_OK) {
         status = verify_function_dominance(project, diagnostics, function);
+    }
+    if (status == OM_STATUS_OK) {
+        status = verify_list_builder_confinement(project, diagnostics,
+                                                  function);
     }
     return status;
 }
@@ -3244,11 +4046,16 @@ Om_Status om_mir_verify_project(const Om_Mir_Project *project,
     if (status == OM_STATUS_OK && structurally_valid) {
         status = validate_structure(project, &diagnostics, &structurally_valid);
     }
+    size_t *use_counts = NULL;
+    if (status == OM_STATUS_OK && structurally_valid) {
+        status = build_mir_use_counts(project, &use_counts);
+    }
     for (size_t index = 0; status == OM_STATUS_OK && structurally_valid
          && index < project->function_count; ++index) {
         const Om_Mir_Function *function = &project->functions[index];
-        status = verify_function(project, &diagnostics, function);
+        status = verify_function(project, &diagnostics, function, use_counts);
     }
+    om_free(use_counts);
     if (status != OM_STATUS_OK) {
         om_vector_destroy(&diagnostics);
         return status;
@@ -3533,12 +4340,21 @@ const char *om_mir_opcode_name(Om_Mir_Opcode opcode)
         "bool-not", "compare", "call-direct", "function-ref",
         "call-indirect", "alloc-object",
         "load-field", "store-init-field", "copy-managed", "list-create",
-        "list-concat", "list-append", "list-stable-order", "list-length", "list-get",
+        "list-concat", "list-append", "list-builder-create",
+        "list-builder-reserve", "list-builder-append", "list-builder-seal",
+        "list-set-copy", "list-set-consume", "list-set-range-copy",
+        "list-fill-range-copy",
+        "list-replace-range-copy", "list-reverse-copy", "list-slice-copy",
+        "list-stable-order", "list-length", "list-get",
         "map-create", "map-length",
         "map-key-at", "map-get", "result-make-ok",
         "result-make-error", "result-tag", "result-ok-payload",
         "result-error-payload", "runtime-string-create", "runtime-string-format",
-        "runtime-string-concat", "runtime-actor-spawn", "runtime-actor-self",
+        "runtime-string-concat", "runtime-string-concat-many",
+        "string-join-list", "string-split-list", "string-replace",
+        "string-utf8-bytes", "list-compact-bytes",
+        "string-hex-decode-bytes", "string-hex-encode-bytes",
+        "runtime-actor-spawn", "runtime-actor-self",
         "runtime-actor-send",
         "runtime-actor-watch", "runtime-actor-stop",
         "runtime-system-actor", "actor-identity", "runtime-fault", "native-call",

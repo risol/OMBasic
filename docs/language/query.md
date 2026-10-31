@@ -27,6 +27,11 @@ only after the final row order is known, so projection faults do not occur for
 rows discarded by Top-K. Order-key faults occur while scanning rows that pass
 all filters, before any projection runs.
 
+The physical implementation uses private transient List builders for scan
+results, ordered candidates, keys, and the final projection. These builders are
+sealed before ordinary List operations can read the value. This does not add a
+source type or change Query's `List<T> -> List<R>` contract.
+
 Query expressions may read lexical values and the current actor's state. They
 cannot mutate state, send messages, spawn actors, perform I/O, call actions, or
 suspend. A long Query runs synchronously inside its current function or actor

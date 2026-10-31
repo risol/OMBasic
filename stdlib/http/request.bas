@@ -10,15 +10,10 @@ FUNCTION serialize_with_connection(method, scheme, host, user_info_present, port
     IF text.find(headers_text, "\r") >= 0 THEN
         RETURN Error(errors.Http_Problem("invalid_header", 0))
     END IF
-    VAR headers = list.take(text.split(headers_text, "\n"), 0)
-    IF headers_text <> "" THEN
-        FOR source_line IN text.split(headers_text, "\n")
-            line = text.trim(source_line)
-            IF line <> "" THEN
-                headers = headers + [line]
-            END IF
-        END FOR
-    END IF
+    VAR headers = QUERY source_line IN text.split(headers_text, "\n")
+        WHERE text.trim(source_line) <> ""
+        SELECT text.trim(source_line)
+    END QUERY
     IF NOT header_fields.list_valid(headers) THEN
         RETURN Error(errors.Http_Problem("invalid_header", 0))
     END IF
@@ -48,7 +43,6 @@ FUNCTION serialize_with_connection(method, scheme, host, user_info_present, port
             host_value = host_value + ":" + number.format_int(port)
         END IF
     END IF
-    VAR request_text = method + " " + target + " HTTP/1.1\r\nHost: " + host_value + "\r\n"
     IF header_fields.count(headers, "host") <> 0 THEN
         RETURN Error(errors.Http_Problem("invalid_header", 0))
     END IF
@@ -60,17 +54,15 @@ FUNCTION serialize_with_connection(method, scheme, host, user_info_present, port
     IF has_length = 1 AND text.trim(header_fields.value_for(headers, "content-length")) <> number.format_int(body_length) THEN
         RETURN Error(errors.Http_Problem("invalid_header", 0))
     END IF
+    VAR request_lines = [method + " " + target + " HTTP/1.1", "Host: " + host_value]
     IF has_length = 0 THEN
-        request_text = request_text + "Content-Length: " + number.format_int(body_length) + "\r\n"
+        request_lines = request_lines + ["Content-Length: " + number.format_int(body_length)]
     END IF
     IF header_fields.count(headers, "connection") > 0 THEN
         RETURN Error(errors.Http_Problem("invalid_header", 0))
     END IF
-    request_text = request_text + "Connection: " + connection_value + "\r\n"
-    FOR line IN headers
-        request_text = request_text + text.trim(line) + "\r\n"
-    END FOR
-    request_text = request_text + "\r\n"
+    request_lines = request_lines + ["Connection: " + connection_value] + headers + ["", ""]
+    request_text = text.join(request_lines, "\r\n")
     status = encoding.utf8_encode_status_code(request_text)
     IF status = 2 THEN
         RETURN Error(errors.Http_Problem("resource_exhausted", 0))
@@ -78,16 +70,7 @@ FUNCTION serialize_with_connection(method, scheme, host, user_info_present, port
     IF status <> 0 THEN
         RETURN Error(errors.Http_Problem("invalid_utf8", 0))
     END IF
-    hex = encoding.utf8_encode_hex_raw(request_text)
-    VAR head = []
-    VAR index = 0
-    alphabet = "0123456789abcdef"
-    WHILE index < text.length(hex)
-        high = text.find(alphabet, text.slice(hex, index, 1))
-        low = text.find(alphabet, text.slice(hex, index + 1, 1))
-        head = head + [high * 16 + low]
-        index = index + 2
-    END WHILE
+    head = string_utf8_bytes(request_text)
     RETURN Ok(encoding.Buffer(head + body))
 END FUNCTION
 

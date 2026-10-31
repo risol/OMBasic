@@ -16,7 +16,10 @@ Tests are organized by capability and follow the current migration stage:
    branches, returns, while loops, signed numeric ranges, escaped string
    literals, interpolation, List/Map literals and indexing, List/Map
    `FOR EACH` with loop transfers, function-valued indirect calls,
-   Record/Message fields and updates,
+   Record/Message fields and updates, transient List builder state transitions,
+   MIR builder confinement and no-escape verification, byte-List and UTF-8/hex
+   intrinsic lowering, and Actor-state single-read consume verification with
+   copy fallback for ambiguous aliases,
    `Result`/`TRY`/`SELECT`, and Null constants/comparisons.
 6. LLVM tests verify generated IR, target object headers with `llvm-readobj`,
    checked arithmetic and Runtime call lowering, debug information, and the
@@ -24,7 +27,10 @@ Tests are organized by capability and follow the current migration stage:
 7. Native integration tests link and execute standalone programs on Windows
    and Linux, covering language behavior, GC roots, Actors, Native FFI and
    callbacks, system services, and distributed Actor lifecycles.
-8. Runtime tests cover roots and collection, Actor isolation and scheduling,
+8. Runtime tests cover roots and collection, transient builder GC tracing,
+   compact byte storage and clone behavior, String builder growth and scalar
+   validation, reserve limits and seal enforcement, Actor-state List replacement,
+   Actor isolation and scheduling,
    finalization, blocking and timer services, wire bounds, and TCP delivery.
 
 The Lexer suite runs deterministic arbitrary-byte and string inputs and checks
@@ -32,7 +38,8 @@ token/diagnostic span bounds. The Parser suite compares normalized AST output
 with golden files and checks recovery and nesting limits. Every parser or
 decoder that accepts external data must include malformed-input coverage.
 
-CTest is the local test entry point; the release matrix contains 23 tests.
+CTest is the local test entry point; the current Release matrix has 39 tests on
+Windows and 40 on Linux.
 Sanitizer profiles are separate build configurations. Linux Clang
 ASan/UBSan runs the full suite; TSan is used for the concurrent Runtime and
 foreign-thread callback paths. With Clang, configure

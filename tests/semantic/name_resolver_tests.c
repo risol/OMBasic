@@ -923,15 +923,15 @@ bool om_test_name_resolution_builtin_identities(void)
     }
     SEMANTIC_ASSERT(found_actor_down_reason && found_ok && found_error
                     && found_actor_down);
-    bool registered[OM_BUILTIN_SYSTEM_MESSAGE_TLS_CLOSE_COMPLETED + 1] = {false};
+    bool registered[OM_BUILTIN_REPLACE_RANGE + 1] = {false};
     SEMANTIC_ASSERT(om_builtin_descriptor_count()
-                    == (size_t)OM_BUILTIN_SYSTEM_MESSAGE_TLS_CLOSE_COMPLETED);
+                    == (size_t)OM_BUILTIN_REPLACE_RANGE);
     for (size_t index = 0; index < om_builtin_descriptor_count(); ++index) {
         const Om_Builtin_Descriptor *descriptor =
             om_builtin_descriptor_at(index);
         SEMANTIC_ASSERT(descriptor != NULL
             && descriptor->id > OM_BUILTIN_NONE
-            && descriptor->id <= OM_BUILTIN_SYSTEM_MESSAGE_TLS_CLOSE_COMPLETED
+            && descriptor->id <= OM_BUILTIN_REPLACE_RANGE
             && !registered[descriptor->id]
             && om_string_view_is_valid(descriptor->spelling)
             && descriptor->spelling.length != 0

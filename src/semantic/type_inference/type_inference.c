@@ -1527,6 +1527,250 @@ static Om_Status initialize_builtin(Om_Infer_Context *context,
             status = set_builtin_scheme(context, symbol->id, function_type);
         }
         return status;
+    } else if (symbol->builtin_id == OM_BUILTIN_LIST_SET) {
+        Om_Type_Id element_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id list_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id int_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id function_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id parameters[3] = {
+            OM_TYPE_ID_INVALID, OM_TYPE_ID_INVALID, OM_TYPE_ID_INVALID,
+        };
+        Om_Status status = om_type_store_variable(&context->type_store, 1,
+                                                   &element_type);
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_list(&context->type_store, element_type,
+                                        &list_type);
+        }
+        if (status == OM_STATUS_OK) {
+            status = get_primitive_type(context, OM_TYPE_INT, &int_type);
+        }
+        parameters[0] = list_type;
+        parameters[1] = int_type;
+        parameters[2] = element_type;
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_function(&context->type_store,
+                OM_TYPE_FUNCTION, parameters, 3, list_type, &function_type);
+        }
+        if (status == OM_STATUS_OK) {
+            status = generalize_symbol(context, symbol->id, function_type, 0);
+        }
+        return status;
+    } else if (symbol->builtin_id == OM_BUILTIN_SET_RANGE
+               || symbol->builtin_id == OM_BUILTIN_FILL_RANGE
+               || symbol->builtin_id == OM_BUILTIN_REPLACE_RANGE) {
+        const bool is_set_range = symbol->builtin_id
+            == OM_BUILTIN_SET_RANGE;
+        const bool is_fill_range = symbol->builtin_id
+            == OM_BUILTIN_FILL_RANGE;
+        Om_Type_Id element_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id list_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id int_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id function_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id parameters[4] = {
+            OM_TYPE_ID_INVALID, OM_TYPE_ID_INVALID,
+            OM_TYPE_ID_INVALID, OM_TYPE_ID_INVALID,
+        };
+        Om_Status status = om_type_store_variable(&context->type_store, 1,
+                                                   &element_type);
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_list(&context->type_store, element_type,
+                                        &list_type);
+        }
+        if (status == OM_STATUS_OK) {
+            status = get_primitive_type(context, OM_TYPE_INT, &int_type);
+        }
+        parameters[0] = list_type;
+        parameters[1] = int_type;
+        size_t parameter_count = 3;
+        if (is_set_range) {
+            parameters[2] = list_type;
+        } else if (is_fill_range) {
+            parameters[2] = int_type;
+            parameters[3] = element_type;
+            parameter_count = 4;
+        } else {
+            parameters[2] = int_type;
+            parameters[3] = list_type;
+            parameter_count = 4;
+        }
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_function(&context->type_store,
+                OM_TYPE_FUNCTION, parameters, parameter_count, list_type,
+                &function_type);
+        }
+        if (status == OM_STATUS_OK) {
+            status = generalize_symbol(context, symbol->id, function_type, 0);
+        }
+        return status;
+    } else if (symbol->builtin_id == OM_BUILTIN_LIST_REVERSE_COPY
+               || symbol->builtin_id == OM_BUILTIN_LIST_SLICE_COPY) {
+        const bool is_reverse = symbol->builtin_id
+            == OM_BUILTIN_LIST_REVERSE_COPY;
+        Om_Type_Id element_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id list_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id int_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id function_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id parameters[3] = {
+            OM_TYPE_ID_INVALID, OM_TYPE_ID_INVALID, OM_TYPE_ID_INVALID,
+        };
+        Om_Status status = om_type_store_variable(&context->type_store, 1,
+                                                   &element_type);
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_list(&context->type_store, element_type,
+                                        &list_type);
+        }
+        parameters[0] = list_type;
+        size_t parameter_count = 1;
+        if (!is_reverse && status == OM_STATUS_OK) {
+            status = get_primitive_type(context, OM_TYPE_INT, &int_type);
+            parameters[1] = int_type;
+            parameters[2] = int_type;
+            parameter_count = 3;
+        }
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_function(&context->type_store,
+                OM_TYPE_FUNCTION, parameters, parameter_count, list_type,
+                &function_type);
+        }
+        if (status == OM_STATUS_OK) {
+            status = generalize_symbol(context, symbol->id, function_type, 0);
+        }
+        return status;
+    } else if (symbol->builtin_id == OM_BUILTIN_STRING_JOIN_LIST
+               || symbol->builtin_id == OM_BUILTIN_STRING_SPLIT_LIST
+               || symbol->builtin_id == OM_BUILTIN_STRING_REPLACE) {
+        const bool is_join = symbol->builtin_id
+            == OM_BUILTIN_STRING_JOIN_LIST;
+        const bool is_replace = symbol->builtin_id
+            == OM_BUILTIN_STRING_REPLACE;
+        Om_Type_Id string_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id list_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id function_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id parameters[3] = {
+            OM_TYPE_ID_INVALID, OM_TYPE_ID_INVALID, OM_TYPE_ID_INVALID,
+        };
+        Om_Status status = get_primitive_type(context, OM_TYPE_STRING,
+                                               &string_type);
+        if (status == OM_STATUS_OK && is_replace) {
+            parameters[0] = string_type;
+            parameters[1] = string_type;
+            parameters[2] = string_type;
+        } else if (status == OM_STATUS_OK && is_join) {
+            status = om_type_store_list(&context->type_store, string_type,
+                                        &list_type);
+            parameters[0] = list_type;
+            parameters[1] = string_type;
+        } else if (status == OM_STATUS_OK) {
+            status = om_type_store_list(&context->type_store, string_type,
+                                        &list_type);
+            parameters[0] = string_type;
+            parameters[1] = string_type;
+        }
+        const Om_Type_Id result_type = is_join || is_replace
+            ? string_type : list_type;
+        const size_t parameter_count = is_replace ? 3 : 2;
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_function(&context->type_store,
+                OM_TYPE_FUNCTION, parameters, parameter_count, result_type,
+                &function_type);
+        }
+        if (status == OM_STATUS_OK) {
+            status = set_builtin_scheme(context, symbol->id, function_type);
+        }
+        return status;
+    } else if (symbol->builtin_id == OM_BUILTIN_STRING_UTF8_BYTES) {
+        Om_Type_Id string_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id int_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id list_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id function_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id parameters[1] = {OM_TYPE_ID_INVALID};
+        Om_Status status = get_primitive_type(context, OM_TYPE_STRING,
+            &string_type);
+        if (status == OM_STATUS_OK) {
+            status = get_primitive_type(context, OM_TYPE_INT, &int_type);
+        }
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_list(&context->type_store, int_type,
+                &list_type);
+        }
+        parameters[0] = string_type;
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_function(&context->type_store,
+                OM_TYPE_FUNCTION, parameters, 1, list_type, &function_type);
+        }
+        if (status == OM_STATUS_OK) {
+            status = set_builtin_scheme(context, symbol->id, function_type);
+        }
+        return status;
+    } else if (symbol->builtin_id == OM_BUILTIN_STRING_HEX_DECODE_BYTES) {
+        Om_Type_Id string_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id int_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id list_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id function_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id parameters[1] = {OM_TYPE_ID_INVALID};
+        Om_Status status = get_primitive_type(context, OM_TYPE_STRING,
+            &string_type);
+        if (status == OM_STATUS_OK) {
+            status = get_primitive_type(context, OM_TYPE_INT, &int_type);
+        }
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_list(&context->type_store, int_type,
+                &list_type);
+        }
+        parameters[0] = string_type;
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_function(&context->type_store,
+                OM_TYPE_FUNCTION, parameters, 1, list_type, &function_type);
+        }
+        if (status == OM_STATUS_OK) {
+            status = set_builtin_scheme(context, symbol->id, function_type);
+        }
+        return status;
+    } else if (symbol->builtin_id == OM_BUILTIN_LIST_COMPACT_BYTES) {
+        Om_Type_Id int_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id list_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id function_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id parameters[1] = {OM_TYPE_ID_INVALID};
+        Om_Status status = get_primitive_type(context, OM_TYPE_INT,
+            &int_type);
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_list(&context->type_store, int_type,
+                &list_type);
+        }
+        parameters[0] = list_type;
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_function(&context->type_store,
+                OM_TYPE_FUNCTION, parameters, 1, list_type, &function_type);
+        }
+        if (status == OM_STATUS_OK) {
+            status = set_builtin_scheme(context, symbol->id, function_type);
+        }
+        return status;
+    } else if (symbol->builtin_id == OM_BUILTIN_STRING_HEX_ENCODE_BYTES) {
+        Om_Type_Id int_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id list_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id string_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id function_type = OM_TYPE_ID_INVALID;
+        Om_Type_Id parameters[1] = {OM_TYPE_ID_INVALID};
+        Om_Status status = get_primitive_type(context, OM_TYPE_INT,
+            &int_type);
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_list(&context->type_store, int_type,
+                &list_type);
+        }
+        if (status == OM_STATUS_OK) {
+            status = get_primitive_type(context, OM_TYPE_STRING,
+                &string_type);
+        }
+        parameters[0] = list_type;
+        if (status == OM_STATUS_OK) {
+            status = om_type_store_function(&context->type_store,
+                OM_TYPE_FUNCTION, parameters, 1, string_type, &function_type);
+        }
+        if (status == OM_STATUS_OK) {
+            status = set_builtin_scheme(context, symbol->id, function_type);
+        }
+        return status;
     } else if (symbol->builtin_id == OM_BUILTIN_ACTOR_DOWN) {
         Om_Type_Id actor_id = OM_TYPE_ID_INVALID;
         Om_Type_Id reason = OM_TYPE_ID_INVALID;

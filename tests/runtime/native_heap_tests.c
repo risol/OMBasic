@@ -94,6 +94,52 @@ static const Om_Runtime_Type_Descriptor TEST_INT_LIST_TYPE = {
     .alignment = _Alignof(void *),
     .element_type = &TEST_INT_TYPE,
 };
+
+typedef struct Test_List_Record_Layout {
+    void *items;
+} Test_List_Record_Layout;
+
+static const Om_Runtime_Field_Descriptor TEST_LIST_RECORD_FIELDS[] = {
+    {.offset = offsetof(Test_List_Record_Layout, items),
+     .type = &TEST_INT_LIST_TYPE},
+};
+
+static const Om_Runtime_Type_Descriptor TEST_LIST_RECORD_TYPE = {
+    .fingerprint = UINT64_C(15),
+    .kind = OM_RUNTIME_TYPE_RECORD,
+    .size = sizeof(Test_List_Record_Layout),
+    .alignment = _Alignof(Test_List_Record_Layout),
+    .fields = TEST_LIST_RECORD_FIELDS,
+    .field_count = sizeof(TEST_LIST_RECORD_FIELDS)
+        / sizeof(TEST_LIST_RECORD_FIELDS[0]),
+};
+
+static const Om_Runtime_Type_Descriptor TEST_LIST_MESSAGE_TYPE = {
+    .fingerprint = UINT64_C(18),
+    .kind = OM_RUNTIME_TYPE_MESSAGE,
+    .size = sizeof(Test_List_Record_Layout),
+    .alignment = _Alignof(Test_List_Record_Layout),
+    .fields = TEST_LIST_RECORD_FIELDS,
+    .field_count = sizeof(TEST_LIST_RECORD_FIELDS)
+        / sizeof(TEST_LIST_RECORD_FIELDS[0]),
+};
+
+static const Om_Runtime_Field_Descriptor TEST_LIST_PAIR_RECORD_FIELDS[] = {
+    {.offset = offsetof(Test_List_Record_Layout, items),
+     .type = &TEST_INT_LIST_TYPE},
+    {.offset = offsetof(Test_List_Record_Layout, items) + sizeof(void *),
+     .type = &TEST_INT_LIST_TYPE},
+};
+
+static const Om_Runtime_Type_Descriptor TEST_LIST_PAIR_RECORD_TYPE = {
+    .fingerprint = UINT64_C(17),
+    .kind = OM_RUNTIME_TYPE_RECORD,
+    .size = sizeof(void *) * 2,
+    .alignment = _Alignof(void *),
+    .fields = TEST_LIST_PAIR_RECORD_FIELDS,
+    .field_count = sizeof(TEST_LIST_PAIR_RECORD_FIELDS)
+        / sizeof(TEST_LIST_PAIR_RECORD_FIELDS[0]),
+};
 #endif
 
 static const Om_Runtime_Type_Descriptor TEST_STRING_INT_MAP_TYPE = {
@@ -130,6 +176,15 @@ static const Om_Runtime_Type_Descriptor TEST_INT_INT_MAP_TYPE = {
     .alignment = _Alignof(void *),
     .key_type = &TEST_INT_TYPE,
     .value_type = &TEST_INT_TYPE,
+};
+
+static const Om_Runtime_Type_Descriptor TEST_INT_LIST_MAP_TYPE = {
+    .fingerprint = UINT64_C(16),
+    .kind = OM_RUNTIME_TYPE_MAP,
+    .size = sizeof(void *),
+    .alignment = _Alignof(void *),
+    .key_type = &TEST_INT_TYPE,
+    .value_type = &TEST_INT_LIST_TYPE,
 };
 #endif
 
@@ -413,7 +468,9 @@ static bool test_runtime_cstring_conversion(void)
 {
     Om_Execution_Context *context = om_runtime_context_create(0);
     Om_Runtime_Root_Frame *frame = NULL;
+    Om_Runtime_Root_Frame *concat_frame = NULL;
     void *roots[2] = {0};
+    void *concat_roots[4] = {0};
     bool passed = false;
     static const uint8_t embedded_nul[] = {'a', 0, 'b'};
     static const uint8_t invalid_utf8[] = {UINT8_C(0xc3), UINT8_C(0x78), 0};
@@ -456,6 +513,40 @@ static bool test_runtime_cstring_conversion(void)
         &string_order) == OM_STATUS_OK && string_order < 0);
     RUNTIME_ASSERT(om_runtime_string_compare(context, roots[0], roots[0],
         &string_order) == OM_STATUS_OK && string_order == 0);
+
+    static const uint8_t first_part[] = "prefix:";
+    static const uint8_t second_part[] = {
+        UINT8_C(0xe6), UINT8_C(0x9d), UINT8_C(0xb1),
+    };
+    static const uint8_t third_part[] = ":suffix";
+    static const uint8_t joined[] = {
+        'p', 'r', 'e', 'f', 'i', 'x', ':',
+        UINT8_C(0xe6), UINT8_C(0x9d), UINT8_C(0xb1),
+        ':', 's', 'u', 'f', 'f', 'i', 'x',
+    };
+    concat_frame = om_runtime_roots_push(context, concat_roots, 4);
+    RUNTIME_ASSERT(concat_frame != NULL);
+    RUNTIME_ASSERT(om_runtime_string_create_utf8_default(context, first_part,
+        sizeof(first_part) - 1, &concat_roots[0]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_string_create_utf8_default(context, second_part,
+        sizeof(second_part), &concat_roots[1]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_string_create_utf8_default(context, third_part,
+        sizeof(third_part) - 1, &concat_roots[2]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_string_concat_many(context,
+        (const void *const *)concat_roots, 3, &concat_roots[3])
+        == OM_STATUS_OK);
+    Om_String_View joined_view = {0};
+    RUNTIME_ASSERT(om_runtime_string_view(context, concat_roots[3],
+        &joined_view) == OM_STATUS_OK);
+    RUNTIME_ASSERT(joined_view.length == sizeof(joined)
+        && memcmp(joined_view.data, joined, sizeof(joined)) == 0);
+    RUNTIME_ASSERT(om_runtime_string_concat_many(context, NULL, 0,
+        &concat_roots[3]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_string_view(context, concat_roots[3],
+        &joined_view) == OM_STATUS_OK && joined_view.length == 0);
+    RUNTIME_ASSERT(om_runtime_roots_pop(context, concat_frame)
+        == OM_STATUS_OK);
+    concat_frame = NULL;
 
     char *owned_copy = malloc(sizeof(owned_text));
     RUNTIME_ASSERT(owned_copy != NULL);
@@ -515,6 +606,116 @@ static bool test_runtime_cstring_conversion(void)
     passed = true;
 
 cleanup:
+    if (concat_frame != NULL) {
+        (void)om_runtime_roots_pop(context, concat_frame);
+    }
+    if (frame != NULL) {
+        (void)om_runtime_roots_pop(context, frame);
+    }
+    om_runtime_context_destroy(context);
+    return passed;
+}
+
+static bool test_runtime_string_collection_builders(void)
+{
+    Om_Execution_Context *context = om_runtime_context_create(64);
+    Om_Runtime_Root_Frame *frame = NULL;
+    Om_Runtime_String_Builder *builder = NULL;
+    void *roots[12] = {0};
+    bool passed = false;
+    static const uint8_t source_bytes[] = "alpha||\xce\xb2" "eta||";
+    static const uint8_t separator_bytes[] = "||";
+    static const uint8_t empty_separator[] = "";
+    static const uint8_t scalar_bytes[] = "a\xc3\xa9";
+    static const uint8_t expected_second[] = {UINT8_C(0xce), UINT8_C(0xb2),
+        'e', 't', 'a'};
+    RUNTIME_ASSERT(context != NULL);
+    frame = om_runtime_roots_push(context, roots,
+        sizeof(roots) / sizeof(roots[0]));
+    RUNTIME_ASSERT(frame != NULL);
+    RUNTIME_ASSERT(om_runtime_string_create_utf8_default(context,
+        source_bytes, sizeof(source_bytes) - 1, &roots[0]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_string_create_utf8_default(context,
+        separator_bytes, sizeof(separator_bytes) - 1, &roots[1])
+        == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_string_split_list(context, roots[0], roots[1],
+        &TEST_STRING_LIST_TYPE, &roots[2]) == OM_STATUS_OK);
+    size_t length = 0;
+    RUNTIME_ASSERT(om_runtime_list_length(context, roots[2], &length)
+        == OM_STATUS_OK && length == 3);
+    Om_Runtime_Value item = {0};
+    RUNTIME_ASSERT(om_runtime_list_get(context, roots[2], 1, &item)
+        == OM_STATUS_OK);
+    Om_String_View view = {0};
+    RUNTIME_ASSERT(om_runtime_string_view(context, item.managed, &view)
+        == OM_STATUS_OK);
+    RUNTIME_ASSERT(view.length == sizeof(expected_second)
+        && memcmp(view.data, expected_second, sizeof(expected_second)) == 0);
+    RUNTIME_ASSERT(om_runtime_string_join_list(context, roots[2], roots[1],
+        &roots[3]) == OM_STATUS_OK);
+    int32_t order = 0;
+    RUNTIME_ASSERT(om_runtime_string_compare(context, roots[0], roots[3],
+        &order) == OM_STATUS_OK && order == 0);
+
+    RUNTIME_ASSERT(om_runtime_string_create_utf8_default(context,
+        empty_separator, sizeof(empty_separator) - 1, &roots[4])
+        == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_string_create_utf8_default(context,
+        scalar_bytes, sizeof(scalar_bytes) - 1, &roots[5]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_string_split_list(context, roots[5], roots[4],
+        &TEST_STRING_LIST_TYPE, &roots[6]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_length(context, roots[6], &length)
+        == OM_STATUS_OK && length == 2);
+    RUNTIME_ASSERT(om_runtime_list_get(context, roots[6], 1, &item)
+        == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_string_view(context, item.managed, &view)
+        == OM_STATUS_OK && view.length == 2
+        && memcmp(view.data, "\xc3\xa9", 2) == 0);
+
+    RUNTIME_ASSERT(om_runtime_list_create(context, &TEST_STRING_LIST_TYPE,
+        &roots[7]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_string_join_list(context, roots[7], roots[1],
+        &roots[3]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_string_view(context, roots[3], &view)
+        == OM_STATUS_OK && view.length == 0);
+    RUNTIME_ASSERT(om_runtime_collect(context) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_length(context, roots[2], &length)
+        == OM_STATUS_OK && length == 3);
+    RUNTIME_ASSERT(om_runtime_string_create_utf8_default(context,
+        (const uint8_t *)"aaaa", 4, &roots[8]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_string_create_utf8_default(context,
+        (const uint8_t *)"aa", 2, &roots[9]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_string_create_utf8_default(context,
+        (const uint8_t *)"b", 1, &roots[10]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_string_replace(context, roots[8], roots[9],
+        roots[10], &roots[11]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_string_view(context, roots[11], &view)
+        == OM_STATUS_OK && view.length == 2
+        && memcmp(view.data, "bb", 2) == 0);
+    RUNTIME_ASSERT(om_runtime_string_replace(context, roots[8], roots[4],
+        roots[10], &roots[11]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_string_compare(context, roots[8], roots[11],
+        &order) == OM_STATUS_OK && order == 0);
+    RUNTIME_ASSERT(om_runtime_string_builder_create(1, &builder)
+                   == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_string_builder_append_string(context, builder,
+        roots[8]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_string_builder_append_scalar(builder,
+        UINT32_C(0x1f642)) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_string_builder_append_scalar(builder,
+        UINT32_C(0xd800)) == OM_STATUS_INVALID_ARGUMENT);
+    RUNTIME_ASSERT(om_runtime_string_builder_append_string(context, builder,
+        roots[10]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_string_builder_seal(context, builder,
+        &roots[11]) == OM_STATUS_OK);
+    builder = NULL;
+    RUNTIME_ASSERT(om_runtime_string_view(context, roots[11], &view)
+        == OM_STATUS_OK && view.length == 9
+        && memcmp(view.data, "aaaa\xf0\x9f\x99\x82" "b", 9) == 0);
+    passed = true;
+
+cleanup:
+    om_runtime_string_builder_destroy(builder);
     if (frame != NULL) {
         (void)om_runtime_roots_pop(context, frame);
     }
@@ -749,7 +950,8 @@ bool om_runtime_test_gc(void)
 
 bool om_runtime_test_strings(void)
 {
-    return test_runtime_cstring_conversion();
+    return test_runtime_cstring_conversion()
+        && test_runtime_string_collection_builders();
 }
 
 bool om_runtime_test_records(void)
@@ -796,8 +998,11 @@ cleanup:
 bool om_runtime_test_lists(void)
 {
     Om_Execution_Context *context = om_runtime_context_create(0);
+    Om_Execution_Context *clone_context = NULL;
     Om_Runtime_Root_Frame *frame = NULL;
+    Om_Runtime_Root_Frame *clone_frame = NULL;
     void *roots[10] = {NULL};
+    void *clone_roots[3] = {NULL};
     bool passed = false;
     static const uint8_t item[] = "list item";
     RUNTIME_ASSERT(context != NULL);
@@ -826,6 +1031,8 @@ bool om_runtime_test_lists(void)
     RUNTIME_ASSERT(om_runtime_list_length(context, roots[3], &length)
                    == OM_STATUS_OK);
     RUNTIME_ASSERT(length == 2);
+    RUNTIME_ASSERT(om_runtime_list_append(context, roots[3],
+        (Om_Runtime_Value){.managed = roots[1]}) == OM_STATUS_INVALID_ARGUMENT);
     RUNTIME_ASSERT(om_runtime_list_get(context, roots[3], 1, &value)
                    == OM_STATUS_OK);
     RUNTIME_ASSERT(value.managed == roots[1]);
@@ -845,6 +1052,18 @@ bool om_runtime_test_lists(void)
     RUNTIME_ASSERT(om_runtime_list_get(context, roots[5], 1023, &value)
                    == OM_STATUS_OK);
     RUNTIME_ASSERT(value.integer == 1023);
+    const Om_Runtime_Value replacement_value = {.integer = -17};
+    RUNTIME_ASSERT(om_runtime_list_set_copy(context, roots[5], 100,
+        &replacement_value, &roots[8]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_get(context, roots[5], 100, &value)
+                   == OM_STATUS_OK && value.integer == 100);
+    RUNTIME_ASSERT(om_runtime_list_get(context, roots[8], 100, &value)
+                   == OM_STATUS_OK && value.integer == -17);
+    RUNTIME_ASSERT(om_runtime_list_append(context, roots[8],
+        (Om_Runtime_Value){.integer = 2}) == OM_STATUS_INVALID_ARGUMENT);
+    RUNTIME_ASSERT(om_runtime_list_set_copy(context, roots[5], -1,
+        &replacement_value, &roots[9]) == OM_STATUS_OUT_OF_RANGE);
+    roots[8] = NULL;
     RUNTIME_ASSERT(om_runtime_list_get(context, roots[4], 0, &value)
                    == OM_STATUS_OK);
     RUNTIME_ASSERT(value.managed == roots[0]);
@@ -860,6 +1079,288 @@ bool om_runtime_test_lists(void)
     RUNTIME_ASSERT(om_runtime_collect(context) == OM_STATUS_OK);
     RUNTIME_ASSERT(om_runtime_live_object_count(context) == 1);
     roots[5] = NULL;
+    RUNTIME_ASSERT(om_runtime_collect(context) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_live_object_count(context) == 0);
+    RUNTIME_ASSERT(om_runtime_string_create_utf8_default(context, item,
+        sizeof(item) - 1, &roots[1]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_builder_create(context,
+        &TEST_STRING_LIST_TYPE, &roots[6]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_builder_reserve(context, roots[6], 64, 3)
+                   == OM_STATUS_OK);
+    RUNTIME_ASSERT(((Om_Runtime_List_Body *)object_payload(
+        find_object(context, roots[6])))->capacity == 3);
+    RUNTIME_ASSERT(om_runtime_list_builder_reserve(context, roots[6], -1, 3)
+                   == OM_STATUS_OK);
+    Om_Runtime_Value builder_item = {.managed = roots[1]};
+    RUNTIME_ASSERT(om_runtime_list_builder_append_value(context, roots[6],
+        &builder_item) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_length(context, roots[6], &length)
+                   == OM_STATUS_INVALID_ARGUMENT);
+    RUNTIME_ASSERT(om_runtime_collect(context) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_live_object_count(context) == 2);
+    RUNTIME_ASSERT(om_runtime_list_builder_seal(context, roots[6], &roots[7])
+                   == OM_STATUS_OK);
+    RUNTIME_ASSERT(roots[7] == roots[6]);
+    RUNTIME_ASSERT(om_runtime_list_builder_append_value(context, roots[6],
+        &builder_item) == OM_STATUS_INVALID_ARGUMENT);
+    RUNTIME_ASSERT(om_runtime_list_append(context, roots[6], builder_item)
+                   == OM_STATUS_INVALID_ARGUMENT);
+    RUNTIME_ASSERT(om_runtime_list_builder_seal(context, roots[6], &roots[8])
+                   == OM_STATUS_INVALID_ARGUMENT);
+    roots[1] = NULL;
+    RUNTIME_ASSERT(om_runtime_collect(context) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_length(context, roots[7], &length)
+                   == OM_STATUS_OK && length == 1);
+    RUNTIME_ASSERT(om_runtime_list_get(context, roots[7], 0, &value)
+                   == OM_STATUS_OK && value.managed != NULL);
+    roots[6] = NULL;
+    roots[7] = NULL;
+    RUNTIME_ASSERT(om_runtime_collect(context) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_live_object_count(context) == 0);
+    RUNTIME_ASSERT(om_runtime_list_create(context, &TEST_INT_LIST_TYPE,
+        &roots[0]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_create(context, &TEST_INT_LIST_TYPE,
+        &roots[1]) == OM_STATUS_OK);
+    for (int64_t index = 1; index <= 5; ++index) {
+        RUNTIME_ASSERT(om_runtime_list_append(context, roots[0],
+            (Om_Runtime_Value){.integer = index}) == OM_STATUS_OK);
+    }
+    RUNTIME_ASSERT(om_runtime_list_append(context, roots[1],
+        (Om_Runtime_Value){.integer = 8}) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_append(context, roots[1],
+        (Om_Runtime_Value){.integer = 9}) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_set_range_copy(context, roots[0], 1,
+        roots[1], &roots[2]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_fill_range_copy(context, roots[0], 2, 2,
+        &(Om_Runtime_Value){.integer = 7}, &roots[3]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_replace_range_copy(context, roots[0], 1, 3,
+        roots[1], &roots[4]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_replace_range_copy(context, roots[0], 1, 0,
+        roots[1], &roots[8]) == OM_STATUS_OK);
+    const int64_t expected_original[] = {1, 2, 3, 4, 5};
+    const int64_t expected_set_range[] = {1, 8, 9, 4, 5};
+    const int64_t expected_fill_range[] = {1, 2, 7, 7, 5};
+    const int64_t expected_replace_range[] = {1, 8, 9, 5};
+    const int64_t expected_replace_growth[] = {1, 8, 9, 2, 3, 4, 5};
+    RUNTIME_ASSERT(om_runtime_list_length(context, roots[4], &length)
+                   == OM_STATUS_OK && length == 4);
+    RUNTIME_ASSERT(om_runtime_list_length(context, roots[8], &length)
+                   == OM_STATUS_OK && length == 7);
+    for (size_t index = 0; index < 5; ++index) {
+        RUNTIME_ASSERT(om_runtime_list_get(context, roots[0], index, &value)
+                       == OM_STATUS_OK);
+        RUNTIME_ASSERT(value.integer == expected_original[index]);
+        RUNTIME_ASSERT(om_runtime_list_get(context, roots[2], index, &value)
+                       == OM_STATUS_OK);
+        RUNTIME_ASSERT(value.integer == expected_set_range[index]);
+        RUNTIME_ASSERT(om_runtime_list_get(context, roots[3], index, &value)
+                       == OM_STATUS_OK);
+        RUNTIME_ASSERT(value.integer == expected_fill_range[index]);
+        if (index < 4) {
+            RUNTIME_ASSERT(om_runtime_list_get(context, roots[4], index,
+                &value) == OM_STATUS_OK);
+            RUNTIME_ASSERT(value.integer == expected_replace_range[index]);
+        }
+    }
+    for (size_t index = 0; index < 7; ++index) {
+        RUNTIME_ASSERT(om_runtime_list_get(context, roots[8], index, &value)
+                       == OM_STATUS_OK);
+        RUNTIME_ASSERT(value.integer == expected_replace_growth[index]);
+    }
+    RUNTIME_ASSERT(om_runtime_list_set_range_copy(context, roots[0], 4,
+        roots[1], &roots[9]) == OM_STATUS_OUT_OF_RANGE);
+    RUNTIME_ASSERT(om_runtime_list_fill_range_copy(context, roots[0], 1, -1,
+        &(Om_Runtime_Value){.integer = 7}, &roots[9]) == OM_STATUS_OUT_OF_RANGE);
+    RUNTIME_ASSERT(om_runtime_list_replace_range_copy(context, roots[0], 4, 2,
+        roots[1], &roots[9]) == OM_STATUS_OUT_OF_RANGE);
+    for (size_t index = 0; index < 5; ++index) roots[index] = NULL;
+    roots[8] = NULL;
+    RUNTIME_ASSERT(om_runtime_collect(context) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_live_object_count(context) == 0);
+    RUNTIME_ASSERT(om_runtime_list_builder_create(context,
+        &TEST_INT_LIST_TYPE, &roots[0]) == OM_STATUS_OK);
+    for (int64_t index = 0; index < 3; ++index) {
+        RUNTIME_ASSERT(om_runtime_list_builder_append_value(context, roots[0],
+            &(Om_Runtime_Value){.integer = index + 1}) == OM_STATUS_OK);
+    }
+    RUNTIME_ASSERT(om_runtime_list_builder_seal(context, roots[0], &roots[1])
+                   == OM_STATUS_OK);
+    roots[0] = NULL;
+    const Om_Runtime_Value consumed_replacement = {.integer = 9};
+    RUNTIME_ASSERT(om_runtime_list_set_consume(context, roots[1], 1,
+        &consumed_replacement, &roots[2]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(roots[2] == roots[1]);
+    RUNTIME_ASSERT(om_runtime_list_get(context, roots[1], 1, &value)
+                   == OM_STATUS_OK && value.integer == 9);
+    RUNTIME_ASSERT(om_runtime_list_builder_create(context,
+        &TEST_INT_LIST_TYPE, &roots[3]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_builder_append_value(context, roots[3],
+        &(Om_Runtime_Value){.integer = 1}) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_builder_seal(context, roots[3], &roots[4])
+                   == OM_STATUS_OK);
+    om_runtime_list_mark_shared(context, roots[4]);
+    const Om_Runtime_Value shared_replacement = {.integer = 7};
+    RUNTIME_ASSERT(om_runtime_list_set_consume(context, roots[4], 0,
+        &shared_replacement, &roots[5]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(roots[5] != roots[4]);
+    RUNTIME_ASSERT(om_runtime_list_get(context, roots[4], 0, &value)
+                   == OM_STATUS_OK && value.integer == 1);
+    RUNTIME_ASSERT(om_runtime_list_get(context, roots[5], 0, &value)
+                   == OM_STATUS_OK && value.integer == 7);
+    roots[1] = NULL;
+    roots[2] = NULL;
+    roots[3] = NULL;
+    roots[4] = NULL;
+    roots[5] = NULL;
+    RUNTIME_ASSERT(om_runtime_list_builder_create(context,
+        &TEST_INT_LIST_TYPE, &roots[4]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_builder_append_value(context, roots[4],
+        &(Om_Runtime_Value){.integer = 1}) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_builder_seal(context, roots[4], &roots[5])
+                   == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_record_create(context, &TEST_LIST_RECORD_TYPE,
+        &roots[6]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_record_set(context, roots[6], 0,
+        (Om_Runtime_Value){.managed = roots[5]}) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_set_consume(context, roots[5], 0,
+        &shared_replacement, &roots[7]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(roots[7] != roots[5]);
+    RUNTIME_ASSERT(om_runtime_list_get(context, roots[5], 0, &value)
+                   == OM_STATUS_OK && value.integer == 1);
+    RUNTIME_ASSERT(om_runtime_list_get(context, roots[7], 0, &value)
+                   == OM_STATUS_OK && value.integer == 7);
+    for (size_t index = 4; index <= 7; ++index) roots[index] = NULL;
+    RUNTIME_ASSERT(om_runtime_collect(context) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_live_object_count(context) == 0);
+
+    RUNTIME_ASSERT(om_runtime_list_builder_create(context,
+        &TEST_INT_LIST_TYPE, &roots[4]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_builder_append_value(context, roots[4],
+        &(Om_Runtime_Value){.integer = 1}) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_builder_seal(context, roots[4], &roots[5])
+                   == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_record_create(context, &TEST_LIST_MESSAGE_TYPE,
+        &roots[6]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_record_set(context, roots[6], 0,
+        (Om_Runtime_Value){.managed = roots[5]}) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_set_consume(context, roots[5], 0,
+        &shared_replacement, &roots[7]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(roots[7] != roots[5]);
+    RUNTIME_ASSERT(om_runtime_list_get(context, roots[5], 0, &value)
+                   == OM_STATUS_OK && value.integer == 1);
+    for (size_t index = 4; index <= 7; ++index) roots[index] = NULL;
+    RUNTIME_ASSERT(om_runtime_collect(context) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_live_object_count(context) == 0);
+
+    RUNTIME_ASSERT(om_runtime_list_builder_create(context,
+        &TEST_INT_LIST_TYPE, &roots[4]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_builder_append_value(context, roots[4],
+        &(Om_Runtime_Value){.integer = 1}) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_builder_seal(context, roots[4], &roots[5])
+                   == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_map_create(context, &TEST_INT_LIST_MAP_TYPE,
+        &roots[6]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_map_set(context, roots[6],
+        (Om_Runtime_Value){.integer = 1},
+        (Om_Runtime_Value){.managed = roots[5]}) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_set_consume(context, roots[5], 0,
+        &shared_replacement, &roots[7]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(roots[7] != roots[5]);
+    RUNTIME_ASSERT(om_runtime_list_get(context, roots[5], 0, &value)
+                   == OM_STATUS_OK && value.integer == 1);
+    RUNTIME_ASSERT(om_runtime_list_get(context, roots[7], 0, &value)
+                   == OM_STATUS_OK && value.integer == 7);
+    for (size_t index = 4; index <= 7; ++index) roots[index] = NULL;
+    RUNTIME_ASSERT(om_runtime_collect(context) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_live_object_count(context) == 0);
+
+    RUNTIME_ASSERT(om_runtime_list_builder_create(context,
+        &TEST_INT_LIST_TYPE, &roots[4]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_builder_append_value(context, roots[4],
+        &(Om_Runtime_Value){.integer = 1}) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_builder_seal(context, roots[4], &roots[5])
+                   == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_record_create(context,
+        &TEST_LIST_PAIR_RECORD_TYPE, &roots[6]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_record_set(context, roots[6], 0,
+        (Om_Runtime_Value){.managed = roots[5]}) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_record_set(context, roots[6], 1,
+        (Om_Runtime_Value){.managed = roots[5]}) == OM_STATUS_OK);
+    clone_context = om_runtime_context_create(0);
+    RUNTIME_ASSERT(clone_context != NULL);
+    clone_frame = om_runtime_roots_push(clone_context, clone_roots, 3);
+    RUNTIME_ASSERT(clone_frame != NULL);
+    RUNTIME_ASSERT(om_runtime_object_clone(context, clone_context, roots[6],
+        &clone_roots[0]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_record_get(clone_context, clone_roots[0], 0,
+        &value) == OM_STATUS_OK);
+    clone_roots[1] = value.managed;
+    RUNTIME_ASSERT(om_runtime_record_get(clone_context, clone_roots[0], 1,
+        &value) == OM_STATUS_OK && value.managed == clone_roots[1]);
+    RUNTIME_ASSERT(om_runtime_list_set_consume(clone_context, clone_roots[1],
+        0, &shared_replacement, &clone_roots[2]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(clone_roots[2] != clone_roots[1]);
+    RUNTIME_ASSERT(om_runtime_list_get(clone_context, clone_roots[1], 0,
+        &value) == OM_STATUS_OK && value.integer == 1);
+    RUNTIME_ASSERT(om_runtime_list_get(clone_context, clone_roots[2], 0,
+        &value) == OM_STATUS_OK && value.integer == 7);
+    RUNTIME_ASSERT(om_runtime_roots_pop(clone_context, clone_frame)
+                   == OM_STATUS_OK);
+    clone_frame = NULL;
+    om_runtime_context_destroy(clone_context);
+    clone_context = NULL;
+    for (size_t index = 4; index <= 6; ++index) roots[index] = NULL;
+    RUNTIME_ASSERT(om_runtime_collect(context) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_live_object_count(context) == 0);
+
+    const int64_t differential_initial[] = {5, 3, 7, 1};
+    const int64_t differential_indices[] = {0, 3, 1, 1, 2};
+    const int64_t differential_values[] = {8, -2, 4, 6, 0};
+    int64_t differential_expected[] = {5, 3, 7, 1};
+    for (size_t branch = 0; branch < 2; ++branch) {
+        const size_t root_index = branch;
+        RUNTIME_ASSERT(om_runtime_list_builder_create(context,
+            &TEST_INT_LIST_TYPE, &roots[root_index]) == OM_STATUS_OK);
+        for (size_t index = 0; index < 4; ++index) {
+            RUNTIME_ASSERT(om_runtime_list_builder_append_value(context,
+                roots[root_index], &(Om_Runtime_Value){
+                    .integer = differential_initial[index],
+                }) == OM_STATUS_OK);
+        }
+        RUNTIME_ASSERT(om_runtime_list_builder_seal(context,
+            roots[root_index], &roots[root_index]) == OM_STATUS_OK);
+    }
+    for (size_t update = 0;
+         update < sizeof(differential_indices) / sizeof(differential_indices[0]);
+         ++update) {
+        const Om_Runtime_Value replacement = {
+            .integer = differential_values[update],
+        };
+        RUNTIME_ASSERT(om_runtime_list_set_copy(context, roots[0],
+            differential_indices[update], &replacement, &roots[2])
+            == OM_STATUS_OK);
+        RUNTIME_ASSERT(om_runtime_list_set_consume(context, roots[1],
+            differential_indices[update], &replacement, &roots[3])
+            == OM_STATUS_OK);
+        roots[0] = roots[2];
+        roots[1] = roots[3];
+        roots[2] = NULL;
+        roots[3] = NULL;
+        differential_expected[differential_indices[update]] =
+            differential_values[update];
+    }
+    for (size_t index = 0; index < 4; ++index) {
+        Om_Runtime_Value copied = {0};
+        Om_Runtime_Value consumed = {0};
+        RUNTIME_ASSERT(om_runtime_list_get(context, roots[0], index, &copied)
+                       == OM_STATUS_OK);
+        RUNTIME_ASSERT(om_runtime_list_get(context, roots[1], index, &consumed)
+                       == OM_STATUS_OK);
+        RUNTIME_ASSERT(copied.integer == differential_expected[index]
+            && consumed.integer == differential_expected[index]);
+    }
+    roots[0] = NULL;
+    roots[1] = NULL;
     RUNTIME_ASSERT(om_runtime_collect(context) == OM_STATUS_OK);
     RUNTIME_ASSERT(om_runtime_live_object_count(context) == 0);
 #ifdef OM_RUNTIME_TEST_SUPPORT_ONLY
@@ -940,9 +1441,181 @@ bool om_runtime_test_lists(void)
         RUNTIME_ASSERT(value.integer == expected_strings[index]);
     }
 #endif
+    for (size_t index = 0; index < 10; ++index) roots[index] = NULL;
+    RUNTIME_ASSERT(om_runtime_collect(context) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_live_object_count(context) == 0);
+    RUNTIME_ASSERT(om_runtime_list_byte_builder_create(context,
+        &TEST_INT_LIST_TYPE, &roots[0]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_builder_reserve(context, roots[0], 3, 3)
+                   == OM_STATUS_OK);
+    RUNTIME_ASSERT(((Om_Runtime_List_Body *)object_payload(
+        find_object(context, roots[0])))->byte_storage);
+    RUNTIME_ASSERT(om_runtime_list_byte_builder_append(context, roots[0], 0)
+                   == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_byte_builder_append(context, roots[0], 127)
+                   == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_byte_builder_append(context, roots[0], 255)
+                   == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_byte_builder_append(context, roots[0], 256)
+                   == OM_STATUS_OUT_OF_RANGE);
+    RUNTIME_ASSERT(om_runtime_list_create(context, &TEST_INT_LIST_TYPE,
+        &roots[1]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_append(context, roots[1],
+        (Om_Runtime_Value){.integer = 17}) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_append(context, roots[1],
+        (Om_Runtime_Value){.integer = 32}) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_byte_builder_append_list(context, roots[0],
+        roots[1]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_builder_seal(context, roots[0], &roots[2])
+                   == OM_STATUS_OK && roots[2] == roots[0]);
+    RUNTIME_ASSERT(om_runtime_list_length(context, roots[2], &length)
+                   == OM_STATUS_OK && length == 5);
+    const int64_t compact_expected[] = {0, 127, 255, 17, 32};
+    for (size_t index = 0; index < 5; ++index) {
+        RUNTIME_ASSERT(om_runtime_list_get(context, roots[2], index, &value)
+                       == OM_STATUS_OK);
+        RUNTIME_ASSERT(value.integer == compact_expected[index]);
+    }
+    RUNTIME_ASSERT(om_runtime_list_reverse_copy(context, roots[2], &roots[3])
+                   == OM_STATUS_OK);
+    RUNTIME_ASSERT(((Om_Runtime_List_Body *)object_payload(
+        find_object(context, roots[3])))->byte_storage);
+    RUNTIME_ASSERT(om_runtime_list_get(context, roots[3], 0, &value)
+                   == OM_STATUS_OK && value.integer == 32);
+    RUNTIME_ASSERT(om_runtime_list_slice_copy(context, roots[2], 1, 3,
+        &roots[4]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(((Om_Runtime_List_Body *)object_payload(
+        find_object(context, roots[4])))->byte_storage);
+    RUNTIME_ASSERT(om_runtime_list_concat(context, roots[2], roots[4],
+        &roots[5]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(((Om_Runtime_List_Body *)object_payload(
+        find_object(context, roots[5])))->byte_storage);
+    RUNTIME_ASSERT(om_runtime_list_length(context, roots[5], &length)
+                   == OM_STATUS_OK && length == 8);
+    RUNTIME_ASSERT(om_runtime_list_set_copy(context, roots[2], 1,
+        &(Om_Runtime_Value){.integer = 260}, &roots[6]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(!((Om_Runtime_List_Body *)object_payload(
+        find_object(context, roots[6])))->byte_storage);
+    RUNTIME_ASSERT(om_runtime_list_get(context, roots[6], 1, &value)
+                   == OM_STATUS_OK && value.integer == 260);
+    RUNTIME_ASSERT(om_runtime_list_compact_bytes(context, roots[1],
+        &TEST_INT_LIST_TYPE, &roots[9]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(((Om_Runtime_List_Body *)object_payload(
+        find_object(context, roots[9])))->byte_storage);
+    RUNTIME_ASSERT(om_runtime_list_get(context, roots[9], 1, &value)
+                   == OM_STATUS_OK && value.integer == 32);
+    RUNTIME_ASSERT(om_runtime_list_byte_builder_create(context,
+        &TEST_INT_LIST_TYPE, &roots[8]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_byte_builder_append_list(context, roots[8],
+        roots[6]) == OM_STATUS_OUT_OF_RANGE);
+    RUNTIME_ASSERT(om_runtime_list_set_copy(context, roots[2], 1,
+        &(Om_Runtime_Value){.integer = 42}, &roots[7]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(((Om_Runtime_List_Body *)object_payload(
+        find_object(context, roots[7])))->byte_storage);
+    RUNTIME_ASSERT(om_runtime_list_set_consume(context, roots[7], 0,
+        &(Om_Runtime_Value){.integer = 9}, &roots[8]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(roots[8] == roots[7]);
+    RUNTIME_ASSERT(om_runtime_list_set_consume(context, roots[7], 1,
+        &(Om_Runtime_Value){.integer = 300}, &roots[9]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(roots[9] != roots[7]);
+    RUNTIME_ASSERT(om_runtime_list_get(context, roots[7], 1, &value)
+                   == OM_STATUS_OK && value.integer == 42);
+    RUNTIME_ASSERT(om_runtime_list_get(context, roots[9], 1, &value)
+                   == OM_STATUS_OK && value.integer == 300);
+    (void)memset(clone_roots, 0, sizeof(clone_roots));
+    clone_context = om_runtime_context_create(0);
+    RUNTIME_ASSERT(clone_context != NULL);
+    clone_frame = om_runtime_roots_push(clone_context, clone_roots, 3);
+    RUNTIME_ASSERT(clone_frame != NULL);
+    RUNTIME_ASSERT(om_runtime_object_clone(context, clone_context, roots[7],
+        &clone_roots[0]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_get(clone_context, clone_roots[0], 2,
+        &value) == OM_STATUS_OK && value.integer == 255);
+    for (size_t index = 0; index < 10; ++index) roots[index] = NULL;
+    RUNTIME_ASSERT(om_runtime_collect(context) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_live_object_count(context) == 0);
+    clone_roots[0] = NULL;
+    RUNTIME_ASSERT(om_runtime_collect(clone_context) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_live_object_count(clone_context) == 0);
+    for (size_t index = 0; index < 10; ++index) roots[index] = NULL;
+    RUNTIME_ASSERT(om_runtime_collect(context) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_live_object_count(context) == 0);
+    RUNTIME_ASSERT(om_runtime_record_create(context, &TEST_LIST_RECORD_TYPE,
+        &roots[0]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_builder_create(context,
+        &TEST_INT_LIST_TYPE, &roots[1]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_builder_append_value(context, roots[1],
+        &(Om_Runtime_Value){.integer = 1}) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_builder_seal(context, roots[1], &roots[1])
+                   == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_record_set_actor_state_init(context, roots[0], 0,
+        &roots[1]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(atomic_load_explicit(&((Om_Runtime_List_Body *)object_payload(
+        find_object(context, roots[1])))->ownership_state,
+        memory_order_acquire) == OM_RUNTIME_LIST_OWNERSHIP_UNIQUE);
+    RUNTIME_ASSERT(om_runtime_list_set_consume(context, roots[1], 0,
+        &(Om_Runtime_Value){.integer = 9}, &roots[2]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(roots[2] == roots[1]);
+    RUNTIME_ASSERT(om_runtime_record_set_actor_state(context, roots[0], 0,
+        &roots[2]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(atomic_load_explicit(&((Om_Runtime_List_Body *)object_payload(
+        find_object(context, roots[2])))->ownership_state,
+        memory_order_acquire) == OM_RUNTIME_LIST_OWNERSHIP_CONSUMED);
+    RUNTIME_ASSERT(om_runtime_list_set_consume(context, roots[2], 0,
+        &(Om_Runtime_Value){.integer = 11}, &roots[3]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(roots[3] == roots[2]);
+
+    RUNTIME_ASSERT(om_runtime_record_create(context, &TEST_LIST_RECORD_TYPE,
+        &roots[4]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_builder_create(context,
+        &TEST_INT_LIST_TYPE, &roots[5]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_builder_append_value(context, roots[5],
+        &(Om_Runtime_Value){.integer = 2}) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_builder_seal(context, roots[5], &roots[5])
+                   == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_record_set_actor_state_init(context, roots[4], 0,
+        &roots[5]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_record_set_actor_state(context, roots[4], 0,
+        &roots[5]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(atomic_load_explicit(&((Om_Runtime_List_Body *)object_payload(
+        find_object(context, roots[5])))->ownership_state,
+        memory_order_acquire) == OM_RUNTIME_LIST_OWNERSHIP_SHARED);
+    RUNTIME_ASSERT(om_runtime_list_set_consume(context, roots[5], 0,
+        &(Om_Runtime_Value){.integer = 12}, &roots[6]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(roots[6] != roots[5]);
+    RUNTIME_ASSERT(om_runtime_list_get(context, roots[5], 0, &value)
+                   == OM_STATUS_OK && value.integer == 2);
+    RUNTIME_ASSERT(om_runtime_list_get(context, roots[6], 0, &value)
+                   == OM_STATUS_OK && value.integer == 12);
+
+    RUNTIME_ASSERT(om_runtime_record_create(context,
+        &TEST_LIST_PAIR_RECORD_TYPE, &roots[7]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_builder_create(context,
+        &TEST_INT_LIST_TYPE, &roots[8]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_builder_append_value(context, roots[8],
+        &(Om_Runtime_Value){.integer = 3}) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_list_builder_seal(context, roots[8], &roots[8])
+                   == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_record_set_actor_state_init(context, roots[7], 0,
+        &roots[8]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_record_set_actor_state_init(context, roots[7], 1,
+        &roots[8]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(atomic_load_explicit(&((Om_Runtime_List_Body *)object_payload(
+        find_object(context, roots[8])))->ownership_state,
+        memory_order_acquire) == OM_RUNTIME_LIST_OWNERSHIP_SHARED);
+    RUNTIME_ASSERT(om_runtime_list_set_consume(context, roots[8], 0,
+        &(Om_Runtime_Value){.integer = 13}, &roots[9]) == OM_STATUS_OK);
+    RUNTIME_ASSERT(roots[9] != roots[8]);
+    for (size_t index = 0; index < 10; ++index) roots[index] = NULL;
+    RUNTIME_ASSERT(om_runtime_collect(context) == OM_STATUS_OK);
+    RUNTIME_ASSERT(om_runtime_live_object_count(context) == 0);
     passed = true;
 
 cleanup:
+    if (clone_frame != NULL) {
+        (void)om_runtime_roots_pop(clone_context, clone_frame);
+    }
+    om_runtime_context_destroy(clone_context);
     if (frame != NULL) {
         (void)om_runtime_roots_pop(context, frame);
     }
@@ -1009,6 +1682,8 @@ int main(void)
     const bool objects_passed = test_native_objects_and_collection();
     const bool threshold_passed = test_collection_threshold_tracks_live_heap();
     const bool cstring_passed = test_runtime_cstring_conversion();
+    const bool string_collection_passed =
+        test_runtime_string_collection_builders();
     const bool cycles_passed = test_cycle_collection();
     const bool container_passed = test_unit_null_containers_and_root_order();
     const bool fault_passed = test_runtime_fault_boundary();
@@ -1016,12 +1691,12 @@ int main(void)
     const bool json_passed = test_json_native();
     (void)fprintf(stdout, "Native runtime tests: %s\n",
         objects_passed && threshold_passed && cstring_passed && cycles_passed
-            && container_passed && fault_passed && native_pointer_passed
-            && json_passed
+            && string_collection_passed && container_passed && fault_passed
+            && native_pointer_passed && json_passed
             ? "passed" : "failed");
     return objects_passed && threshold_passed && cstring_passed && cycles_passed
-            && container_passed && fault_passed && native_pointer_passed
-            && json_passed
+            && string_collection_passed && container_passed && fault_passed
+            && native_pointer_passed && json_passed
         ? 0 : 1;
 }
 #endif

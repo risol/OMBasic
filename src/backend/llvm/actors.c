@@ -344,8 +344,10 @@ Om_Status create_actor_state_initializer(
                 value_storage,
             };
             LLVMValueRef set_status = LLVMBuildCall2(backend->builder,
-                LLVMGlobalGetValueType(backend->runtime_record_set),
-                backend->runtime_record_set, set_arguments, 4,
+                LLVMGlobalGetValueType(
+                    backend->runtime_record_set_actor_state_init),
+                backend->runtime_record_set_actor_state_init,
+                set_arguments, 4,
                 "state_field_status");
             status = set_status == NULL ? OM_STATUS_OUT_OF_MEMORY
                 : callback_status_check(backend, function, set_status);

@@ -57,62 +57,15 @@ EXPORT FUNCTION trim_end(value)
 END FUNCTION
 
 EXPORT FUNCTION split(value, separator)
-    value_length = length(value)
-    separator_length = length(separator)
-    IF separator_length = 0 THEN
-        VAR chars = []
-        VAR index = 0
-        WHILE index < value_length
-            chars = chars + [slice(value, index, 1)]
-            index = index + 1
-        END WHILE
-        RETURN chars
-    END IF
-    VAR parts = []
-    VAR start_index = 0
-    VAR match_index = -1
-    WHILE start_index <= value_length
-        match_index = find_from(value, separator, start_index)
-        IF match_index < 0 THEN
-            RETURN parts + [slice(value, start_index, value_length - start_index)]
-        END IF
-        parts = parts + [slice(value, start_index, match_index - start_index)]
-        start_index = match_index + separator_length
-    END WHILE
-    RETURN parts
+    RETURN string_split_list(value, separator)
 END FUNCTION
 
 EXPORT FUNCTION join(values, separator)
-    VAR joined_text = ""
-    FOR item IN values
-        joined_text = (joined_text + item) + separator
-    END FOR
-    IF is_empty(joined_text) THEN
-        RETURN ""
-    END IF
-    separator_length = length(separator)
-    RETURN slice(joined_text, 0, length(joined_text) - separator_length)
+    RETURN string_join_list(values, separator)
 END FUNCTION
 
 ' Replaces non-overlapping matches from left to right; an empty needle is a no-op.
 EXPORT FUNCTION replace(value, needle, replacement)
-    IF is_empty(needle) THEN
-        RETURN value + ""
-    END IF
-    VAR output = ""
-    VAR cursor = 0
-    VAR match_index = -1
-    VAR needle_length = length(needle)
-    VAR value_length = length(value)
-    WHILE cursor <= value_length
-        match_index = find_from(value, needle, cursor)
-        IF match_index < 0 THEN
-            RETURN output + slice(value, cursor, value_length - cursor)
-        END IF
-        output = output + slice(value, cursor, match_index - cursor)
-        output = output + replacement
-        cursor = match_index + needle_length
-    END WHILE
-    RETURN output
+    RETURN string_replace(value, needle, replacement)
 END FUNCTION
 

@@ -148,7 +148,7 @@ Om_Status runtime_collect_internal(Om_Execution_Context *context)
             }
         } else if (type->kind == OM_RUNTIME_TYPE_LIST) {
             const Om_Runtime_List_Body *list = (const Om_Runtime_List_Body *)payload;
-            if (type_is_managed(type->element_type)) {
+            if (type_is_managed(type->element_type) && !list->byte_storage) {
                 for (size_t index = 0; status == OM_STATUS_OK
                      && index < list->length; ++index) {
                     status = mark_managed_field(context, &list->items[index],
@@ -243,7 +243,14 @@ static Om_Status clone_object_value(Om_Runtime_Object_Copy_Context *copy,
     }
     for (size_t index = 0; index < copy->pair_count; ++index) {
         if (copy->pairs[index].source == source) {
-            *destination = copy->pairs[index].destination;
+            const void *existing_destination =
+                copy->pairs[index].destination;
+            if (source->fields.type != NULL
+                && source->fields.type->kind == OM_RUNTIME_TYPE_LIST) {
+                om_runtime_list_mark_shared(copy->destination_context,
+                    existing_destination);
+            }
+            *destination = (void *)existing_destination;
             return OM_STATUS_OK;
         }
     }
@@ -339,6 +346,9 @@ static Om_Status clone_object_value(Om_Runtime_Object_Copy_Context *copy,
         status = allocate_object(copy->destination_context, type,
             sizeof(Om_Runtime_List_Body), 0, &object);
         if (status == OM_STATUS_OK) {
+            atomic_init(&((Om_Runtime_List_Body *)object_payload(object))
+                             ->ownership_state,
+                        OM_RUNTIME_LIST_OWNERSHIP_UNIQUE);
             if (copy->pair_count == copy->pair_capacity) {
                 const size_t capacity = copy->pair_capacity == 0 ? 16
                     : copy->pair_capacity * 2;
@@ -369,11 +379,17 @@ static Om_Status clone_object_value(Om_Runtime_Object_Copy_Context *copy,
             } else {
                 const Om_Runtime_List_Body *source_list =
                     object_payload_const(source);
+                if (source_list->transient) {
+                    status = OM_STATUS_INVALID_ARGUMENT;
+                }
                 for (size_t index = 0; status == OM_STATUS_OK
                      && index < source_list->length; ++index) {
                     Om_Runtime_Value value = {0};
                     const Om_Runtime_Value source_value =
-                        source_list->items[index];
+                        source_list->byte_storage
+                            ? (Om_Runtime_Value){.integer =
+                                  source_list->byte_items[index]}
+                            : source_list->items[index];
                     if (type_is_managed(type->element_type)) {
                         status = clone_managed_value(copy, type->element_type,
                             &source_value.managed, &value.managed, depth + 1);
@@ -405,6 +421,8 @@ static Om_Status clone_object_value(Om_Runtime_Object_Copy_Context *copy,
                 const Om_Status pop_status = om_runtime_roots_pop(
                     copy->destination_context, root);
                 if (status == OM_STATUS_OK) {
+                    ((Om_Runtime_List_Body *)object_payload(object))->sealed =
+                        true;
                     status = pop_status;
                 }
             }

@@ -2,12 +2,14 @@
 #define OMBASIC_RUNTIME_INTERNAL_H
 
 #include <setjmp.h>
+#include <stdatomic.h>
 
 #include "ombasic/runtime/abi.h"
 #include "ombasic/runtime/embedding.h"
 
 typedef struct Om_Runtime_Actor Om_Runtime_Actor;
 typedef struct Om_Runtime_Actor_System Om_Runtime_Actor_System;
+typedef struct Om_Runtime_String_Builder Om_Runtime_String_Builder;
 
 typedef struct Om_Runtime_Distribution_Hooks {
     Om_Status (*spawn)(void *state,
@@ -58,7 +60,19 @@ typedef struct Om_Runtime_List_Body {
     size_t length;
     size_t capacity;
     Om_Runtime_Value *items;
+    uint8_t *byte_items;
+    bool byte_storage;
+    bool transient;
+    bool sealed;
+    atomic_uint ownership_state;
 } Om_Runtime_List_Body;
+
+enum {
+    OM_RUNTIME_LIST_OWNERSHIP_UNIQUE = 0,
+    OM_RUNTIME_LIST_OWNERSHIP_SHARED = 1,
+    OM_RUNTIME_LIST_OWNERSHIP_CONSUMING = 2,
+    OM_RUNTIME_LIST_OWNERSHIP_CONSUMED = 3,
+};
 
 typedef struct Om_Runtime_Map_Entry {
     Om_Runtime_Value key;
@@ -174,9 +188,144 @@ Om_Status om_runtime_record_set(Om_Execution_Context *context,
                                 void *record,
                                 size_t field_index,
                                 Om_Runtime_Value value);
+Om_Status om_runtime_record_set_actor_state_init(
+    Om_Execution_Context *context,
+    void *record,
+    size_t field_index,
+    const void *value);
+Om_Status om_runtime_record_set_actor_state(
+    Om_Execution_Context *context,
+    void *record,
+    size_t field_index,
+    const void *value);
 Om_Status om_runtime_list_append(Om_Execution_Context *context,
                                  void *list,
                                  Om_Runtime_Value value);
+Om_Status om_runtime_list_builder_create(
+    Om_Execution_Context *context,
+    const Om_Runtime_Type_Descriptor *type,
+    void **result);
+Om_Status om_runtime_list_byte_builder_create(
+    Om_Execution_Context *context,
+    const Om_Runtime_Type_Descriptor *type,
+    void **result);
+Om_Status om_runtime_list_builder_reserve(Om_Execution_Context *context,
+                                          void *builder,
+                                          int64_t requested_capacity,
+                                          int64_t capacity_limit);
+Om_Status om_runtime_list_builder_append_value(
+    Om_Execution_Context *context,
+    void *builder,
+    const Om_Runtime_Value *value);
+Om_Status om_runtime_list_byte_builder_append(
+    Om_Execution_Context *context,
+    void *builder,
+    int64_t value);
+Om_Status om_runtime_list_byte_builder_append_list(
+    Om_Execution_Context *context,
+    void *builder,
+    const void *list);
+Om_Status om_runtime_list_builder_seal(Om_Execution_Context *context,
+                                       void *builder,
+                                       void **result);
+Om_Status om_runtime_list_set_copy(Om_Execution_Context *context,
+                                   const void *list,
+                                   int64_t index,
+                                   const Om_Runtime_Value *replacement,
+                                   void **result);
+Om_Status om_runtime_list_set_consume(Om_Execution_Context *context,
+                                      void *list,
+                                      int64_t index,
+                                      const Om_Runtime_Value *replacement,
+                                      void **result);
+void om_runtime_list_mark_shared(Om_Execution_Context *context,
+                                 const void *list);
+void om_runtime_list_mark_value_shared(
+    Om_Execution_Context *context,
+    const Om_Runtime_Type_Descriptor *type,
+    Om_Runtime_Value value);
+void om_runtime_list_mark_inline_value_shared(
+    Om_Execution_Context *context,
+    const Om_Runtime_Type_Descriptor *type,
+    const void *value);
+Om_Status om_runtime_list_set_range_copy(Om_Execution_Context *context,
+                                         const void *list,
+                                         int64_t start,
+                                         const void *replacements,
+                                         void **result);
+Om_Status om_runtime_list_fill_range_copy(Om_Execution_Context *context,
+                                          const void *list,
+                                          int64_t start,
+                                          int64_t count,
+                                          const Om_Runtime_Value *value,
+                                          void **result);
+Om_Status om_runtime_list_replace_range_copy(Om_Execution_Context *context,
+                                             const void *list,
+                                             int64_t start,
+                                             int64_t remove_count,
+                                             const void *replacements,
+                                             void **result);
+Om_Status om_runtime_string_concat_many(Om_Execution_Context *context,
+                                        const void *const *strings,
+                                        size_t count,
+                                        void **result);
+Om_Status om_runtime_string_join_list(Om_Execution_Context *context,
+                                      const void *list,
+                                      const void *separator,
+                                      void **result);
+Om_Status om_runtime_string_split_list(
+    Om_Execution_Context *context,
+    const void *value,
+    const void *separator,
+    const Om_Runtime_Type_Descriptor *list_type,
+    void **result);
+Om_Status om_runtime_string_replace(Om_Execution_Context *context,
+                                    const void *value,
+                                    const void *needle,
+                                    const void *replacement,
+                                    void **result);
+Om_Status om_runtime_string_utf8_bytes(
+    Om_Execution_Context *context,
+    const void *value,
+    const Om_Runtime_Type_Descriptor *list_type,
+    void **result);
+Om_Status om_runtime_string_hex_decode_bytes(
+    Om_Execution_Context *context,
+    const void *value,
+    const Om_Runtime_Type_Descriptor *list_type,
+    void **result);
+Om_Status om_runtime_string_hex_encode_bytes(
+    Om_Execution_Context *context,
+    const void *list,
+    void **result);
+Om_Status om_runtime_list_compact_bytes(
+    Om_Execution_Context *context,
+    const void *list,
+    const Om_Runtime_Type_Descriptor *list_type,
+    void **result);
+Om_Status om_runtime_string_builder_create(
+    size_t initial_capacity,
+    Om_Runtime_String_Builder **result);
+Om_Status om_runtime_string_builder_append_string(
+    Om_Execution_Context *context,
+    Om_Runtime_String_Builder *builder,
+    const void *string);
+Om_Status om_runtime_string_builder_append_scalar(
+    Om_Runtime_String_Builder *builder,
+    uint32_t scalar);
+Om_Status om_runtime_string_builder_seal(
+    Om_Execution_Context *context,
+    Om_Runtime_String_Builder *builder,
+    void **result);
+void om_runtime_string_builder_destroy(Om_Runtime_String_Builder *builder);
+Om_Status om_runtime_list_reverse_copy(Om_Execution_Context *context,
+                                      const void *list,
+                                      void **result);
+Om_Status om_runtime_list_slice_copy(Om_Execution_Context *context,
+                                     const void *list,
+                                     int64_t start,
+                                     int64_t count,
+                                     void **result);
 Om_Status om_runtime_map_set(Om_Execution_Context *context,
                              void *map,
                              Om_Runtime_Value key,

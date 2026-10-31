@@ -191,28 +191,31 @@ EXPORT FUNCTION parse(value)
 END FUNCTION
 
 EXPORT FUNCTION format(value)
-    VAR output = ""
+    VAR scheme = ""
+    VAR authority = ""
+    VAR user_info = ""
+    VAR port = ""
+    VAR query = ""
+    VAR fragment = ""
     IF value.scheme_present THEN
-        output = value.scheme + ":"
+        scheme = $"{value.scheme}:"
     END IF
     IF value.authority_present THEN
-        output = output + "//"
         IF value.user_info_present THEN
-            output = output + value.user_info + "@"
+            user_info = $"{value.user_info}@"
         END IF
-        output = output + value.host
         IF value.port_present THEN
-            output = output + ":" + value.port
+            port = $":{value.port}"
         END IF
+        authority = $"//{user_info}{value.host}{port}"
     END IF
-    output = output + value.path
     IF value.query_present THEN
-        output = output + "?" + value.query
+        query = $"?{value.query}"
     END IF
     IF value.fragment_present THEN
-        output = output + "#" + value.fragment
+        fragment = $"#{value.fragment}"
     END IF
-    RETURN output
+    RETURN $"{scheme}{authority}{value.path}{query}{fragment}"
 END FUNCTION
 
 EXPORT FUNCTION remove_dot_segments(path)

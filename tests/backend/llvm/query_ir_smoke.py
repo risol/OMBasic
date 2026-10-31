@@ -28,20 +28,22 @@ def main() -> int:
     for helper in (
         "om_runtime_list_length",
         "om_runtime_list_get",
-        "om_runtime_list_create",
-        "om_runtime_list_append_value",
+        "om_runtime_list_builder_create",
+        "om_runtime_list_builder_reserve",
+        "om_runtime_list_builder_append_value",
+        "om_runtime_list_builder_seal",
     ):
         require(f"@{helper}" in ir,
                 f"Query LLVM IR does not reference {helper}")
     require("@om_runtime_list_stable_order" not in ir,
             "unordered scan Query unexpectedly invokes stable ordering")
-    append_calls = sum(
-        line.count("call i32 @om_runtime_list_append_value")
+    builder_append_calls = sum(
+        line.count("call i32 @om_runtime_list_builder_append_value")
         for line in ir.splitlines())
-    require(append_calls == 9,
+    require(builder_append_calls == 9,
             "expected eight source-literal appends plus one fused SELECT "
-            "append loop site; "
-            f"found {append_calls} append call sites")
+            "builder append loop site; "
+            f"found {builder_append_calls} builder append call sites")
     return 0
 
 

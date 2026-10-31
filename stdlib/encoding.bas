@@ -23,16 +23,17 @@ EXPORT FUNCTION buffer_from_bytes(values)
     IF list.length(values) > 67108864 THEN
         RETURN Error(Encoding_Error("resource_exhausted", 67108864))
     END IF
-    VAR normalized = []
     VAR index = 0
     FOR value IN values
         IF value < 0 OR value > 255 THEN
             RETURN Error(Encoding_Error("invalid_byte", index))
         END IF
-        normalized = normalized + [value + 0]
         index = index + 1
     END FOR
-    RETURN Ok(Buffer(normalized))
+    VAR normalized = QUERY value IN values
+        SELECT value + 0
+    END QUERY
+    RETURN Ok(Buffer(list_compact_bytes(normalized)))
 END FUNCTION
 
 EXPORT FUNCTION buffer_length(value)
@@ -50,8 +51,7 @@ EXPORT FUNCTION utf8_encode(value)
     IF status <> 0 THEN
         RETURN Error(Encoding_Error("invalid_utf8", 0))
     END IF
-    encoded = native_utf8_encode_hex(value)
-    RETURN hex_decode(encoded)
+    RETURN Ok(Buffer(string_utf8_bytes(value)))
 END FUNCTION
 
 FUNCTION valid_buffer(value)
@@ -70,13 +70,7 @@ EXPORT FUNCTION hex_encode(value)
     IF NOT valid_buffer(value) THEN
         RETURN Error(Encoding_Error("invalid_buffer", 0))
     END IF
-    alphabet = "0123456789abcdef"
-    VAR output = ""
-    FOR byte_value IN value.bytes
-        output = output + text.slice(alphabet, quotient(byte_value, 16), 1)
-        output = output + text.slice(alphabet, byte_value % 16, 1)
-    END FOR
-    RETURN Ok(output)
+    RETURN Ok(string_hex_encode_bytes(value.bytes))
 END FUNCTION
 
 FUNCTION hex_digit(character)
@@ -98,12 +92,7 @@ EXPORT FUNCTION hex_decode(encoded)
     IF encoded_length % 2 <> 0 THEN
         RETURN Error(Encoding_Error("invalid_length", encoded_byte_length))
     END IF
-    VAR decoded = []
     VAR index = 0
-    VAR first_byte = 0
-    VAR second_byte = 0
-    VAR third_byte = 0
-    VAR byte_count = 0
     WHILE index < encoded_length
         high_digit = hex_digit(text.slice(encoded, index, 1))
         low_digit = hex_digit(text.slice(encoded, index + 1, 1))
@@ -115,14 +104,9 @@ EXPORT FUNCTION hex_decode(encoded)
             RETURN Error(Encoding_Error("invalid_character",
                 encoded_byte_offset(encoded, index + 1)))
         END IF
-        decoded = decoded + [high_digit * 16 + low_digit]
         index = index + 2
     END WHILE
-    VAR normalized = []
-    FOR byte_value IN decoded
-        normalized = normalized + [byte_value + 0]
-    END FOR
-    RETURN Ok(Buffer(normalized))
+    RETURN Ok(Buffer(string_hex_decode_bytes(encoded)))
 END FUNCTION
 
 FUNCTION base64_digit(character)

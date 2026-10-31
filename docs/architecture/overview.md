@@ -47,4 +47,6 @@ callback ingress, and distributed Actor messaging.
 See [dependency rules](dependency_rules.md), the
 [Runtime ABI](../runtime/runtime_abi.md), and the [HIR](../compiler/hir.md)
 and [MIR](../compiler/mir.md) contracts. The phase-by-phase gate is tracked in
-[implementation status](../development/implementation_status.md).
+[implementation status](../development/implementation_status.md). Collection
+representation freedom and internal construction storage are described in
+[immutable values and transient storage](immutable-values-and-transient-storage.md).

@@ -180,6 +180,26 @@
       }
     },
     {
+      "id": "actor-state-list-replacement-reuse",
+      "rules": [
+        "OM-12.06",
+        "OM-17.03"
+      ],
+      "kind": "run",
+      "source": "17_actors/actor_state_list_replacement.bas",
+      "tags": [
+        "actor",
+        "runtime"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "updated=99,2\n"
+        }
+      }
+    },
+    {
       "id": "sdk-stdlib-http-wire-basics",
       "rules": [
         "OM-21.18",
@@ -274,7 +294,7 @@
         "compiles": true,
         "run": {
           "exit_code": 0,
-          "stdout": "café 東京|true|true|false|true|3|true|true|5|é東|one||東京||é界\n|||true||é界|true\n東京-a-東京|unchanged\né東京|é |é\n"
+          "stdout": "café 東京|true|true|false|true|3|true|true|5|é東|one||東京||é界\n|||true||é界|true\n東京-a-東京|unchanged|bb\né東京|é |é\n"
         }
       }
     },
@@ -1464,6 +1484,27 @@
         "run": {
           "exit_code": 0,
           "stdout": "é|東京|!|done|東京|!\n"
+        }
+      }
+    },
+    {
+      "id": "immutable-list-set",
+      "rules": [
+        "OM-12.01",
+        "OM-12.03",
+        "OM-12.06"
+      ],
+      "kind": "run",
+      "source": "12_collections/list_set.bas",
+      "tags": [
+        "runtime",
+        "type"
+      ],
+      "expect": {
+        "compiles": true,
+        "run": {
+          "exit_code": 0,
+          "stdout": "original=1,2,3 updated=1,9,3\nlabels=old,kept updated=new,kept\nset=1,8,9,4,5 fill=1,6,6,6,5 replace=1,8,9,5\nsource=1,2,3,4,5\nlabel_range=old,new source=old,kept\n"
         }
       }
     },

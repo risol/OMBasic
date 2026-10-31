@@ -766,7 +766,13 @@ static Om_Status setup_prelude(Om_Resolver *resolver,
         OM_SYSTEM_MESSAGE_NAME_TLS_RECEIVE,
         OM_SYSTEM_MESSAGE_NAME_TLS_RECEIVE_COMPLETED,
         OM_SYSTEM_MESSAGE_NAME_TLS_CLOSE,
-        OM_SYSTEM_MESSAGE_NAME_TLS_CLOSE_COMPLETED
+        OM_SYSTEM_MESSAGE_NAME_TLS_CLOSE_COMPLETED,
+        "list_set", "list_reverse_copy", "list_slice_copy",
+        "string_join_list", "string_split_list", "string_replace",
+        "string_utf8_bytes", "list_compact_bytes",
+        "string_hex_decode_bytes", "string_hex_encode_bytes",
+        "set_range",
+        "fill_range", "replace_range"
     };
     Om_Status status = add_scope(resolver, OM_SCOPE_ID_INVALID, OM_SCOPE_PRELUDE,
                                  OM_MODULE_ID_INVALID, OM_AST_NODE_ID_INVALID,

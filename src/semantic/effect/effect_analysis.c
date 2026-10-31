@@ -19,7 +19,20 @@ static bool is_pure_builtin(Om_Builtin_Id id)
 {
     return id == OM_BUILTIN_OK || id == OM_BUILTIN_ERROR
         || id == OM_BUILTIN_ACTOR_ID
-        || id == OM_BUILTIN_ACTOR_DOWN;
+        || id == OM_BUILTIN_ACTOR_DOWN
+        || id == OM_BUILTIN_LIST_SET
+        || id == OM_BUILTIN_LIST_REVERSE_COPY
+        || id == OM_BUILTIN_LIST_SLICE_COPY
+        || id == OM_BUILTIN_SET_RANGE
+        || id == OM_BUILTIN_FILL_RANGE
+        || id == OM_BUILTIN_REPLACE_RANGE
+        || id == OM_BUILTIN_STRING_JOIN_LIST
+        || id == OM_BUILTIN_STRING_SPLIT_LIST
+        || id == OM_BUILTIN_STRING_REPLACE
+        || id == OM_BUILTIN_STRING_UTF8_BYTES
+        || id == OM_BUILTIN_LIST_COMPACT_BYTES
+        || id == OM_BUILTIN_STRING_HEX_DECODE_BYTES
+        || id == OM_BUILTIN_STRING_HEX_ENCODE_BYTES;
 }
 
 static uint32_t native_effect_for_builtin(const Om_Symbol *symbol)

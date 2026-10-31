@@ -27,8 +27,12 @@ an empty value on a non-empty separator returns one empty field. Repeated and
 trailing separators preserve empty fields. An empty separator is valid for
 `join` and concatenates the items directly.
 
-These functions use ordinary `.bas` code and add no compiler special cases.
-String equality is value equality. The `+` operator concatenates only two
+`split` uses a private transient List builder, and `join` allocates the final
+String once. `replace` uses a private Runtime operation that scans
+non-overlapping matches, computes the exact UTF-8 byte length, and creates the
+final String in one allocation without an intermediate List. Public results
+remain immutable `List<String>` and String values, with no source-level builder
+type. String equality is value equality. The `+` operator concatenates only two
 String values; it does not convert other values. Interpolation formats Int,
 Float, Bool, String, and Null using the rules in Language Standard §37.
 

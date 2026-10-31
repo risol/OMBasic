@@ -103,6 +103,18 @@ ACTION main()
     stepped_total = sum_by(10, 2)
     numbers = [1, 2, 3]
     first_number = numbers[0]
+    VAR loop_numbers = [0, 0, 0]
+    FOR update_index = 0 TO 2
+        loop_numbers = list_set(loop_numbers, update_index, update_index + 10)
+    END FOR
+    loop_middle = loop_numbers[1]
+    VAR branch_numbers = [4, 5, 6]
+    IF TRUE THEN
+        branch_numbers = list_set(branch_numbers, 0, 8)
+    ELSE
+        branch_numbers = list_set(branch_numbers, 0, 9)
+    END IF
+    branch_first = branch_numbers[0]
     VAR each_total = 0
     FOR item IN numbers
         IF item = 2 THEN
@@ -143,4 +155,6 @@ ACTION main()
     CASE ELSE
         null_selected = FALSE
     END SELECT
+    updated_literal = list_set([1, 2, 3], 1, 9)
+    updated_literal_first = updated_literal[0]
 END ACTION

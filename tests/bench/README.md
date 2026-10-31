@@ -42,3 +42,27 @@ time). This difference primarily reflects the loop's repeated list
 concatenation; the language currently exposes no mutable-list append operation.
 Treat this as an implementation comparison, not a claim that Query beats a
 hand loop with the same internal append primitive.
+
+On Windows Release, the same input with five measured runs produced checksum
+`3251200`, a median of 11.689 ms for Query and 85.157 ms for the equivalent
+hand-written loop (0.14x). This is likewise informational and includes process
+startup in each sample.
+
+Compare Runtime copy-based and verifier-eligible unique List updates:
+
+```sh
+cmake -S . -B build/linux/clang/release -G Ninja \
+  -DCMAKE_C_COMPILER=/opt/llvm-23/bin/clang \
+  -DLLVM_DIR=/opt/llvm-23/lib/cmake/llvm \
+  -DCMAKE_BUILD_TYPE=Release -DOM_BUILD_BENCHMARKS=ON
+cmake --build build/linux/clang/release --target ombasic_list_update_benchmark
+build/linux/clang/release/ombasic_list_update_benchmark 16384 1024
+```
+
+The benchmark builds equivalent Lists, applies the same indexed update
+sequence through `om_runtime_list_set_copy` and `om_runtime_list_set_consume`,
+and verifies equal checksums before reporting elapsed wall-clock time. Five
+local Linux Release runs with `16384 1024` had median times of 6.141 ms for
+copy and 0.018 ms for consume (about 341x). The small absolute consume time is
+below the timer's useful precision, so treat the ratio as directional. This is
+an informational Runtime storage comparison, not a CI wall-clock gate.

@@ -394,6 +394,163 @@ Om_Status emit_instruction(Om_Llvm_Backend_Context *backend,
         }
         break;
     }
+    case OM_MIR_RUNTIME_STRING_CONCAT_MANY: {
+        if (instruction->operand_count == 0) {
+            status = OM_STATUS_INVALID_ARGUMENT;
+            break;
+        }
+        LLVMValueRef parts = LLVMBuildArrayAlloca(backend->builder,
+            backend->byte_pointer_type,
+            LLVMConstInt(backend->i64_type,
+                instruction->operand_count, 0),
+            "runtime_string_parts");
+        if (parts == NULL) {
+            status = OM_STATUS_OUT_OF_MEMORY;
+            break;
+        }
+        for (size_t index = 0; status == OM_STATUS_OK
+             && index < instruction->operand_count; ++index) {
+            LLVMValueRef part = value_at(backend, operands[index]);
+            if (part == NULL) {
+                status = OM_STATUS_INVALID_ARGUMENT;
+                break;
+            }
+            LLVMValueRef element_index = LLVMConstInt(
+                backend->i64_type, index, 0);
+            LLVMValueRef element_pointer = LLVMBuildGEP2(
+                backend->builder, backend->byte_pointer_type, parts,
+                &element_index, 1, "runtime_string_part_pointer");
+            if (element_pointer == NULL) {
+                status = OM_STATUS_OUT_OF_MEMORY;
+            } else {
+                LLVMBuildStore(backend->builder, part, element_pointer);
+            }
+        }
+        if (status == OM_STATUS_OK) {
+            LLVMValueRef arguments[4] = {
+                NULL, parts,
+                LLVMConstInt(backend->i64_type,
+                    instruction->operand_count, 0),
+                NULL,
+            };
+            status = emit_runtime_object_call(backend, function, block_id,
+                backend->runtime_string_concat_many, arguments, 4, &result);
+        }
+        if (status == OM_STATUS_OK) {
+            status = store_value_root(backend, function->id,
+                instruction->result_id, result);
+        }
+        break;
+    }
+    case OM_MIR_STRING_JOIN_LIST: {
+        if (instruction->operand_count != 2) {
+            status = OM_STATUS_INVALID_ARGUMENT;
+            break;
+        }
+        LLVMValueRef arguments[4] = {NULL, left, right, NULL};
+        status = emit_runtime_object_call(backend, function, block_id,
+            backend->runtime_string_join_list, arguments, 4, &result);
+        if (status == OM_STATUS_OK) {
+            status = store_value_root(backend, function->id,
+                instruction->result_id, result);
+        }
+        break;
+    }
+    case OM_MIR_STRING_SPLIT_LIST: {
+        if (instruction->operand_count != 2) {
+            status = OM_STATUS_INVALID_ARGUMENT;
+            break;
+        }
+        Om_Type_Id result_type_id = OM_TYPE_ID_INVALID;
+        Om_Type_View result_type = {0};
+        LLVMValueRef type_descriptor = NULL;
+        status = resolved_type(backend->project->type_store,
+            backend->project->values[instruction->result_id.value].type_id,
+            &result_type_id, &result_type);
+        if (status == OM_STATUS_OK) {
+            status = runtime_descriptor(backend, result_type_id, 0,
+                                       &type_descriptor);
+        }
+        if (status == OM_STATUS_OK) {
+            LLVMValueRef arguments[5] = {
+                NULL, left, right, type_descriptor, NULL,
+            };
+            status = emit_runtime_object_call(backend, function, block_id,
+                backend->runtime_string_split_list, arguments, 5, &result);
+        }
+        if (status == OM_STATUS_OK) {
+            status = store_value_root(backend, function->id,
+                instruction->result_id, result);
+        }
+        break;
+    }
+    case OM_MIR_STRING_REPLACE: {
+        if (instruction->operand_count != 3) {
+            status = OM_STATUS_INVALID_ARGUMENT;
+            break;
+        }
+        LLVMValueRef arguments[5] = {NULL, left, right,
+            value_at(backend, operands[2]), NULL};
+        if (arguments[3] == NULL) {
+            status = OM_STATUS_INVALID_ARGUMENT;
+            break;
+        }
+        status = emit_runtime_object_call(backend, function, block_id,
+            backend->runtime_string_replace, arguments, 5, &result);
+        if (status == OM_STATUS_OK) {
+            status = store_value_root(backend, function->id,
+                instruction->result_id, result);
+        }
+        break;
+    }
+    case OM_MIR_STRING_UTF8_BYTES:
+    case OM_MIR_STRING_HEX_DECODE_BYTES:
+    case OM_MIR_LIST_COMPACT_BYTES: {
+        if (instruction->operand_count != 1) {
+            status = OM_STATUS_INVALID_ARGUMENT;
+            break;
+        }
+        Om_Type_Id result_type_id = OM_TYPE_ID_INVALID;
+        Om_Type_View result_type = {0};
+        LLVMValueRef type_descriptor = NULL;
+        status = resolved_type(backend->project->type_store,
+            backend->project->values[instruction->result_id.value].type_id,
+            &result_type_id, &result_type);
+        if (status == OM_STATUS_OK) {
+            status = runtime_descriptor(backend, result_type_id, 0,
+                                       &type_descriptor);
+        }
+        if (status == OM_STATUS_OK) {
+            LLVMValueRef arguments[4] = {NULL, left, type_descriptor, NULL};
+            LLVMValueRef runtime_function =
+                instruction->opcode == OM_MIR_STRING_UTF8_BYTES
+                    ? backend->runtime_string_utf8_bytes
+                    : instruction->opcode == OM_MIR_STRING_HEX_DECODE_BYTES
+                        ? backend->runtime_string_hex_decode_bytes
+                        : backend->runtime_list_compact_bytes;
+            status = emit_runtime_object_call(backend, function, block_id,
+                runtime_function, arguments, 4, &result);
+        }
+        if (status == OM_STATUS_OK) {
+            status = store_value_root(backend, function->id,
+                instruction->result_id, result);
+        }
+        break;
+    }
+    case OM_MIR_STRING_HEX_ENCODE_BYTES: {
+        if (instruction->operand_count != 1) {
+            status = OM_STATUS_INVALID_ARGUMENT;
+            break;
+        }
+        LLVMValueRef arguments[3] = {NULL, left, NULL};
+        status = emit_runtime_object_call(backend, function, block_id,
+            backend->runtime_string_hex_encode_bytes, arguments, 3, &result);
+        if (status == OM_STATUS_OK) {
+            status = store_value_root(backend, function->id,
+                instruction->result_id, result);
+        }
+        break;
+    }
     case OM_MIR_RUNTIME_PRINT:
     {
         LLVMValueRef arguments[2] = {
@@ -538,8 +695,11 @@ Om_Status emit_instruction(Om_Llvm_Backend_Context *backend,
                 context_for_function(backend, function), left,
                 LLVMConstInt(backend->i64_type, field_index, 0), storage,
             };
+            LLVMValueRef setter = function->kind == OM_MIR_RECEIVE
+                ? backend->runtime_record_set_actor_state
+                : backend->runtime_record_set;
             status = emit_runtime_status_call(backend, block_id,
-                backend->runtime_record_set, arguments, 4);
+                setter, arguments, 4);
         }
         if (status == OM_STATUS_OK) {
             result = LLVMConstNull(backend->i8_type);
@@ -632,11 +792,21 @@ Om_Status emit_instruction(Om_Llvm_Backend_Context *backend,
         if (status == OM_STATUS_OK) {
             LLVMValueRef arguments[3] = {NULL, type_descriptor, NULL};
             status = emit_runtime_object_call(backend, function, block_id,
-                backend->runtime_list_create, arguments, 3, &result);
+                backend->runtime_list_builder_create, arguments, 3, &result);
         }
         if (status == OM_STATUS_OK) {
             status = store_value_root(backend, function->id,
                 instruction->result_id, result);
+        }
+        if (status == OM_STATUS_OK) {
+            const LLVMValueRef capacity = LLVMConstInt(backend->i64_type,
+                instruction->operand_count, 0);
+            LLVMValueRef arguments[4] = {
+                context_for_function(backend, function), result,
+                capacity, capacity,
+            };
+            status = emit_runtime_status_call(backend, block_id,
+                backend->runtime_list_builder_reserve, arguments, 4);
         }
         for (size_t index = 0; status == OM_STATUS_OK
              && index < instruction->operand_count; ++index) {
@@ -648,8 +818,199 @@ Om_Status emit_instruction(Om_Llvm_Backend_Context *backend,
                     context_for_function(backend, function), result, storage,
                 };
                 status = emit_runtime_status_call(backend, block_id,
-                    backend->runtime_list_append, arguments, 3);
+                    backend->runtime_list_builder_append, arguments, 3);
             }
+        }
+        if (status == OM_STATUS_OK) {
+            LLVMValueRef arguments[3] = {NULL, result, NULL};
+            status = emit_runtime_object_call(backend, function, block_id,
+                backend->runtime_list_builder_seal, arguments, 3, &result);
+        }
+        if (status == OM_STATUS_OK) {
+            status = store_value_root(backend, function->id,
+                instruction->result_id, result);
+        }
+        break;
+    }
+    case OM_MIR_LIST_BUILDER_CREATE: {
+        Om_Type_Id list_type_id = OM_TYPE_ID_INVALID;
+        Om_Type_View list_type = {0};
+        LLVMValueRef type_descriptor = NULL;
+        status = resolved_type(backend->project->type_store,
+            backend->project->values[instruction->result_id.value].type_id,
+            &list_type_id, &list_type);
+        if (status == OM_STATUS_OK) {
+            status = runtime_descriptor(backend, list_type_id, 0,
+                                       &type_descriptor);
+        }
+        if (status == OM_STATUS_OK) {
+            LLVMValueRef arguments[3] = {NULL, type_descriptor, NULL};
+            status = emit_runtime_object_call(backend, function, block_id,
+                backend->runtime_list_builder_create, arguments, 3, &result);
+        }
+        break;
+    }
+    case OM_MIR_LIST_BUILDER_RESERVE: {
+        if (instruction->operand_count != 3) {
+            status = OM_STATUS_INVALID_ARGUMENT;
+            break;
+        }
+        LLVMValueRef arguments[4] = {
+            context_for_function(backend, function), left,
+            value_at(backend, operands[1]), value_at(backend, operands[2]),
+        };
+        status = emit_runtime_status_call(backend, block_id,
+            backend->runtime_list_builder_reserve, arguments, 4);
+        if (status == OM_STATUS_OK) result = left;
+        break;
+    }
+    case OM_MIR_LIST_BUILDER_APPEND: {
+        if (instruction->operand_count != 2) {
+            status = OM_STATUS_INVALID_ARGUMENT;
+            break;
+        }
+        LLVMValueRef storage = NULL;
+        status = get_mir_value_storage(backend, operands[1], &storage, NULL);
+        if (status == OM_STATUS_OK) {
+            LLVMValueRef arguments[3] = {
+                context_for_function(backend, function), left, storage,
+            };
+            status = emit_runtime_status_call(backend, block_id,
+                backend->runtime_list_builder_append, arguments, 3);
+        }
+        if (status == OM_STATUS_OK) result = left;
+        break;
+    }
+    case OM_MIR_LIST_BUILDER_SEAL: {
+        if (instruction->operand_count != 1) {
+            status = OM_STATUS_INVALID_ARGUMENT;
+            break;
+        }
+        LLVMValueRef arguments[3] = {NULL, left, NULL};
+        status = emit_runtime_object_call(backend, function, block_id,
+            backend->runtime_list_builder_seal, arguments, 3, &result);
+        break;
+    }
+    case OM_MIR_LIST_SET_COPY:
+    case OM_MIR_LIST_SET_CONSUME: {
+        if (instruction->operand_count != 3) {
+            status = OM_STATUS_INVALID_ARGUMENT;
+            break;
+        }
+        LLVMValueRef replacement = NULL;
+        LLVMValueRef result_slot = entry_alloca(backend, function,
+            backend->byte_pointer_type, "list_set_result");
+        if (result_slot == NULL) {
+            status = OM_STATUS_OUT_OF_MEMORY;
+            break;
+        }
+        LLVMBuildStore(backend->builder,
+            LLVMConstNull(backend->byte_pointer_type), result_slot);
+        status = get_mir_value_storage(backend, operands[2], &replacement,
+                                       NULL);
+        if (status == OM_STATUS_OK) {
+            LLVMValueRef arguments[5] = {
+                context_for_function(backend, function), left,
+                right, replacement, result_slot,
+            };
+            LLVMValueRef runtime = instruction->opcode
+                    == OM_MIR_LIST_SET_CONSUME
+                ? backend->runtime_list_set_consume
+                : backend->runtime_list_set_copy;
+            LLVMValueRef call = LLVMBuildCall2(backend->builder,
+                LLVMGlobalGetValueType(runtime), runtime, arguments, 5,
+                "list_set_status");
+            status = emit_runtime_status_check_as(backend, block_id, call,
+                OM_LLVM_RUNTIME_FAULT_INDEX_OUT_OF_BOUNDS);
+        }
+        if (status == OM_STATUS_OK) {
+            result = LLVMBuildLoad2(backend->builder,
+                backend->byte_pointer_type, result_slot, "list_set_value");
+        }
+        break;
+    }
+    case OM_MIR_LIST_SET_RANGE_COPY:
+    case OM_MIR_LIST_FILL_RANGE_COPY:
+    case OM_MIR_LIST_REPLACE_RANGE_COPY: {
+        const bool is_set_range = instruction->opcode
+            == OM_MIR_LIST_SET_RANGE_COPY;
+        const bool is_fill_range = instruction->opcode
+            == OM_MIR_LIST_FILL_RANGE_COPY;
+        if (instruction->operand_count != (is_set_range ? 3U : 4U)) {
+            status = OM_STATUS_INVALID_ARGUMENT;
+            break;
+        }
+        LLVMValueRef result_slot = entry_alloca(backend, function,
+            backend->byte_pointer_type, "list_range_result");
+        if (result_slot == NULL) {
+            status = OM_STATUS_OUT_OF_MEMORY;
+            break;
+        }
+        LLVMBuildStore(backend->builder,
+            LLVMConstNull(backend->byte_pointer_type), result_slot);
+        LLVMValueRef third = value_at(backend, operands[2]);
+        LLVMValueRef arguments[6] = {
+            context_for_function(backend, function), left, right, third,
+            NULL, result_slot,
+        };
+        unsigned argument_count = 6;
+        LLVMValueRef callee = NULL;
+        if (is_set_range) {
+            arguments[3] = third;
+            arguments[4] = result_slot;
+            argument_count = 5;
+            callee = backend->runtime_list_set_range_copy;
+        } else if (is_fill_range) {
+            status = get_mir_value_storage(backend, operands[3],
+                                           &arguments[4], NULL);
+            callee = backend->runtime_list_fill_range_copy;
+        } else {
+            arguments[4] = value_at(backend, operands[3]);
+            callee = backend->runtime_list_replace_range_copy;
+        }
+        if (status == OM_STATUS_OK) {
+            LLVMValueRef call = LLVMBuildCall2(backend->builder,
+                LLVMGlobalGetValueType(callee), callee, arguments,
+                argument_count, "list_range_status");
+            status = emit_runtime_status_check_as(backend, block_id, call,
+                OM_LLVM_RUNTIME_FAULT_INDEX_OUT_OF_BOUNDS);
+        }
+        if (status == OM_STATUS_OK) {
+            result = LLVMBuildLoad2(backend->builder,
+                backend->byte_pointer_type, result_slot, "list_range_value");
+        }
+        break;
+    }
+    case OM_MIR_LIST_REVERSE_COPY: {
+        if (instruction->operand_count != 1) {
+            status = OM_STATUS_INVALID_ARGUMENT;
+            break;
+        }
+        LLVMValueRef arguments[3] = {NULL, left, NULL};
+        status = emit_runtime_object_call(backend, function, block_id,
+            backend->runtime_list_reverse_copy, arguments, 3, &result);
+        if (status == OM_STATUS_OK) {
+            status = store_value_root(backend, function->id,
+                instruction->result_id, result);
+        }
+        break;
+    }
+    case OM_MIR_LIST_SLICE_COPY: {
+        if (instruction->operand_count != 3) {
+            status = OM_STATUS_INVALID_ARGUMENT;
+            break;
+        }
+        LLVMValueRef third = value_at(backend, operands[2]);
+        if (third == NULL) {
+            status = OM_STATUS_INVALID_ARGUMENT;
+            break;
+        }
+        LLVMValueRef arguments[5] = {NULL, left, right, third, NULL};
+        status = emit_runtime_object_call(backend, function, block_id,
+            backend->runtime_list_slice_copy, arguments, 5, &result);
+        if (status == OM_STATUS_OK) {
+            status = store_value_root(backend, function->id,
+                instruction->result_id, result);
         }
         break;
     }

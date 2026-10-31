@@ -267,6 +267,57 @@ Om_Status initialize_types(Om_Llvm_Backend_Context *backend)
         string_concat_parameters, 4, 0);
     backend->runtime_string_concat = LLVMAddFunction(backend->module,
         "om_runtime_string_concat", string_concat_type);
+    LLVMTypeRef string_concat_many_parameters[4] = {
+        backend->byte_pointer_type,
+        LLVMPointerType(backend->byte_pointer_type, 0),
+        backend->i64_type,
+        LLVMPointerType(backend->byte_pointer_type, 0),
+    };
+    LLVMTypeRef string_concat_many_type = LLVMFunctionType(
+        backend->i32_type, string_concat_many_parameters, 4, 0);
+    backend->runtime_string_concat_many = LLVMAddFunction(backend->module,
+        "om_runtime_string_concat_many", string_concat_many_type);
+    backend->runtime_string_join_list = LLVMAddFunction(backend->module,
+        "om_runtime_string_join_list", string_concat_type);
+    LLVMTypeRef string_split_list_parameters[5] = {
+        backend->byte_pointer_type, backend->byte_pointer_type,
+        backend->byte_pointer_type, backend->byte_pointer_type,
+        LLVMPointerType(backend->byte_pointer_type, 0),
+    };
+    LLVMTypeRef string_split_list_type = LLVMFunctionType(backend->i32_type,
+        string_split_list_parameters, 5, 0);
+    backend->runtime_string_split_list = LLVMAddFunction(backend->module,
+        "om_runtime_string_split_list", string_split_list_type);
+    LLVMTypeRef string_replace_parameters[5] = {
+        backend->byte_pointer_type, backend->byte_pointer_type,
+        backend->byte_pointer_type, backend->byte_pointer_type,
+        LLVMPointerType(backend->byte_pointer_type, 0),
+    };
+    LLVMTypeRef string_replace_type = LLVMFunctionType(backend->i32_type,
+        string_replace_parameters, 5, 0);
+    backend->runtime_string_replace = LLVMAddFunction(backend->module,
+        "om_runtime_string_replace", string_replace_type);
+    LLVMTypeRef string_utf8_bytes_parameters[4] = {
+        backend->byte_pointer_type, backend->byte_pointer_type,
+        backend->byte_pointer_type,
+        LLVMPointerType(backend->byte_pointer_type, 0),
+    };
+    LLVMTypeRef string_utf8_bytes_type = LLVMFunctionType(backend->i32_type,
+        string_utf8_bytes_parameters, 4, 0);
+    backend->runtime_string_utf8_bytes = LLVMAddFunction(backend->module,
+        "om_runtime_string_utf8_bytes", string_utf8_bytes_type);
+    backend->runtime_string_hex_decode_bytes = LLVMAddFunction(backend->module,
+        "om_runtime_string_hex_decode_bytes", string_utf8_bytes_type);
+    backend->runtime_list_compact_bytes = LLVMAddFunction(backend->module,
+        "om_runtime_list_compact_bytes", string_utf8_bytes_type);
+    LLVMTypeRef string_hex_encode_parameters[3] = {
+        backend->byte_pointer_type, backend->byte_pointer_type,
+        LLVMPointerType(backend->byte_pointer_type, 0),
+    };
+    LLVMTypeRef string_hex_encode_type = LLVMFunctionType(backend->i32_type,
+        string_hex_encode_parameters, 3, 0);
+    backend->runtime_string_hex_encode_bytes = LLVMAddFunction(backend->module,
+        "om_runtime_string_hex_encode_bytes", string_hex_encode_type);
     LLVMTypeRef string_compare_parameters[4] = {
         backend->byte_pointer_type, backend->byte_pointer_type,
         backend->byte_pointer_type, LLVMPointerType(backend->i32_type, 0),
@@ -296,6 +347,87 @@ Om_Status initialize_types(Om_Llvm_Backend_Context *backend)
         "om_runtime_record_create", object_create_type);
     backend->runtime_list_create = LLVMAddFunction(backend->module,
         "om_runtime_list_create", object_create_type);
+    backend->runtime_list_builder_create = LLVMAddFunction(backend->module,
+        "om_runtime_list_builder_create", object_create_type);
+    LLVMTypeRef builder_reserve_parameters[4] = {
+        backend->byte_pointer_type, backend->byte_pointer_type,
+        backend->i64_type, backend->i64_type,
+    };
+    LLVMTypeRef builder_reserve_type = LLVMFunctionType(backend->i32_type,
+        builder_reserve_parameters, 4, 0);
+    backend->runtime_list_builder_reserve = LLVMAddFunction(backend->module,
+        "om_runtime_list_builder_reserve", builder_reserve_type);
+    LLVMTypeRef builder_append_parameters[3] = {
+        backend->byte_pointer_type, backend->byte_pointer_type,
+        value_pointer_type,
+    };
+    LLVMTypeRef builder_append_type = LLVMFunctionType(backend->i32_type,
+        builder_append_parameters, 3, 0);
+    backend->runtime_list_builder_append = LLVMAddFunction(backend->module,
+        "om_runtime_list_builder_append_value", builder_append_type);
+    LLVMTypeRef builder_seal_parameters[3] = {
+        backend->byte_pointer_type, backend->byte_pointer_type,
+        LLVMPointerType(backend->byte_pointer_type, 0),
+    };
+    LLVMTypeRef builder_seal_type = LLVMFunctionType(backend->i32_type,
+        builder_seal_parameters, 3, 0);
+    backend->runtime_list_builder_seal = LLVMAddFunction(backend->module,
+        "om_runtime_list_builder_seal", builder_seal_type);
+    LLVMTypeRef list_set_parameters[5] = {
+        backend->byte_pointer_type, backend->byte_pointer_type,
+        backend->i64_type, value_pointer_type,
+        LLVMPointerType(backend->byte_pointer_type, 0),
+    };
+    LLVMTypeRef list_set_type = LLVMFunctionType(backend->i32_type,
+        list_set_parameters, 5, 0);
+    backend->runtime_list_set_copy = LLVMAddFunction(backend->module,
+        "om_runtime_list_set_copy", list_set_type);
+    backend->runtime_list_set_consume = LLVMAddFunction(backend->module,
+        "om_runtime_list_set_consume", list_set_type);
+    LLVMTypeRef list_set_range_parameters[5] = {
+        backend->byte_pointer_type, backend->byte_pointer_type,
+        backend->i64_type, backend->byte_pointer_type,
+        LLVMPointerType(backend->byte_pointer_type, 0),
+    };
+    LLVMTypeRef list_set_range_type = LLVMFunctionType(backend->i32_type,
+        list_set_range_parameters, 5, 0);
+    backend->runtime_list_set_range_copy = LLVMAddFunction(backend->module,
+        "om_runtime_list_set_range_copy", list_set_range_type);
+    LLVMTypeRef list_fill_range_parameters[6] = {
+        backend->byte_pointer_type, backend->byte_pointer_type,
+        backend->i64_type, backend->i64_type, value_pointer_type,
+        LLVMPointerType(backend->byte_pointer_type, 0),
+    };
+    LLVMTypeRef list_fill_range_type = LLVMFunctionType(backend->i32_type,
+        list_fill_range_parameters, 6, 0);
+    backend->runtime_list_fill_range_copy = LLVMAddFunction(backend->module,
+        "om_runtime_list_fill_range_copy", list_fill_range_type);
+    LLVMTypeRef list_replace_range_parameters[6] = {
+        backend->byte_pointer_type, backend->byte_pointer_type,
+        backend->i64_type, backend->i64_type, backend->byte_pointer_type,
+        LLVMPointerType(backend->byte_pointer_type, 0),
+    };
+    LLVMTypeRef list_replace_range_type = LLVMFunctionType(backend->i32_type,
+        list_replace_range_parameters, 6, 0);
+    backend->runtime_list_replace_range_copy = LLVMAddFunction(backend->module,
+        "om_runtime_list_replace_range_copy", list_replace_range_type);
+    LLVMTypeRef list_reverse_parameters[3] = {
+        backend->byte_pointer_type, backend->byte_pointer_type,
+        LLVMPointerType(backend->byte_pointer_type, 0),
+    };
+    LLVMTypeRef list_reverse_type = LLVMFunctionType(backend->i32_type,
+        list_reverse_parameters, 3, 0);
+    backend->runtime_list_reverse_copy = LLVMAddFunction(backend->module,
+        "om_runtime_list_reverse_copy", list_reverse_type);
+    LLVMTypeRef list_slice_parameters[5] = {
+        backend->byte_pointer_type, backend->byte_pointer_type,
+        backend->i64_type, backend->i64_type,
+        LLVMPointerType(backend->byte_pointer_type, 0),
+    };
+    LLVMTypeRef list_slice_type = LLVMFunctionType(backend->i32_type,
+        list_slice_parameters, 5, 0);
+    backend->runtime_list_slice_copy = LLVMAddFunction(backend->module,
+        "om_runtime_list_slice_copy", list_slice_type);
     LLVMTypeRef list_concat_parameters[4] = {
         backend->byte_pointer_type, backend->byte_pointer_type,
         backend->byte_pointer_type,
@@ -315,6 +447,12 @@ Om_Status initialize_types(Om_Llvm_Backend_Context *backend)
         record_set_parameters, 4, 0);
     backend->runtime_record_set = LLVMAddFunction(backend->module,
         "om_runtime_record_set_value", record_set_type);
+    backend->runtime_record_set_actor_state_init = LLVMAddFunction(
+        backend->module, "om_runtime_record_set_actor_state_init",
+        record_set_type);
+    backend->runtime_record_set_actor_state = LLVMAddFunction(
+        backend->module, "om_runtime_record_set_actor_state",
+        record_set_type);
     LLVMTypeRef record_get_parameters[4] = {
         backend->byte_pointer_type, backend->byte_pointer_type,
         backend->i64_type, value_pointer_type,
@@ -533,12 +671,29 @@ Om_Status initialize_types(Om_Llvm_Backend_Context *backend)
         || backend->runtime_string_from_owned_utf8_slice == NULL
         || backend->runtime_string_format == NULL
         || backend->runtime_string_concat == NULL
+        || backend->runtime_string_concat_many == NULL
+        || backend->runtime_string_join_list == NULL
+        || backend->runtime_string_split_list == NULL
+        || backend->runtime_string_replace == NULL
+        || backend->runtime_string_utf8_bytes == NULL
+        || backend->runtime_string_hex_decode_bytes == NULL
+        || backend->runtime_list_compact_bytes == NULL
+        || backend->runtime_string_hex_encode_bytes == NULL
         || backend->runtime_string_compare == NULL
         || backend->runtime_print == NULL
         || backend->runtime_record_create == NULL
         || backend->runtime_record_set == NULL
+        || backend->runtime_record_set_actor_state_init == NULL
+        || backend->runtime_record_set_actor_state == NULL
         || backend->runtime_record_get == NULL
         || backend->runtime_list_create == NULL
+        || backend->runtime_list_set_copy == NULL
+        || backend->runtime_list_set_consume == NULL
+        || backend->runtime_list_set_range_copy == NULL
+        || backend->runtime_list_fill_range_copy == NULL
+        || backend->runtime_list_replace_range_copy == NULL
+        || backend->runtime_list_reverse_copy == NULL
+        || backend->runtime_list_slice_copy == NULL
         || backend->runtime_list_concat == NULL
         || backend->runtime_list_append == NULL
         || backend->runtime_list_stable_order == NULL

@@ -166,6 +166,8 @@ Om_Status om_runtime_map_set(Om_Execution_Context *context,
         }
     }
     if (status == OM_STATUS_OK) {
+        om_runtime_list_mark_value_shared(context, type->key_type, key);
+        om_runtime_list_mark_value_shared(context, type->value_type, value);
         map->entries[index] = (Om_Runtime_Map_Entry){key, value};
     }
     return status;

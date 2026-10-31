@@ -1,20 +1,20 @@
 module 0 path="system_actor/hello.bas"
-  entity 0 kind=4 symbol=107 related=4294967295 name="Writer" span=0:0-98
-  entity 1 kind=5 symbol=19 related=107 name="Console_Write_Completed" span=0:17-87
-  entity 2 kind=1 symbol=108 related=4294967295 name="main" span=0:98-214
+  entity 0 kind=4 symbol=120 related=4294967295 name="Writer" span=0:0-98
+  entity 1 kind=5 symbol=19 related=120 name="Console_Write_Completed" span=0:17-87
+  entity 2 kind=1 symbol=121 related=4294967295 name="main" span=0:98-214
 node 0 module=0 kind=program op=none type=4294967295 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:0-214 children=0:2
-node 1 module=0 kind=actor op=none type=317 symbol=107 related=4294967295 effects=0 flags=0 span=0:0-98 children=2:1 name="Writer"
+node 1 module=0 kind=actor op=none type=341 symbol=120 related=4294967295 effects=0 flags=0 span=0:0-98 children=2:1 name="Writer"
 node 2 module=0 kind=receive op=none type=5 symbol=19 related=4294967295 effects=0 flags=0 span=0:17-87 children=3:2 name="Console_Write_Completed"
-node 3 module=0 kind=parameter op=none type=46 symbol=109 related=4294967295 effects=0 flags=0 span=0:49-56 children=5:0 name="outcome"
+node 3 module=0 kind=parameter op=none type=46 symbol=122 related=4294967295 effects=0 flags=0 span=0:49-56 children=5:0 name="outcome"
 node 4 module=0 kind=block op=none type=5 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:66-71 children=5:1
 node 5 module=0 kind=stop op=none type=5 symbol=4294967295 related=4294967295 effects=512 flags=0 span=0:66-70 children=6:0
-node 6 module=0 kind=action op=none type=318 symbol=108 related=4294967295 effects=28 flags=0 span=0:98-214 children=6:1 name="main"
+node 6 module=0 kind=action op=none type=342 symbol=121 related=4294967295 effects=28 flags=0 span=0:98-214 children=6:1 name="main"
 node 7 module=0 kind=block op=none type=5 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:116-203 children=7:2
-node 8 module=0 kind=bind op=none type=319 symbol=110 related=4294967295 effects=0 flags=0 span=0:116-141 children=9:1 name="writer_ref"
-node 9 module=0 kind=spawn op=none type=319 symbol=107 related=4294967295 effects=8 flags=0 span=0:129-141 children=10:0 name="Writer"
+node 8 module=0 kind=bind op=none type=343 symbol=123 related=4294967295 effects=0 flags=0 span=0:116-141 children=9:1 name="writer_ref"
+node 9 module=0 kind=spawn op=none type=343 symbol=120 related=4294967295 effects=8 flags=0 span=0:129-141 children=10:0 name="Writer"
 node 10 module=0 kind=send op=none type=5 symbol=18 related=9 effects=4 flags=0 span=0:146-202 children=10:2
 node 11 module=0 kind=system-actor-ref op=none type=23 symbol=9 related=4294967295 effects=0 flags=0 span=0:151-158 children=12:0 name="Console"
 node 12 module=0 kind=message-construct op=none type=44 symbol=18 related=4294967295 effects=16 flags=0 span=0:160-202 children=12:3 name="Console_Write"
-node 13 module=0 kind=local op=none type=322 symbol=18 related=4294967295 effects=0 flags=0 span=0:160-173 children=15:0 name="Console_Write"
+node 13 module=0 kind=local op=none type=346 symbol=18 related=4294967295 effects=0 flags=0 span=0:160-173 children=15:0 name="Console_Write"
 node 14 module=0 kind=string op=none type=3 symbol=4294967295 related=4294967295 effects=0 flags=0 span=0:174-189 children=15:0 name="\"Hello, world!\""
-node 15 module=0 kind=local op=none type=319 symbol=110 related=4294967295 effects=0 flags=0 span=0:191-201 children=15:0 name="writer_ref"
+node 15 module=0 kind=local op=none type=343 symbol=123 related=4294967295 effects=0 flags=0 span=0:191-201 children=15:0 name="writer_ref"

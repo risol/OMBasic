@@ -1,5 +1,64 @@
 # Native AOT implementation status
 
+## Internal transient List storage — complete
+
+- Added private Runtime List builders with checked exact reserve, geometric
+  append growth, initialized-prefix GC tracing, and create/mutable/sealed state
+  checks. Sealed Lists reject further builder or ordinary append operations.
+- Added MIR builder create/reserve/append/seal operations. The verifier propagates
+  builder identity across CFG block parameters and rejects reads, arbitrary
+  calls, returns, and other escapes. LLVM lowering calls private Runtime entry
+  points.
+- List literals, concatenation, stable ordering, reverse, slice/drop, and Query
+  scan/candidate/key/projection storage now use transient construction and seal
+  before publication. The standard library routes map/filter/take through Query
+  so they share fused scans and result builders. Query's source and result types
+  remain `List<T>` and `List<R>`.
+- Added pure `list_set(values, index, replacement)` with copy-based Runtime
+  construction and conformance coverage proving the input remains unchanged.
+- Added `set_range`, `fill_range`, and `replace_range` as single-copy Runtime
+  operations; conformance coverage checks Int and String Lists, range results,
+  and source preservation.
+- Runtime List tests cover exact reserve bounds, illegal pre-seal reads,
+  post-seal mutation, duplicate sealing, and managed element tracing while the
+  builder is rooted. MIR and LLVM smoke tests cover Query builder lowering.
+- `encoding.buffer_from_bytes` validates first, then normalizes values through
+  Query's transient List result path, avoiding repeated immutable concatenation.
+- `encoding.utf8_encode` now builds byte values directly with a Runtime
+  `string_utf8_bytes` intrinsic and seals them before wrapping the public
+  `Buffer` Record. HTTP request serialization reuses that byte List and bulk
+  appends the body. The public `Buffer` representation remains `List<Int>`.
+- Runtime stores byte-safe `List<Int>` values in compact one-byte backing
+  storage. UTF-8 and hex encoding/decoding use that representation directly;
+  concat, immutable updates, cloning, and GC tracing preserve it when possible.
+- Multi-part String interpolation now lowers to one exact-size Runtime join;
+  Runtime tests cover UTF-8 parts and empty joins.
+- A reusable Runtime UTF-8 String builder supports String and checked Unicode
+  scalar appends, geometric growth, and sealing to an immutable String.
+- `text.split` builds its `List<String>` result with a rooted transient List
+  builder; `text.join` creates one exact-size String. `text.replace` uses a
+  direct Runtime scan and one exact-size String allocation, without an
+  intermediate List; Unicode, empty-needle, and overlap cases are covered.
+- JSON compaction returns one bounded output allocation; URI formatting uses
+  multi-part interpolation, and HTTP request text uses one final String join
+  after Query normalizes the header lines.
+- Runtime COW metadata now marks List aliases stored in Lists, Records,
+  Messages, and Maps. A verifier-checked same-block last-use pass selects
+  `list-set-consume` for fresh single-use values; shared storage and values
+  carried across branches or loops keep the copy path. Runtime tests cover
+  unique consume, explicit sharing, Record/Message/Map aliases, and duplicate
+  references in a cloned graph.
+- A Linux Runtime microbenchmark compares repeated copy-based updates with
+  eligible unique consume updates and checks that both paths produce the same
+  checksum.
+- Receive handlers can reuse a uniquely owned Actor-state List for a
+  replacement when the verifier proves a single direct field read. Duplicate
+  field aliases, shared storage, and unproven cases use the copy path.
+- Advanced interprocedural ownership analysis remains deferred.
+
+See [ADR-0043](../architecture/adr/ADR-0043-immutable-values-and-transient-storage.md)
+and the [implementation design](../architecture/immutable-values-and-transient-storage.md).
+
 ## Query v0.1 — complete
 
 - The compiler supports eager `List<T>` Query expressions with ordered clauses,
@@ -11,10 +70,13 @@
   key types and include actual/expected types. Language semantics and Actor
   responsiveness guidance are in `docs/language/query.md`, ADR-0042, and the
   language standard.
-- Windows and Linux Release CTest suites pass (39/39 and 40/40). Linux
-  ASan/UBSan and TSan full suites pass (39/39); focused post-change sanitizer
-  suites, a 500-run syntax-fuzzer smoke pass, the conformance manifest, and
-  specification audit pass. The LLVM IR smoke test verifies the fused scan
+- Windows and Linux Release CTest suites pass (39/39 and 40/40). After the
+  compact byte storage and Actor-state changes, focused Linux ASan/UBSan
+  Runtime/Actor tests pass (5/5), and focused TSan List/Record/Map/Actor tests
+  pass (4/4). The Actor-state replacement conformance program also passes under
+  both sanitizers.
+  A 500-run syntax-fuzzer smoke
+  pass, the conformance manifest, and specification audit also pass. The LLVM IR smoke test verifies the fused scan
   emits list access and one append loop site without stable-order calls.
 - The scan benchmark compares generated Query code with an equivalent
   hand-written list-building filter loop, and the ordering benchmark compares
@@ -364,12 +426,14 @@ The source and architecture baseline is commit
 ## Phase 15 — Release Gates: complete on Windows and Linux
 
 - The Windows clang-cl/LLD Debug and Release suites and the Linux Clang 23.1.4
-  Release suite each pass 23/23, including checked-size builtin fallback, the
+  Release suites pass 39/39 on Windows and 40/40 on Linux, including
+  checked-size builtin fallback, the
   target ABI model, AAPCS64/Darwin ARM64 ABI classifier checks, the two-process
   distribution integration, and the two-million-message Actor stress test.
-- Linux Clang 23.1.4 ASan/UBSan passes the complete 23-test CTest suite,
-  including generated Native executables. Linux Clang TSan also passes the
-  complete 23-test suite in an isolated container with ASLR disabled.
+- Linux Clang 23.1.4 ASan/UBSan passes the focused Runtime/Actor suite and the
+  Actor-state replacement conformance program. Linux Clang TSan passes the
+  focused List/Record/Map/Actor Runtime suite and that conformance program in
+  an isolated container with ASLR disabled.
 - The LLVM PassBuilder C API runs `default<O0>` for Debug and `default<O2>` for
   optimized configurations. The program entry frame remains available to
   debuggers while other O2 inlining remains enabled.

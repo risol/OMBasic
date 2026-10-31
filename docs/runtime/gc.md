@@ -30,3 +30,26 @@ object headers while the Actor-system lock is held.
 Type trace callbacks visit managed references and must not allocate or mutate
 the heap. Descriptor metadata identifies structural fields and active Result
 payloads without reading compiler IR.
+
+Transient List builders use the ordinary managed List descriptor. The GC traces
+only `length` initialized elements; reserved but unused capacity is not scanned.
+Generated MIR values root a builder across allocation safepoints. Sealing changes
+its Runtime state but not its managed object address. Object cloning refuses a
+transient List and marks a successful List clone as published.
+
+Byte-safe `List<Int>` values may use a compact one-byte backing allocation.
+Those bytes are scalar values rather than managed pointers, so tracing skips the
+compact buffer. Cloning and builder growth copy the byte payload while preserving
+its compact representation.
+
+Published Lists carry atomic ownership metadata for conservative consume-based
+updates. Runtime marks a List shared before storing it in a List element,
+Record, Message, or Map key/value. Cloning creates new List storage and marks a
+clone shared when the source graph references the same List more than once.
+Consume claims a unique sealed List atomically; shared or contended Lists use
+the normal copy-and-seal path.
+
+Actor-state List replacement uses dedicated initialization and receive-handler
+setters. They retain unique ownership only when the stored reference is the
+consumed List and no other direct state field aliases it; all other cases mark
+the List shared before publication.

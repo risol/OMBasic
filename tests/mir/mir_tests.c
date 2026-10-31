@@ -731,10 +731,55 @@ static bool test_hir_lowering_to_verified_mir(void)
     MIR_ASSERT(strstr(first_dump.data, "runtime-string-create") != NULL);
     MIR_ASSERT(strstr(first_dump.data, "runtime-string-format") != NULL);
     MIR_ASSERT(strstr(first_dump.data, "runtime-string-concat") != NULL);
+    MIR_ASSERT(strstr(first_dump.data, "runtime-string-concat-many") != NULL);
     MIR_ASSERT(strstr(first_dump.data, "const-null") != NULL);
     MIR_ASSERT(strstr(first_dump.data, "list-create") != NULL);
     MIR_ASSERT(strstr(first_dump.data, "list-length") != NULL);
     MIR_ASSERT(strstr(first_dump.data, "list-get") != NULL);
+    MIR_ASSERT(strstr(first_dump.data, "list-set-consume") != NULL);
+    size_t list_set_consume_index = SIZE_MAX;
+    size_t list_set_copy_index = SIZE_MAX;
+    size_t list_set_copy_count = 0;
+    for (size_t index = 0; index < mir.instruction_count; ++index) {
+        if (mir.instructions[index].opcode == OM_MIR_LIST_SET_CONSUME
+            && list_set_consume_index == SIZE_MAX) {
+            list_set_consume_index = index;
+        } else if (mir.instructions[index].opcode == OM_MIR_LIST_SET_COPY
+                   && list_set_copy_index == SIZE_MAX) {
+            list_set_copy_index = index;
+        }
+        list_set_copy_count += mir.instructions[index].opcode
+            == OM_MIR_LIST_SET_COPY;
+    }
+    MIR_ASSERT(list_set_consume_index != SIZE_MAX);
+    MIR_ASSERT(list_set_copy_index != SIZE_MAX && list_set_copy_count >= 3);
+    const Om_Mir_Value_Id loop_or_branch_source = mir.operands[
+        mir.instructions[list_set_copy_index].operand_start];
+    MIR_ASSERT(loop_or_branch_source.value < mir.value_count
+        && mir.values[loop_or_branch_source.value].is_block_parameter);
+    Om_Mir_Instruction *mutable_list_set_consume =
+        (Om_Mir_Instruction *)&mir.instructions[list_set_consume_index];
+    const uint32_t consume_flags = mutable_list_set_consume->flags;
+    mutable_list_set_consume->flags = OM_MIR_INSTRUCTION_FLAG_NONE;
+    om_mir_verification_result_destroy(&verification);
+    MIR_ASSERT(om_mir_verify_project(&mir, &verification) == OM_STATUS_OK);
+    MIR_ASSERT(has_diagnostic(&verification, OM_MIR_DIAGNOSTIC_E1104));
+    mutable_list_set_consume->flags = consume_flags;
+    om_mir_verification_result_destroy(&verification);
+
+    Om_Mir_Instruction *mutable_list_set_copy =
+        (Om_Mir_Instruction *)&mir.instructions[list_set_copy_index];
+    const Om_Mir_Opcode copy_opcode = mutable_list_set_copy->opcode;
+    const uint32_t copy_flags = mutable_list_set_copy->flags;
+    mutable_list_set_copy->opcode = OM_MIR_LIST_SET_CONSUME;
+    mutable_list_set_copy->flags = OM_MIR_INSTRUCTION_FLAG_OWNERSHIP_PROOF;
+    MIR_ASSERT(om_mir_verify_project(&mir, &verification) == OM_STATUS_OK);
+    MIR_ASSERT(has_diagnostic(&verification, OM_MIR_DIAGNOSTIC_E1104));
+    mutable_list_set_copy->opcode = copy_opcode;
+    mutable_list_set_copy->flags = copy_flags;
+    om_mir_verification_result_destroy(&verification);
+    MIR_ASSERT(om_mir_verify_project(&mir, &verification) == OM_STATUS_OK);
+    MIR_ASSERT(verification.diagnostic_count == 0);
     MIR_ASSERT(strstr(first_dump.data, "map-create") != NULL);
     MIR_ASSERT(strstr(first_dump.data, "map-length") != NULL);
     MIR_ASSERT(strstr(first_dump.data, "map-key-at") != NULL);
@@ -829,7 +874,7 @@ static bool test_actor_hir_lowering_to_verified_mir(void)
     MIR_ASSERT(lowering_status == OM_STATUS_OK);
     MIR_ASSERT(lowering.diagnostic_count == 0);
     MIR_ASSERT(mir.actor_count == 1);
-    MIR_ASSERT(mir.actor_state_initializer_count == 1);
+    MIR_ASSERT(mir.actor_state_initializer_count == 2);
     MIR_ASSERT(mir.actor_handler_count == 1);
     MIR_ASSERT(mir.nominal_count == 3);
     MIR_ASSERT(om_mir_verify_project(&mir, &verification) == OM_STATUS_OK);
@@ -892,6 +937,7 @@ static bool test_actor_hir_lowering_to_verified_mir(void)
     bool saw_stop = false;
     bool saw_load_field = false;
     bool saw_store_field = false;
+    bool saw_actor_list_set_consume = false;
     for (size_t index = 0; index < mir.instruction_count; ++index) {
         const Om_Mir_Opcode opcode = mir.instructions[index].opcode;
         saw_spawn |= opcode == OM_MIR_RUNTIME_ACTOR_SPAWN;
@@ -901,10 +947,17 @@ static bool test_actor_hir_lowering_to_verified_mir(void)
         saw_stop |= opcode == OM_MIR_RUNTIME_ACTOR_STOP;
         saw_load_field |= opcode == OM_MIR_LOAD_FIELD;
         saw_store_field |= opcode == OM_MIR_STORE_INIT_FIELD;
+        if (opcode == OM_MIR_LIST_SET_CONSUME) {
+            const Om_Mir_Block *block = &mir.blocks[
+                mir.instructions[index].block_id.value];
+            saw_actor_list_set_consume |= mir.functions[
+                block->function_id.value].kind == OM_MIR_RECEIVE;
+        }
     }
     MIR_ASSERT(saw_spawn && saw_send && saw_stop);
     MIR_ASSERT(saw_remote_spawn);
     MIR_ASSERT(saw_load_field && saw_store_field);
+    MIR_ASSERT(saw_actor_list_set_consume);
     MIR_ASSERT(om_mir_dump(&mir, &dump) == OM_STATUS_OK);
     MIR_ASSERT(compare_or_update_golden("actors.mir",
         (Om_String_View){dump.data, dump.length}));
@@ -1003,17 +1056,51 @@ static bool test_query_plan_dump_is_deterministic(void)
     MIR_ASSERT(lowering.diagnostic_count == 0);
     MIR_ASSERT(om_mir_verify_project(&mir, &verification) == OM_STATUS_OK);
     MIR_ASSERT(verification.diagnostic_count == 0);
+    size_t builder_append_index = SIZE_MAX;
+    for (size_t index = 0; index < mir.instruction_count; ++index) {
+        if (mir.instructions[index].opcode == OM_MIR_LIST_BUILDER_APPEND) {
+            builder_append_index = index;
+            break;
+        }
+    }
+    MIR_ASSERT(builder_append_index != SIZE_MAX);
+    om_mir_verification_result_destroy(&verification);
+    Om_Mir_Instruction *mutable_builder_append =
+        (Om_Mir_Instruction *)&mir.instructions[builder_append_index];
+    mutable_builder_append->opcode = OM_MIR_LIST_APPEND;
+    MIR_ASSERT(om_mir_verify_project(&mir, &verification) == OM_STATUS_OK);
+    MIR_ASSERT(verification.diagnostic_count != 0);
+    om_mir_verification_result_destroy(&verification);
+    mutable_builder_append->opcode = OM_MIR_LIST_BUILDER_APPEND;
+    MIR_ASSERT(om_mir_verify_project(&mir, &verification) == OM_STATUS_OK);
+    MIR_ASSERT(verification.diagnostic_count == 0);
     MIR_ASSERT(om_mir_dump(&mir, &mir_dump) == OM_STATUS_OK);
     size_t list_create_count = 0;
+    size_t list_builder_create_count = 0;
+    size_t list_builder_reserve_count = 0;
+    size_t list_builder_append_count = 0;
+    size_t list_builder_seal_count = 0;
     size_t stable_order_count = 0;
     size_t direct_call_count = 0;
     for (size_t index = 0; index < mir.instruction_count; ++index) {
         list_create_count += mir.instructions[index].opcode == OM_MIR_LIST_CREATE;
+        list_builder_create_count += mir.instructions[index].opcode
+            == OM_MIR_LIST_BUILDER_CREATE;
+        list_builder_reserve_count += mir.instructions[index].opcode
+            == OM_MIR_LIST_BUILDER_RESERVE;
+        list_builder_append_count += mir.instructions[index].opcode
+            == OM_MIR_LIST_BUILDER_APPEND;
+        list_builder_seal_count += mir.instructions[index].opcode
+            == OM_MIR_LIST_BUILDER_SEAL;
         stable_order_count += mir.instructions[index].opcode
             == OM_MIR_LIST_STABLE_ORDER;
         direct_call_count += mir.instructions[index].opcode == OM_MIR_CALL_DIRECT;
     }
-    MIR_ASSERT(list_create_count == 4);
+    MIR_ASSERT(list_create_count == 1);
+    MIR_ASSERT(list_builder_create_count == 3);
+    MIR_ASSERT(list_builder_reserve_count == 3);
+    MIR_ASSERT(list_builder_append_count == 3);
+    MIR_ASSERT(list_builder_seal_count == 3);
     MIR_ASSERT(stable_order_count == 1);
     MIR_ASSERT(direct_call_count == 1);
     MIR_ASSERT(strstr(mir_dump.data, "list-stable-order") != NULL);
