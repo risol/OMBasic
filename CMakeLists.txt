@@ -1065,6 +1065,11 @@ if(BUILD_TESTING)
                 "${CMAKE_CURRENT_SOURCE_DIR}"
                 "${OM_LLVM_DEBUG_INFO_TOOL}"
                 "$<TARGET_FILE_DIR:ombasic_test_native_math>")
+    add_test(NAME query_llvm_ir
+        COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/backend/llvm/query_ir_smoke.py"
+                "$<TARGET_FILE:ombasic>"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/backend/llvm/query_scan.bas")
     add_test(NAME install_sdk_relocation
         COMMAND "${Python3_EXECUTABLE}"
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/tooling/install_sdk_test.py"

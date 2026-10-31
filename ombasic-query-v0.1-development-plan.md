@@ -2971,12 +2971,12 @@ parse + AST dump
 
 任务：
 
-- [ ] lexer keywords；
-- [ ] parser Query expression；
-- [ ] AST kinds；
-- [ ] clause order diagnostics；
-- [ ] parser tests；
-- [ ] formatter / tooling keyword updates。
+- [x] lexer keywords；
+- [x] parser Query expression；
+- [x] AST kinds；
+- [x] clause order diagnostics；
+- [x] parser tests；
+- [x] formatter / tooling keyword updates。
 
 完成标准：
 
@@ -2993,17 +2993,17 @@ END QUERY
 
 任务：
 
-- [ ] Query-local range symbol；
-- [ ] List<T> source checking；
-- [ ] WHERE Bool；
-- [ ] TAKE Int；
-- [ ] ORDER key type；
-- [ ] SELECT result；
-- [ ] effect restrictions；
-- [ ] HIR nodes；
-- [ ] HIR verifier；
-- [ ] HIR dump；
-- [ ] diagnostics tests。
+- [x] Query-local range symbol；
+- [x] List<T> source checking；
+- [x] WHERE Bool；
+- [x] TAKE Int；
+- [x] ORDER key type；
+- [x] SELECT result；
+- [x] effect restrictions；
+- [x] HIR nodes；
+- [x] HIR verifier；
+- [x] HIR dump；
+- [x] diagnostics tests。
 
 完成标准：
 
@@ -3025,12 +3025,12 @@ high-quality diagnostics
 
 任务：
 
-- [ ] Query Plan structs；
-- [ ] HIR Query -> QIR；
-- [ ] QIR verifier；
-- [ ] debug dump；
-- [ ] physical plan selection；
-- [ ] no AST round-trip。
+- [x] Query Plan structs；
+- [x] HIR Query -> QIR；
+- [x] QIR verifier；
+- [x] debug dump；
+- [x] physical plan selection；
+- [x] no AST round-trip。
 
 完成标准：
 
@@ -3044,15 +3044,15 @@ high-quality diagnostics
 
 任务：
 
-- [ ] source evaluate once；
-- [ ] List length/get；
-- [ ] loop CFG；
-- [ ] multiple filters；
-- [ ] projection；
-- [ ] internal result append；
-- [ ] result `List<R>`；
-- [ ] GC roots；
-- [ ] execution tests。
+- [x] source evaluate once；
+- [x] List length/get；
+- [x] loop CFG；
+- [x] multiple filters；
+- [x] projection；
+- [x] internal result append；
+- [x] result `List<R>`；
+- [x] GC roots；
+- [x] execution tests。
 
 完成标准：
 
@@ -3068,13 +3068,13 @@ QUERY + WHERE* + SELECT
 
 任务：
 
-- [ ] filters fused；
-- [ ] no intermediate Lists；
-- [ ] TAKE early exit；
-- [ ] TAKE <= 0；
-- [ ] outer lexical values；
-- [ ] benchmark against hand loop；
-- [ ] LLVM inspection tests。
+- [x] filters fused；
+- [x] no intermediate Lists；
+- [x] TAKE early exit；
+- [x] TAKE <= 0；
+- [x] outer lexical values；
+- [x] benchmark against hand loop；
+- [x] LLVM inspection tests。
 
 完成标准：
 
@@ -3086,17 +3086,17 @@ QUERY + WHERE* + SELECT
 
 任务：
 
-- [ ] order key type rules；
-- [ ] multi-key comparator；
-- [ ] source index stability；
-- [ ] full stable sort；
-- [ ] ORDER + TAKE detection；
-- [ ] Top-K heap；
-- [ ] final K stable sort；
-- [ ] projection delay；
-- [ ] GC-safe candidates；
-- [ ] property equivalence tests；
-- [ ] performance benchmarks。
+- [x] order key type rules；
+- [x] multi-key comparator；
+- [x] source index stability；
+- [x] full stable sort；
+- [x] ORDER + TAKE detection；
+- [x] Top-K heap；
+- [x] final K stable sort；
+- [x] projection delay；
+- [x] GC-safe candidates；
+- [x] property equivalence tests；
+- [x] performance benchmarks。
 
 完成标准：
 
@@ -3353,69 +3353,69 @@ Query v0.1 只有在以下全部成立时完成。
 
 ## Syntax
 
-- [ ] `QUERY x IN list`；
-- [ ] `WHERE*`；
-- [ ] `ORDER BY`；
-- [ ] `TAKE`；
-- [ ] `SELECT`；
-- [ ] `END QUERY`；
-- [ ] formatter / reserved keyword updates。
+- [x] `QUERY x IN list`；
+- [x] `WHERE*`；
+- [x] `ORDER BY`；
+- [x] `TAKE`；
+- [x] `SELECT`；
+- [x] `END QUERY`；
+- [x] formatter / reserved keyword updates。
 
 ## Semantics
 
-- [ ] source 仅 List；
-- [ ] typed range variable；
-- [ ] WHERE Bool；
-- [ ] TAKE Int；
-- [ ] ORDER typed；
-- [ ] SELECT result typed；
-- [ ] Query Pure；
-- [ ] eager；
-- [ ] synchronous；
-- [ ] non-yielding。
+- [x] source 仅 List；
+- [x] typed range variable；
+- [x] WHERE Bool；
+- [x] TAKE Int；
+- [x] ORDER typed；
+- [x] SELECT result typed；
+- [x] Query Pure；
+- [x] eager；
+- [x] synchronous；
+- [x] non-yielding。
 
 ## Compiler
 
-- [ ] AST；
-- [ ] semantic；
-- [ ] HIR；
-- [ ] temporary QIR；
-- [ ] QIR verifier；
-- [ ] physical plan；
-- [ ] MIR lowering；
-- [ ] no QIR -> AST；
-- [ ] LLVM codegen。
+- [x] AST；
+- [x] semantic；
+- [x] HIR；
+- [x] temporary QIR；
+- [x] QIR verifier；
+- [x] physical plan；
+- [x] MIR lowering；
+- [x] no QIR -> AST；
+- [x] LLVM codegen。
 
 ## Performance
 
-- [ ] Filter fusion；
-- [ ] no intermediate List per clause；
-- [ ] TAKE early exit；
-- [ ] stable sort；
-- [ ] Top-K；
-- [ ] projection delay after ordered selection；
-- [ ] source expression evaluated once。
+- [x] Filter fusion；
+- [x] no intermediate List per clause；
+- [x] TAKE early exit；
+- [x] stable sort；
+- [x] Top-K；
+- [x] projection delay after ordered selection；
+- [x] source expression evaluated once。
 
 ## Actor
 
-- [ ] Query works inside RECEIVE；
-- [ ] no Scheduler modifications；
-- [ ] no implicit parallelism；
-- [ ] no ActorRef source；
-- [ ] docs explain long-query responsiveness。
+- [x] Query works inside RECEIVE；
+- [x] no Scheduler modifications；
+- [x] no implicit parallelism；
+- [x] no ActorRef source；
+- [x] docs explain long-query responsiveness。
 
 ## Quality
 
-- [ ] Linux；
-- [ ] Windows；
-- [ ] ASan / UBSan；
-- [ ] TSan；
-- [ ] GC stress；
-- [ ] parser fuzz；
-- [ ] conformance；
-- [ ] benchmarks；
-- [ ] docs；
-- [ ] ADR。
+- [x] Linux；
+- [x] Windows；
+- [x] ASan / UBSan；
+- [x] TSan；
+- [x] GC stress；
+- [x] parser fuzz；
+- [x] conformance；
+- [x] benchmarks；
+- [x] docs；
+- [x] ADR。
 
 ---
 

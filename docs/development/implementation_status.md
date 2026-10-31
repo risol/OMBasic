@@ -1,6 +1,6 @@
 # Native AOT implementation status
 
-## Query v0.1 — implementation in progress
+## Query v0.1 — complete
 
 - The compiler supports eager `List<T>` Query expressions with ordered clauses,
   Query-local range bindings, typed filters/take/order/projection, purity checks,
@@ -11,12 +11,17 @@
   key types and include actual/expected types. Language semantics and Actor
   responsiveness guidance are in `docs/language/query.md`, ADR-0042, and the
   language standard.
-- Windows Release Query runtime conformance, all Linux Release CTest cases
-  except the pre-fix reserved-keyword audit, and the targeted Windows/Linux
-  syntax, semantic, HIR, MIR, runtime-list, and formatter tests have passed.
-  The reserved-keyword audit now passes after adding the Query keywords to the
-  language-standard table. Sanitizer, parser-fuzzer, and performance benchmark
-  gates remain outstanding; this feature is not yet complete.
+- Windows and Linux Release CTest suites pass (39/39 and 40/40). Linux
+  ASan/UBSan and TSan full suites pass (39/39); focused post-change sanitizer
+  suites, a 500-run syntax-fuzzer smoke pass, the conformance manifest, and
+  specification audit pass. The LLVM IR smoke test verifies the fused scan
+  emits list access and one append loop site without stable-order calls.
+- The scan benchmark compares generated Query code with an equivalent
+  hand-written list-building filter loop, and the ordering benchmark compares
+  Top-K with stable full sort. The timings are informational rather than CI
+  thresholds; see `tests/bench/README.md`. The current local Linux Release run
+  measured the fused Query at 4.139 ms versus 56.233 ms for the hand loop that
+  builds its result through List concatenation.
 
 ## Foundation libraries — implementation in progress
 
